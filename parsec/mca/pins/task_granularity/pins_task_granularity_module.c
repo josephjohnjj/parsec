@@ -153,12 +153,25 @@ int find_data_size(parsec_execution_stream_t* es, parsec_task_t* task)
 {
     int i, total_data = 0, nb_elements = 0, size = 0;
     int nb_param = task->task_class->nb_parameters;
+    struct parsec_data_copy_s* data;
 
     for(i = 0; i < nb_param; i++)
     {
-        nb_elements = task->data[i].data_in->arena_chunk->count;
-        size = task->data[i].data_in->arena_chunk->origin->elem_size;
-        total_data += nb_elements * size;
+        data = task->data[i].data_in;
+        if(data == NULL)
+            data = task->data[i].data_out;   
+
+        if(data != NULL)
+        {
+            if(data->arena_chunk != NULL)
+            {
+                nb_elements = data->arena_chunk->count;
+
+                if(size = data->arena_chunk->origin != NULL)
+                    size = data->arena_chunk->origin->elem_size;
+            }
+            total_data += nb_elements * size;
+        }
     }
 
     return total_data;
