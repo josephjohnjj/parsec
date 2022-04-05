@@ -163,8 +163,6 @@ int find_data_size(parsec_execution_stream_t* es, parsec_task_t* task)
 
     return total_data;
 
-    #endif
-
 }
 
 static void stop_task_granularity_record(parsec_execution_stream_t* es,
