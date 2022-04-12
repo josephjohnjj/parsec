@@ -163,12 +163,8 @@ int find_data_size(parsec_execution_stream_t* es, parsec_task_t* task)
                
         if(task_data != NULL)
         {   
-            if(task_data->arena_chunk != NULL)
-            {
-                nb_elements = task_data->arena_chunk->count;
-                if(task_data->arena_chunk->origin != NULL)
-                    size = task_data->arena_chunk->origin->elem_size;
-            }
+            if(task_data->arena_chunk != NULL && task_data->arena_chunk->origin != NULL)
+                total_data +=  task_data->arena_chunk->count * task_data->arena_chunk->origin->elem_size;  
             else if(task_data->original != NULL)
                 total_data += task_data->original->nb_elts;
             else
