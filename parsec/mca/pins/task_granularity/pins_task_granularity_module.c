@@ -153,24 +153,27 @@ int find_chore(parsec_execution_stream_t* es, parsec_task_t* task)
 int find_data_size(parsec_execution_stream_t* es, parsec_task_t* task)
 {
     int i, total_data = 0, nb_elements = 0, size = 0;
-    int nb_flows = task->task_class->nb_flows;
     struct parsec_data_copy_s* task_data;
 
-    for(i = 0; i < nb_flows; i++)
+    for(i = 0; i < task->task_class->nb_flows; i++)
     {
         task_data = task->data[i].data_in;
         if(task_data == NULL)
             task_data = task->data[i].data_out;
                
         if(task_data != NULL)
-        {
+        {   
             if(task_data->arena_chunk != NULL)
             {
                 nb_elements = task_data->arena_chunk->count;
-                if(size = task_data->arena_chunk->origin != NULL)
+                if(task_data->arena_chunk->origin != NULL)
                     size = task_data->arena_chunk->origin->elem_size;
             }
-            total_data += nb_elements * size;
+            else if(task_data->original != NULL)
+                total_data += task_data->original->nb_elts;
+            else
+                printf("SOMETHING IS WRONG Name %s Id %d \n", task->task_class->name, task->task_class->task_class_id);
+             
         }
     }
     return total_data;
