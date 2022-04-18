@@ -4,6 +4,7 @@
 extern int parsec_device_cuda_enabled;
 static parsec_device_cuda_info_t* device_info; 
 static parsec_list_t** migrated_task_list;
+static int NDEVICES;
 
 
 /**
@@ -20,10 +21,11 @@ int parsec_cuda_migrate_init(int ndevices)
     cudaError_t cudastatus;
     //nvmlReturn_t nvml_ret;
 
+    NDEVICES = ndevices;
     device_info = (parsec_device_cuda_info_t *) calloc(ndevices, sizeof(parsec_device_cuda_info_t));
     migrated_task_list = (parsec_list_t**) calloc(ndevices, sizeof(parsec_list_t*));
 
-    for(i = 0; i < ndevices; i++)
+    for(i = 0; i < NDEVICES; i++)
     {
         device_info[i].task_count = 0;
         device_info[i].load = 0;
@@ -36,14 +38,14 @@ int parsec_cuda_migrate_init(int ndevices)
 
 }
 
-int parsec_cuda_migrate_fini(int ndevices)
+int parsec_cuda_migrate_fini()
 {
     int i;
 
     free(device_info); 
     //nvmlShutdown();
 
-    for(i = 0; i < ndevices; i++)
+    for(i = 0; i < NDEVICES; i++)
     {
         PARSEC_OBJ_RELEASE(migrated_task_list[i]); 
     }
@@ -145,13 +147,13 @@ int is_starving(int device)
  * 
  * TODO: needs updation
  */
-int find_starving_device(int dealer_device, int ndevice)
+int find_starving_device(int dealer_device)
 {
     int i;
-    printf(" find_starving_device: Total_Dev %d  Dealer_Dev %d\n", ndevice, dealer_device);
+    printf(" find_starving_device: Total_Dev %d  Dealer_Dev %d\n", NDEVICES, dealer_device);
 
     // 0 device is the CPU, 1 is recursive
-    for(i = 2; i < (2 + ndevice); i++)
+    for(i = 2; i < (2 + NDEVICES); i++)
     {
         printf("Trying_Dev %d  Dealer_Dev %d\n", i, dealer_device);
         if( i == dealer_device) 
@@ -196,12 +198,45 @@ parsec_cuda_change_device( int dealer_device_index)
 
 
 
-int parsec_cuda_kernel_schedule( parsec_execution_stream_t *es,
+int parsec_cuda_kernel_enqueue( parsec_execution_stream_t *es,
                         parsec_task_t            *task,
                         int   starving_device_index)
 {
     parsec_list_t* li = migrated_task_list[starving_device_index];
-    parsec_list_chain_sorted(li, task, parsec_execution_context_priority_comparator);
+    parsec_list_chain_sorted(li, (parsec_list_item_t*) task, parsec_execution_context_priority_comparator);
+
+    return 0;
+}
+
+/**
+ * @brief This function will be called in __parsec_context_wait() just before 
+ * parsec_current_scheduler->module.select(). This will ensure that the migrated tasks 
+ * will get priority over new tasks. 
+ * 
+ * When a compute thread calls this function, it is forced to try to be a manager of the 
+ * a device. If the device already has a manager, the compute thread passes the control of 
+ * the task to the manager. If not the compute thread will become the manager. 
+ * 
+ * @param es 
+ * @return int 
+ */
+
+int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es)
+{
+    int i;
+    parsec_task_t * task = NULL;
+    parsec_list_t* li = NULL;
+
+    for(i = 0; i < NDEVICES; i++)
+    {
+        li = migrated_task_list[i];
+        task = (parsec_task_t*) parsec_list_pop_front(li);
+        if(task != NULL)
+            break;
+    }
+
+    if(task != NULL)   
+        parsec_cuda_kernel_scheduler(es, task, i); 
 }
 
 /**
@@ -226,13 +261,7 @@ int parsec_cuda_kernel_migrate( parsec_execution_stream_t *es,
     if(starving_device_index == -1)
         return -1;
 
-    /**
-     * @brief The distance value in normal parsec scheduler is laways positive. So a negative
-     * distance value can be used to communicate the device index of the staving node to the 
-     * qpd scheduler. The distance is calucaled as distance = ( (starving device index) * -1 ) -1
-     * 
-     */
-    parsec_cuda_kernel_schedule(es, (parsec_task_t *) migrated_gpu_task, starving_device_index); 
+    parsec_cuda_kernel_enqueue(es, (parsec_task_t *) migrated_gpu_task, starving_device_index); 
     printf("Task migrated to device %d \n", starving_device_index);
 
     return starving_device_index;
