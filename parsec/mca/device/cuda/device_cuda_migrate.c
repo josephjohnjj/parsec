@@ -3,6 +3,7 @@
 
 extern int parsec_device_cuda_enabled;
 static parsec_device_cuda_info_t* device_info; 
+static parsec_list_t** migrated_task_list;
 
 
 /**
@@ -17,17 +18,19 @@ int parsec_cuda_migrate_init(int ndevices)
 {
     int i;
     cudaError_t cudastatus;
-    nvmlReturn_t nvml_ret;
+    //nvmlReturn_t nvml_ret;
 
     device_info = (parsec_device_cuda_info_t *) calloc(ndevices, sizeof(parsec_device_cuda_info_t));
+    migrated_task_list = (parsec_list_t**) calloc(ndevices, sizeof(parsec_list_t*));
 
     for(i = 0; i < ndevices; i++)
     {
         device_info[i].task_count = 0;
         device_info[i].load = 0;
+        migrated_task_list[i] = PARSEC_OBJ_NEW(parsec_list_t);
     }
 
-    nvml_ret = nvmlInit_v2();
+    //nvml_ret = nvmlInit_v2();
 
     return 0;
 
@@ -35,8 +38,16 @@ int parsec_cuda_migrate_init(int ndevices)
 
 int parsec_cuda_migrate_fini(int ndevices)
 {
+    int i;
+
     free(device_info); 
-    nvmlShutdown();
+    //nvmlShutdown();
+
+    for(i = 0; i < ndevices; i++)
+    {
+        PARSEC_OBJ_RELEASE(migrated_task_list[i]); 
+    }
+    free(migrated_task_list);
 
     return 0;
 
@@ -59,11 +70,11 @@ int parsec_cuda_get_device_load(int device)
     nvmlDevice_t nvml_device;
     nvmlUtilization_t nvml_utilization;
     
-    nvmlDeviceGetHandleByIndex_v2(device, &nvml_device);
-    nvml_ret = nvmlDeviceGetUtilizationRates ( nvml_device, &nvml_utilization);
-    device_info[device].load = nvml_utilization.gpu;
-
-    printf("NVML Device Load GPU %d Memory %d \n", nvml_utilization.gpu, nvml_utilization.memory);
+    //nvmlDeviceGetHandleByIndex_v2(device, &nvml_device);
+    //nvml_ret = nvmlDeviceGetUtilizationRates ( nvml_device, &nvml_utilization);
+    //device_info[device].load = nvml_utilization.gpu;
+//
+    //printf("NVML Device Load GPU %d Memory %d \n", nvml_utilization.gpu, nvml_utilization.memory);
 
     return device_info[device].load;
  
@@ -184,6 +195,15 @@ parsec_cuda_change_device( int dealer_device_index)
 }
 
 
+
+int parsec_cuda_kernel_schedule( parsec_execution_stream_t *es,
+                        parsec_task_t            *task,
+                        int   starving_device_index)
+{
+    parsec_list_t* li = migrated_task_list[starving_device_index];
+    parsec_list_chain_sorted(li, task, parsec_execution_context_priority_comparator);
+}
+
 /**
  * This function migrate a specific task from a device a
  * to another. 
@@ -212,7 +232,7 @@ int parsec_cuda_kernel_migrate( parsec_execution_stream_t *es,
      * qpd scheduler. The distance is calucaled as distance = ( (starving device index) * -1 ) -1
      * 
      */
-    __parsec_schedule(es, (parsec_task_t *) migrated_gpu_task, (starving_device_index * -1) - 1); 
+    parsec_cuda_kernel_schedule(es, (parsec_task_t *) migrated_gpu_task, starving_device_index); 
     printf("Task migrated to device %d \n", starving_device_index);
 
     return starving_device_index;
