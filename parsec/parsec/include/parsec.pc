@@ -1,0 +1,13 @@
+prefix=/home/joseph/parsec/build/install
+exec_prefix=${prefix}/bin
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: PaRSEC
+Description: Parallel Runtime Scheduling and Execution Controller
+Version: 4.0.0
+Requires: hwloc
+Libs: -L${libdir} -lparsec -L/usr/lib/gcc/x86_64-linux-gnu/9 -L/usr/lib/x86_64-linux-gnu -L/usr/lib -L/lib/x86_64-linux-gnu -L/lib -lgfortran -lm -lgcc_s -lgcc -lquadmath -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc -latomic /usr/local/lib/libmpi.so /usr/lib/x86_64-linux-gnu/libhwloc.so -latomic 
+Libs.private: 
+Cflags: -I${includedir}  -I/usr/include -I/usr/local/include 
+

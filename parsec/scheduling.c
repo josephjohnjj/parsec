@@ -26,6 +26,8 @@
 #include "parsec/dictionary.h"
 #include "parsec/utils/backoff.h"
 
+#include "parsec/mca/device/cuda/device_cuda_migrate.h"
+
 #include <signal.h>
 #if defined(PARSEC_HAVE_STRING_H)
 #include <string.h>
@@ -41,6 +43,8 @@
 #if defined(PARSEC_PROF_RUSAGE_EU) && defined(PARSEC_HAVE_GETRUSAGE) && defined(PARSEC_HAVE_RUSAGE_THREAD) && !defined(__bgp__)
 #include <sys/time.h>
 #include <sys/resource.h>
+
+
 
 static void parsec_rusage_per_es(parsec_execution_stream_t* es, bool print)
 {
@@ -601,7 +605,7 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         }
 
 #if defined(DISTRIBUTED)
-        if( (1 == parsec_communication_engine_up) &&
+        if( (1 == parsec_communication_engine_up) && 
             (es->virtual_process[0].parsec_context->nb_nodes == 1) &&
             PARSEC_THREAD_IS_MASTER(es) ) {
             /* check for remote deps completion */
@@ -617,6 +621,14 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         }
         misses_in_a_row++;  /* assume we fail to extract a task */
 
+        /**
+         * @brief This function will force a thread to be a manager thread,
+         * if there are any tasks migrated to a particular device. 
+         * This will also ensure that a migrated task gets priority in execution
+         * when compared to a new task. 
+         */
+        parsec_cuda_kernel_dequeue(es);
+        
         if( NULL == (task = es->next_task) ) {
             task = parsec_current_scheduler->module.select(es, &distance);
         } else {

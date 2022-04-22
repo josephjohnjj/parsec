@@ -1,0 +1,32 @@
+PARSECDIR=/home/joseph/parsec/build/install
+PARSEC_PKGCONFIG=/home/joseph/parsec/build/install/lib/pkgconfig
+
+PKG_CONFIG_PATH += ":${PARSEC_PKGCONFIG}"
+
+CC = gcc
+
+CFLAGS  = $(shell PKG_CONFIG_PATH="${PKG_CONFIG_PATH}" pkg-config --cflags parsec)
+LDFLAGS = $(shell PKG_CONFIG_PATH="${PKG_CONFIG_PATH}" pkg-config --libs parsec)
+
+PTGPP = ${PARSECDIR}/bin/parsec-ptgpp
+PTGFLAGS =
+
+TESTS = write_check dtd_test_allreduce
+
+all:${TESTS}
+
+%.c %.h: %.jdf
+	${PTGPP} -E -i $< -o `basename $@ .c` ${PTGFLAGS}
+
+%.o: %.c
+	${CC} ${CFLAGS} -o $@ -c $<
+
+write_check: write_check.o
+	${CC} -o $@ ${LDFLAGS} $<
+
+dtd_test_allreduce: dtd_test_allreduce.o
+	${CC} -o $@ ${LDFLAGS} $^
+
+clean:
+	rm -f *.o ${TESTS} write_check.c write_check.h
+
