@@ -23,6 +23,10 @@ PARSEC_DECLSPEC extern const parsec_device_module_t parsec_device_cuda_module;
 
 int parsec_cuda_module_init( int device, parsec_device_module_t** module );
 int parsec_cuda_module_fini(parsec_device_module_t* device);
+int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es);
+int parsec_cuda_kernel_enqueue( parsec_execution_stream_t *es,
+                                parsec_task_t            *task,
+                                int   starving_device_index);
 
 END_C_DECLS
 

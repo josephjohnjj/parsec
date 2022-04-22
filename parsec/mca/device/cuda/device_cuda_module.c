@@ -27,6 +27,8 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
+#include "parsec/mca/device/cuda/device_cuda_migrate.h"
+
 static int parsec_cuda_data_advise(parsec_device_module_t *dev, parsec_data_t *data, int advice);
 /**
  * According to
@@ -2608,6 +2610,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                              parsec_gpu_describe_gpu_task(tmp, MAX_TASK_STRLEN, gpu_task),
                              gpu_task->ec->priority );
     }
+
+    //migrate_if_starving(es,  gpu_device);
+    
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[0],
                           parsec_cuda_kernel_push,
@@ -2690,6 +2695,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     out_task_pop = progress_task;
 
  fetch_task_from_shared_queue:
+
+    /**
+     * @brief Before a new task is selectd by the device manager for execution,
+     * the manager checks if there are any starving devices and migrate tasks,
+     * to the starving device, if there are available tasks to migrate.
+     */
+    //migrate_if_starving(es,  gpu_device);
+
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
         parsec_gpu_sort_pending_list(gpu_device);

@@ -1,0 +1,409 @@
+interfaces/dtd/insert_function.c:333:        if( !(tp->super.devices_index_mask & (1 << device->device_index)))
+interfaces/dtd/insert_function.c:335:        tp->super.devices_index_mask &= ~(1 << device->device_index);
+interfaces/dtd/insert_function.c:336:        if((NULL == device) || (NULL == device->taskpool_unregister))
+interfaces/dtd/insert_function.c:338:        (void)device->taskpool_unregister(device, &tp->super);
+interfaces/dtd/insert_function.c:1258:        __tp->super.devices_index_mask |= (1 << device->device_index);
+interfaces/dtd/insert_function.c:1356:        if( !(tp->devices_index_mask & (1 << device->device_index))) continue;  /* not supported */
+interfaces/dtd/insert_function.c:1360:        if( PARSEC_DEV_CUDA == device->type ) continue;
+interfaces/dtd/insert_function.c:1362:        if( NULL != device->taskpool_register )
+interfaces/dtd/insert_function.c:1364:                device->taskpool_register(device, (parsec_taskpool_t *)tp)) {
+interfaces/dtd/insert_function.c:1365:                tp->devices_index_mask &= ~(1 << device->device_index);  /* can't use this type */
+interfaces/ptg/ptg-compiler/jdf2c.c:4372:            "    if(NULL != device->taskpool_register)\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4373:            "      if( PARSEC_SUCCESS != device->taskpool_register(device, (parsec_taskpool_t*)__parsec_tp) ) {\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4374:            "        parsec_debug_verbose(5, parsec_debug_output, \"Device %%s refused to register taskpool %%p\", device->name, __parsec_tp);\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4375:            "        __parsec_tp->super.super.devices_index_mask &= ~(1 << device->device_index);\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4378:            "    if(NULL != device->memory_register) {  /* Register all the data */\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4381:            "    supported_dev |= device->type;\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4391:                           "                     device->name, parsec_dc->key_base, parsec_dc, __parsec_tp);\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4392:                           "        __parsec_tp->super.super.devices_index_mask &= ~(1 << device->device_index);\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4398:                           "                     device->name, parsec_dc->key_base, parsec_dc, __parsec_tp);\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4399:                           "        __parsec_tp->super.super.devices_index_mask &= ~(1 << device->device_index);\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4523:            "    if((NULL == (device = parsec_mca_device_get(_i))) || (NULL == device->memory_unregister)) continue;\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4537:            "    if((NULL == device) || (NULL == device->taskpool_unregister)) continue;\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:4538:            "    if( PARSEC_SUCCESS != device->taskpool_unregister(device, &__parsec_tp->super.super) ) continue;\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:6567:            "  struct parsec_body_cuda_%s_%s_s parsec_body = { cuda_device->cuda_index, cuda_stream->cuda_stream, NULL };\n"
+interfaces/ptg/ptg-compiler/jdf2c.c:6619:            "    PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, \"GPU[%%s]:\\tEnqueue on device %%s priority %%d\", gpu_device->super.name, \n"
+data_dist/matrix/two_dim_rectangle_cyclic.c:45:    return device->memory_register(device, desc,
+data_dist/matrix/two_dim_rectangle_cyclic.c:57:    return device->memory_unregister(device, desc, twodbc->mat);
+data_dist/matrix/sym_two_dim_rectangle_cyclic.c:48:    return device->memory_register(device, desc,
+data_dist/matrix/sym_two_dim_rectangle_cyclic.c:60:    return device->memory_unregister(device, desc, sym_twodbc->mat);
+data_internal.h:75:    void                     *device_private;        /**< The pointer to the device-specific data.
+mca/device/cuda/device_cuda_migrate.c:258:    dealer_device_index = dealer_device->super.device_index;
+mca/device/template/device_template_module.c:75:    assert(tp->devices_index_mask & (1 << device->device_index));
+mca/device/template/device_template_module.c:81:            if( chores[j].type != device->type )
+mca/device/template/device_template_module.c:100:        tp->devices_index_mask &= ~(1 << device->device_index);  /* drop support for this device */
+mca/device/template/device_template_module.c:102:                             "Device %d (%s) disabled for taskpool %p", device->device_index, device->name, tp);
+mca/device/template/device_template_module.c:155:    device->super.name = strdup("0");
+mca/device/template/device_template_module.c:157:    device->super.type                 = PARSEC_DEV_TEMPLATE;
+mca/device/template/device_template_module.c:158:    device->super.executed_tasks       = 0;
+mca/device/template/device_template_module.c:159:    device->super.transferred_data_in  = 0;
+mca/device/template/device_template_module.c:160:    device->super.transferred_data_out = 0;
+mca/device/template/device_template_module.c:161:    device->super.required_data_in     = 0;
+mca/device/template/device_template_module.c:162:    device->super.required_data_out    = 0;
+mca/device/template/device_template_module.c:164:    device->super.attach              = (parsec_device_attach_f)parsec_device_template_attach;
+mca/device/template/device_template_module.c:165:    device->super.detach              = (parsec_device_detach_f)parsec_device_template_detach;
+mca/device/template/device_template_module.c:166:    device->super.memory_register     = parsec_template_memory_register;
+mca/device/template/device_template_module.c:167:    device->super.memory_unregister   = parsec_template_memory_unregister;
+mca/device/template/device_template_module.c:168:    device->super.taskpool_register   = parsec_template_taskpool_register;
+mca/device/template/device_template_module.c:169:    device->super.taskpool_unregister = parsec_template_taskpool_unregister;
+mca/device/template/device_template_module.c:171:    device->super.device_hweight = 0;  /* no computational capacity */
+mca/device/template/device_template_module.c:172:    device->super.device_tweight = 0;
+mca/device/template/device_template_module.c:173:    device->super.device_sweight = 0;
+mca/device/template/device_template_module.c:174:    device->super.device_dweight = 0;
+mca/device/template/device_template_module.c:177:        parsec_inform("TEMPLATE Device %d enabled\n", device->super.device_index);
+mca/device/device_gpu.c:68:        if( NULL != PARSEC_DATA_GET_COPY(original, gpu_device->super.device_index) ) {
+mca/device/device_gpu.c:121:    parsec_list_t *sort_list = gpu_device->exec_stream[0]->fifo_pending;
+mca/device/device_gpu.c:127:    if (gpu_device->sort_starting_p == NULL || !parsec_list_nolock_contains(sort_list, gpu_device->sort_starting_p) ) {
+mca/device/device_gpu.c:128:        gpu_device->sort_starting_p = (parsec_list_item_t*)sort_list->ghost_element.list_next;
+mca/device/device_gpu.c:132:    parsec_list_item_t *p = gpu_device->sort_starting_p;
+mca/device/device_gpu.c:183:            gpu_stream->workspace->workspace[i] = zone_malloc( gpu_device->memory, size);
+mca/device/device_gpu.c:186:                                 gpu_device->super.name,
+mca/device/device_gpu.c:190:               (gpu_device->exec_stream[0]->prof_event_track_enable ||
+mca/device/device_gpu.c:191:                gpu_device->exec_stream[1]->prof_event_track_enable)) {
+mca/device/device_gpu.c:194:                                             gpu_stream->workspace->workspace[i], gpu_device->super.device_index,
+mca/device/device_gpu.c:222:    for( i = 0; i < gpu_device->max_exec_streams; i++ ) {
+mca/device/device_gpu.c:223:        parsec_gpu_exec_stream_t *gpu_stream = gpu_device->exec_stream[i];
+mca/device/device_gpu.c:228:                   (gpu_device->exec_stream[0]->prof_event_track_enable ||
+mca/device/device_gpu.c:229:                    gpu_device->exec_stream[1]->prof_event_track_enable)) {
+mca/device/device_gpu.c:232:                                                 gpu_stream->workspace->workspace[i], gpu_device->super.device_index,
+mca/device/device_gpu.c:238:                                     gpu_device->super.name,
+mca/device/device_gpu.c:240:                zone_free( gpu_device->memory, gpu_stream->workspace->workspace[j] );
+mca/device/device_gpu.c:311:    parsec_output(parsec_gpu_output_stream, "Device %d:%d (%p) epoch\n", gpu_device->super.device_index,
+mca/device/device_gpu.c:312:                  gpu_device->super.device_index, gpu_device, gpu_device->data_avail_epoch);
+mca/device/device_gpu.c:314:                  gpu_device->peer_access_mask, (unsigned long long)gpu_device->super.executed_tasks, gpu_device->max_exec_streams);
+mca/device/device_gpu.c:316:                  (unsigned long long)gpu_device->super.transferred_data_in, (unsigned long long)gpu_device->super.d2d_transfer,
+mca/device/device_gpu.c:317:                  (unsigned long long)gpu_device->super.transferred_data_out,
+mca/device/device_gpu.c:318:                  (unsigned long long)gpu_device->super.required_data_in, (unsigned long long)gpu_device->super.required_data_out);
+mca/device/device_gpu.c:319:    for( i = 0; i < gpu_device->max_exec_streams; i++ ) {
+mca/device/device_gpu.c:320:        dump_exec_stream(gpu_device->exec_stream[i]);
+mca/device/device_gpu.c:322:    if( !parsec_list_is_empty(&gpu_device->gpu_mem_lru) ) {
+mca/device/device_gpu.c:325:        PARSEC_LIST_ITERATOR(&gpu_device->gpu_mem_lru, item,
+mca/device/device_gpu.c:334:    if( !parsec_list_is_empty(&gpu_device->gpu_mem_owned_lru) ) {
+mca/device/device_gpu.c:337:        PARSEC_LIST_ITERATOR(&gpu_device->gpu_mem_owned_lru, item,
+mca/device/device.c:312:        assert( i == device->device_index );
+mca/device/device.c:314:        device_counter[device->device_index]  += device->executed_tasks;
+mca/device/device.c:315:        transferred_in[device->device_index]  += device->transferred_data_in;
+mca/device/device.c:316:        transferred_out[device->device_index] += device->transferred_data_out;
+mca/device/device.c:317:        required_in[device->device_index]     += device->required_data_in;
+mca/device/device.c:318:        required_out[device->device_index]    += device->required_data_out;
+mca/device/device.c:320:        total              += device->executed_tasks;
+mca/device/device.c:321:        total_data_in      += device->transferred_data_in;
+mca/device/device.c:322:        total_data_out     += device->transferred_data_out;
+mca/device/device.c:323:        total_required_in  += device->required_data_in;
+mca/device/device.c:324:        total_required_out += device->required_data_out;
+mca/device/device.c:326:        device->executed_tasks       = 0;
+mca/device/device.c:327:        device->transferred_data_in  = 0;
+mca/device/device.c:328:        device->transferred_data_out = 0;
+mca/device/device.c:329:        device->required_data_in     = 0;
+mca/device/device.c:330:        device->required_data_out    = 0;
+mca/device/device.c:352:               device->device_index, device_counter[i], (device_counter[i]/gtotal)*100.00,
+mca/device/device.c:356:               (((double)transferred_out[i]) / (double)required_out[i]) * 100.0, device->name );
+mca/device/device.c:557:        parsec_device_hweight[i] = device->device_hweight;
+mca/device/device.c:558:        parsec_device_sweight[i] = device->device_sweight;
+mca/device/device.c:559:        parsec_device_dweight[i] = device->device_dweight;
+mca/device/device.c:560:        parsec_device_tweight[i] = device->device_tweight;
+mca/device/device.c:561:        if( PARSEC_DEV_RECURSIVE == device->type ) continue;
+mca/device/device.c:562:        total_hperf += device->device_hweight;
+mca/device/device.c:563:        total_tperf += device->device_tweight;
+mca/device/device.c:564:        total_sperf += device->device_sweight;
+mca/device/device.c:565:        total_dperf += device->device_dweight;
+mca/device/device.c:710:    device->device_hweight = nstreams * fp_ipc * freq; /* No processor have half precision for now */
+mca/device/device.c:711:    device->device_tweight = nstreams * fp_ipc * freq; /* No processor support tensor operations for now */
+mca/device/device.c:712:    device->device_sweight = nstreams * fp_ipc * freq;
+mca/device/device.c:713:    device->device_dweight = nstreams * dp_ipc * freq;
+mca/device/device.c:728:    assert(tp->devices_index_mask & (1 << device->device_index));
+mca/device/device.c:736:            if( chores[j].type != device->type )
+mca/device/device.c:754:        tp->devices_index_mask &= ~(1 << device->device_index);  /* discard this type */
+mca/device/device.c:756:                             "Device %d (%s) disabled for taskpool %p", device->device_index, device->name, tp);
+mca/device/device.c:820:    if( NULL != device->context ) {
+mca/device/device.c:833:    device->device_index = parsec_nb_devices;
+mca/device/device.c:835:    device->context = context;
+mca/device/device.c:837:    PARSEC_OBJ_CONSTRUCT(&device->infos, parsec_info_object_array_t);
+mca/device/device.c:838:    parsec_info_object_array_init(&device->infos, &parsec_per_device_infos, device);
+mca/device/device.c:839:    return device->device_index;
+mca/device/device.c:853:    PARSEC_OBJ_DESTRUCT(&device->infos);
+mca/device/device.c:855:    if( NULL == device->context ) {
+mca/device/device.c:859:    if(device != parsec_devices[device->device_index]) {
+mca/device/device.c:863:    parsec_devices[device->device_index] = NULL;
+mca/device/device.c:864:    device->context = NULL;
+mca/device/device.c:865:    device->device_index = -1;
+mca/device/device.c:880:        if ((NULL == device) || (device->type & device_type))
+mca/device/device.c:886:        tp->devices_index_mask &= ~(1 << device->device_index);
+mca/device/transfer_gpu.c:222:    parsec_list_item_t* item = (parsec_list_item_t*)gpu_device->gpu_mem_owned_lru.ghost_element.list_next;
+mca/device/transfer_gpu.c:229:        if( item == &(gpu_device->gpu_mem_owned_lru.ghost_element) ) {
+mca/device/transfer_gpu.c:251:                                 gpu_device->super.name, (void*)d2h_task,
+mca/device/transfer_gpu.c:272:    w2r_task->last_data_check_epoch = gpu_device->data_avail_epoch - 1;
+mca/device/transfer_gpu.c:293:                         gpu_device->super.name, (void*)task, task->locals[0].value);
+mca/device/transfer_gpu.c:300:        gpu_device->super.transferred_data_out += gpu_copy->original->nb_elts; /* TODO: not hardcoded, use datatype size */
+mca/device/transfer_gpu.c:311:                                 gpu_device->super.name, (void*)task, i, gpu_copy, gpu_copy->original);
+mca/device/transfer_gpu.c:318:                                 gpu_device->super.name,
+mca/device/transfer_gpu.c:323:                                 gpu_device->super.name, (void*)task, i, gpu_copy, gpu_copy->original);
+mca/device/transfer_gpu.c:324:            parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_copy);
+mca/device/transfer_gpu.c:330:    gpu_device->data_avail_epoch++;
+mca/device/cuda/device_cuda_module.c:179:    parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
+mca/device/cuda/device_cuda_module.c:180:    int index, capability = cuda_device->major * 10 + cuda_device->minor;
+mca/device/cuda/device_cuda_module.c:185:    status = cudaSetDevice( cuda_device->cuda_index );
+mca/device/cuda/device_cuda_module.c:223:                            function_name, gpu_device->super.name);
+mca/device/cuda/device_cuda_module.c:260:    assert(PARSEC_DEV_CUDA == device->type);
+mca/device/cuda/device_cuda_module.c:261:    assert(tp->devices_index_mask & (1 << device->device_index));
+mca/device/cuda/device_cuda_module.c:267:            if( chores[j].type != device->type )
+mca/device/cuda/device_cuda_module.c:286:        tp->devices_index_mask &= ~(1 << device->device_index);  /* drop support for this device */
+mca/device/cuda/device_cuda_module.c:288:                             "Device %d (%s) disabled for taskpool %p", device->device_index, device->name, tp);
+mca/device/cuda/device_cuda_module.c:358:    gpu_device = &cuda_device->super;
+mca/device/cuda/device_cuda_module.c:359:    device = &gpu_device->super;
+mca/device/cuda/device_cuda_module.c:361:    cuda_device->cuda_index = (uint8_t)dev_id;
+mca/device/cuda/device_cuda_module.c:362:    cuda_device->major      = (uint8_t)major;
+mca/device/cuda/device_cuda_module.c:363:    cuda_device->minor      = (uint8_t)minor;
+mca/device/cuda/device_cuda_module.c:364:    len = asprintf(&gpu_device->super.name, "%s (%d)", szName, dev_id);
+mca/device/cuda/device_cuda_module.c:366:        gpu_device->super.name = "";
+mca/device/cuda/device_cuda_module.c:367:    gpu_device->data_avail_epoch = 0;
+mca/device/cuda/device_cuda_module.c:369:    gpu_device->max_exec_streams = PARSEC_MAX_STREAMS;
+mca/device/cuda/device_cuda_module.c:370:    gpu_device->exec_stream =
+mca/device/cuda/device_cuda_module.c:371:        (parsec_gpu_exec_stream_t**)malloc(gpu_device->max_exec_streams * sizeof(parsec_gpu_exec_stream_t*));
+mca/device/cuda/device_cuda_module.c:375:    gpu_device->exec_stream[0] = (parsec_gpu_exec_stream_t*)malloc(gpu_device->max_exec_streams * sizeof
+mca/device/cuda/device_cuda_module.c:377:    for( j = 1; j < gpu_device->max_exec_streams; j++ ) {
+mca/device/cuda/device_cuda_module.c:378:        gpu_device->exec_stream[j] = (parsec_gpu_exec_stream_t*)(
+mca/device/cuda/device_cuda_module.c:379:                (parsec_cuda_exec_stream_t*)gpu_device->exec_stream[0] + j);
+mca/device/cuda/device_cuda_module.c:381:    for( j = 0; j < gpu_device->max_exec_streams; j++ ) {
+mca/device/cuda/device_cuda_module.c:382:        parsec_cuda_exec_stream_t* cuda_stream = (parsec_cuda_exec_stream_t*)gpu_device->exec_stream[j];
+mca/device/cuda/device_cuda_module.c:433:            exec_stream->profiling = gpu_device->exec_stream[0]->profiling;
+mca/device/cuda/device_cuda_module.c:444:    device->type                 = PARSEC_DEV_CUDA;
+mca/device/cuda/device_cuda_module.c:445:    device->executed_tasks       = 0;
+mca/device/cuda/device_cuda_module.c:446:    device->transferred_data_in  = 0;
+mca/device/cuda/device_cuda_module.c:447:    device->d2d_transfer         = 0;
+mca/device/cuda/device_cuda_module.c:448:    device->transferred_data_out = 0;
+mca/device/cuda/device_cuda_module.c:449:    device->required_data_in     = 0;
+mca/device/cuda/device_cuda_module.c:450:    device->required_data_out    = 0;
+mca/device/cuda/device_cuda_module.c:452:    device->attach              = parsec_device_cuda_attach;
+mca/device/cuda/device_cuda_module.c:453:    device->detach              = parsec_device_cuda_detach;
+mca/device/cuda/device_cuda_module.c:454:    device->memory_register     = parsec_cuda_memory_register;
+mca/device/cuda/device_cuda_module.c:455:    device->memory_unregister   = parsec_cuda_memory_unregister;
+mca/device/cuda/device_cuda_module.c:456:    device->taskpool_register   = parsec_cuda_taskpool_register;
+mca/device/cuda/device_cuda_module.c:457:    device->taskpool_unregister = parsec_cuda_taskpool_unregister;
+mca/device/cuda/device_cuda_module.c:458:    device->data_advise         = parsec_cuda_data_advise;
+mca/device/cuda/device_cuda_module.c:459:    device->memory_release      = parsec_cuda_flush_lru;
+mca/device/cuda/device_cuda_module.c:464:                        "the PaRSEC runtime developers", gpu_device->super.name, major, minor );
+mca/device/cuda/device_cuda_module.c:466:    device->device_hweight = (float)streaming_multiprocessor * (float)hrate * (float)clockRate * 2e-3f;
+mca/device/cuda/device_cuda_module.c:467:    device->device_tweight = (float)streaming_multiprocessor * (float)trate * (float)clockRate * 2e-3f;
+mca/device/cuda/device_cuda_module.c:468:    device->device_sweight = (float)streaming_multiprocessor * (float)srate * (float)clockRate * 2e-3f;
+mca/device/cuda/device_cuda_module.c:469:    device->device_dweight = (float)streaming_multiprocessor * (float)drate * (float)clockRate * 2e-3f;
+mca/device/cuda/device_cuda_module.c:472:    PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_lru,       parsec_list_t);
+mca/device/cuda/device_cuda_module.c:473:    PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_owned_lru, parsec_list_t);
+mca/device/cuda/device_cuda_module.c:474:    PARSEC_OBJ_CONSTRUCT(&gpu_device->pending,           parsec_fifo_t);
+mca/device/cuda/device_cuda_module.c:476:    gpu_device->sort_starting_p = NULL;
+mca/device/cuda/device_cuda_module.c:477:    gpu_device->peer_access_mask = 0;  /* No GPU to GPU direct transfer by default */
+mca/device/cuda/device_cuda_module.c:495:                      cuda_device->cuda_index, cuda_device->major, cuda_device->minor, device->name,
+mca/device/cuda/device_cuda_module.c:502:                      device->device_dweight, device->device_sweight, device->device_tweight, device->device_hweight);
+mca/device/cuda/device_cuda_module.c:509:    if( NULL != gpu_device->exec_stream) {
+mca/device/cuda/device_cuda_module.c:510:        for( j = 0; j < gpu_device->max_exec_streams; j++ ) {
+mca/device/cuda/device_cuda_module.c:511:            parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t*)gpu_device->exec_stream[j];
+mca/device/cuda/device_cuda_module.c:541:        free(gpu_device->exec_stream[0]);
+mca/device/cuda/device_cuda_module.c:542:        free(gpu_device->exec_stream);
+mca/device/cuda/device_cuda_module.c:543:        gpu_device->exec_stream = NULL;
+mca/device/cuda/device_cuda_module.c:557:    status = cudaSetDevice( cuda_device->cuda_index );
+mca/device/cuda/device_cuda_module.c:565:    PARSEC_OBJ_DESTRUCT(&gpu_device->pending);
+mca/device/cuda/device_cuda_module.c:568:    for( j = 0; j < gpu_device->max_exec_streams; j++ ) {
+mca/device/cuda/device_cuda_module.c:569:        parsec_cuda_exec_stream_t* cuda_stream = (parsec_cuda_exec_stream_t*)gpu_device->exec_stream[j];
+mca/device/cuda/device_cuda_module.c:594:    free(gpu_device->exec_stream[0]);
+mca/device/cuda/device_cuda_module.c:595:    free(gpu_device->exec_stream);
+mca/device/cuda/device_cuda_module.c:596:    gpu_device->exec_stream = NULL;
+mca/device/cuda/device_cuda_module.c:598:    cuda_device->cuda_index = -1;
+mca/device/cuda/device_cuda_module.c:601:    PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_lru);
+mca/device/cuda/device_cuda_module.c:602:    PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_owned_lru);
+mca/device/cuda/device_cuda_module.c:619:    parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
+mca/device/cuda/device_cuda_module.c:626:    status = cudaSetDevice( cuda_device->cuda_index );
+mca/device/cuda/device_cuda_module.c:635:                           gpu_device->super.name, gpu_device->super.name);
+mca/device/cuda/device_cuda_module.c:650:                       cuda_device->cuda_index, how_much_we_allocate, gpu_device->super.name, initial_free_mem);
+mca/device/cuda/device_cuda_module.c:658:                       cuda_device->cuda_index, gpu_device->super.name);
+mca/device/cuda/device_cuda_module.c:679:                                                  gpu_device->super.name,_free_mem, _total_mem, mem_elem_per_gpu);
+mca/device/cuda/device_cuda_module.c:685:                             gpu_device->super.name,gpu_elem, gpu_elem->super.obj_reference_count, NULL);
+mca/device/cuda/device_cuda_module.c:688:        gpu_elem->device_index = gpu_device->super.device_index;
+mca/device/cuda/device_cuda_module.c:693:                             gpu_device->super.name, gpu_elem, gpu_elem->super.obj_reference_count);
+mca/device/cuda/device_cuda_module.c:694:        parsec_list_push_back( &gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_elem );
+mca/device/cuda/device_cuda_module.c:697:    if( 0 == mem_elem_per_gpu && parsec_list_is_empty( &gpu_device->gpu_mem_lru ) ) {
+mca/device/cuda/device_cuda_module.c:698:        parsec_warning("GPU[%s] Cannot allocate memory on GPU %s. Skip it!", gpu_device->super.name, gpu_device->super.name);
+mca/device/cuda/device_cuda_module.c:703:                             gpu_device->super.name, mem_elem_per_gpu );
+mca/device/cuda/device_cuda_module.c:706:                         "GPU[%s] Allocate %u tiles on the GPU memory", gpu_device->super.name, mem_elem_per_gpu);
+mca/device/cuda/device_cuda_module.c:708:    if( NULL == gpu_device->memory ) {
+mca/device/cuda/device_cuda_module.c:725:                                                   gpu_device->super.name, total_size); }) );
+mca/device/cuda/device_cuda_module.c:727:        gpu_device->memory = zone_malloc_init( base_ptr, mem_elem_per_gpu, eltsize );
+mca/device/cuda/device_cuda_module.c:729:        if( gpu_device->memory == NULL ) {
+mca/device/cuda/device_cuda_module.c:731:                           gpu_device->super.name, gpu_device->super.name);
+mca/device/cuda/device_cuda_module.c:736:                             gpu_device->super.name, mem_elem_per_gpu, eltsize );
+mca/device/cuda/device_cuda_module.c:739:    gpu_device->mem_block_size = eltsize;
+mca/device/cuda/device_cuda_module.c:740:    gpu_device->mem_nb_blocks = mem_elem_per_gpu;
+mca/device/cuda/device_cuda_module.c:750:    parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
+mca/device/cuda/device_cuda_module.c:759:                             gpu_device->super.name, gpu_copy, gpu_copy->device_private, gpu_copy->super.super
+mca/device/cuda/device_cuda_module.c:762:        assert( gpu_copy->device_index == cuda_device->super.super.device_index );
+mca/device/cuda/device_cuda_module.c:766:                          gpu_device->super.name, original->key);
+mca/device/cuda/device_cuda_module.c:776:           (gpu_device->exec_stream[0]->prof_event_track_enable ||
+mca/device/cuda/device_cuda_module.c:777:            gpu_device->exec_stream[1]->prof_event_track_enable)) {
+mca/device/cuda/device_cuda_module.c:778:            parsec_profiling_trace_flags(gpu_device->exec_stream[0]->profiling,
+mca/device/cuda/device_cuda_module.c:780:                                         gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:782:            parsec_profiling_trace_flags(gpu_device->exec_stream[0]->profiling,
+mca/device/cuda/device_cuda_module.c:785:                                         gpu_device->super.device_index, NULL, 0);
+mca/device/cuda/device_cuda_module.c:788:        zone_free( cuda_device->super.memory, (void*)gpu_copy->device_private );
+mca/device/cuda/device_cuda_module.c:810:    parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_lru);
+mca/device/cuda/device_cuda_module.c:811:    parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_owned_lru);
+mca/device/cuda/device_cuda_module.c:813:    if( (in_use = zone_in_use(gpu_device->memory)) != 0 ) {
+mca/device/cuda/device_cuda_module.c:815:                       device->name, in_use);
+mca/device/cuda/device_cuda_module.c:835:    status = cudaSetDevice( cuda_device->cuda_index );
+mca/device/cuda/device_cuda_module.c:839:    parsec_cuda_flush_lru(&cuda_device->super.super);
+mca/device/cuda/device_cuda_module.c:842:    assert( NULL != cuda_device->super.memory );
+mca/device/cuda/device_cuda_module.c:843:    void* ptr = zone_malloc_fini(&cuda_device->super.memory);
+mca/device/cuda/device_cuda_module.c:873:    parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
+mca/device/cuda/device_cuda_module.c:894:                             gpu_device->super.name, task_name, flow->name, i);
+mca/device/cuda/device_cuda_module.c:901:        gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
+mca/device/cuda/device_cuda_module.c:908:                                 gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:914:                                     gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:928:                             gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:933:        gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
+mca/device/cuda/device_cuda_module.c:939:            lru_gpu_elem = (parsec_gpu_data_copy_t*)parsec_list_pop_front(&gpu_device->gpu_mem_lru);
+mca/device/cuda/device_cuda_module.c:947:                                     gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:957:                                         gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:960:                    parsec_list_push_front(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)temp_loc[j]);
+mca/device/cuda/device_cuda_module.c:972:                                 gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:983:                                     gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:1001:                                     gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:1004:                parsec_list_push_back(&gpu_device->gpu_mem_lru, &lru_gpu_elem->super);
+mca/device/cuda/device_cuda_module.c:1012:                                             gpu_device->super.name, task_name);
+mca/device/cuda/device_cuda_module.c:1031:                    parsec_list_push_back(&gpu_device->gpu_mem_lru, &lru_gpu_elem->super);
+mca/device/cuda/device_cuda_module.c:1039:                                                 gpu_device->super.name, task_name);
+mca/device/cuda/device_cuda_module.c:1052:                                             gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:1076:                parsec_data_copy_detach(oldmaster, lru_gpu_elem, gpu_device->super.device_index);
+mca/device/cuda/device_cuda_module.c:1084:                                     gpu_device->super.name, task_name, this_task->task_class->name, i, lru_gpu_elem,
+mca/device/cuda/device_cuda_module.c:1090:                                     gpu_device->super.name, task_name, this_task->task_class->name, i, lru_gpu_elem);
+mca/device/cuda/device_cuda_module.c:1097:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1102:               (gpu_device->exec_stream[0]->prof_event_track_enable ||
+mca/device/cuda/device_cuda_module.c:1103:                gpu_device->exec_stream[1]->prof_event_track_enable)) {
+mca/device/cuda/device_cuda_module.c:1104:                parsec_profiling_trace_flags(gpu_device->exec_stream[0]->profiling,
+mca/device/cuda/device_cuda_module.c:1106:                                             gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:1108:                parsec_profiling_trace_flags(gpu_device->exec_stream[0]->profiling,
+mca/device/cuda/device_cuda_module.c:1111:                                             gpu_device->super.device_index, NULL, 0);
+mca/device/cuda/device_cuda_module.c:1115:            zone_free( gpu_device->memory, (void*)(lru_gpu_elem->device_private) );
+mca/device/cuda/device_cuda_module.c:1120:                                 gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:1128:                             gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1132:                        (gpu_device->exec_stream[0]->prof_event_track_enable ||
+mca/device/cuda/device_cuda_module.c:1133:                         gpu_device->exec_stream[1]->prof_event_track_enable)) {
+mca/device/cuda/device_cuda_module.c:1134:            parsec_profiling_trace_flags(gpu_device->exec_stream[0]->profiling,
+mca/device/cuda/device_cuda_module.c:1136:                                         gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:1148:                             gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1151:        parsec_data_copy_attach(master, gpu_elem, gpu_device->super.device_index);
+mca/device/cuda/device_cuda_module.c:1158:                             gpu_device->super.name, task_name,
+mca/device/cuda/device_cuda_module.c:1161:        parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_elem);
+mca/device/cuda/device_cuda_module.c:1165:        gpu_device->data_avail_epoch++;
+mca/device/cuda/device_cuda_module.c:1267:    parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
+mca/device/cuda/device_cuda_module.c:1280:                             gpu_device->super.name, gpu_task);
+mca/device/cuda/device_cuda_module.c:1295:                               gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count, gpu_elem->readers);
+mca/device/cuda/device_cuda_module.c:1302:                             gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count);
+mca/device/cuda/device_cuda_module.c:1314:            if( gpu_device->peer_access_mask & (1 << in_elem_dev->cuda_index) ) {
+mca/device/cuda/device_cuda_module.c:1328:            if(gpu_device->peer_access_mask & (1 << target->cuda_index)) {
+mca/device/cuda/device_cuda_module.c:1333:                                         gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, in_elem, original);
+mca/device/cuda/device_cuda_module.c:1341:                                             gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index);
+mca/device/cuda/device_cuda_module.c:1348:                                         gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
+mca/device/cuda/device_cuda_module.c:1368:                                 gpu_device->super.name, in_elem, in_elem->super.super.obj_reference_count, original, gpu_elem, gpu_elem->super.super.obj_reference_count);
+mca/device/cuda/device_cuda_module.c:1381:    transfer_from = parsec_data_start_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
+mca/device/cuda/device_cuda_module.c:1387:                             gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1401:        gpu_device->super.required_data_in += original->nb_elts;
+mca/device/cuda/device_cuda_module.c:1408:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1413:                                 gpu_device->super.device_index, gpu_elem->version, (void*)
+mca/device/cuda/device_cuda_module.c:1418:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1422:                                 gpu_device->super.device_index, gpu_elem->version, (void*)gpu_elem->device_private);
+mca/device/cuda/device_cuda_module.c:1443:                    gpu_task->prof_tp_id = cuda_device->cuda_index;
+mca/device/cuda/device_cuda_module.c:1454:                                           gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:1465:                                                     gpu_device->super.device_index, &_info,
+mca/device/cuda/device_cuda_module.c:1476:                                   in_elem->device_private, gpu_elem->device_private, cuda_device->cuda_index,
+mca/device/cuda/device_cuda_module.c:1481:                                   gpu_elem->device_private, cuda_device->cuda_index,
+mca/device/cuda/device_cuda_module.c:1492:                gpu_device->super.transferred_data_in += nb_elts;
+mca/device/cuda/device_cuda_module.c:1494:                gpu_device->super.d2d_transfer += nb_elts;
+mca/device/cuda/device_cuda_module.c:1496:                gpu_device->super.nb_data_faults += nb_elts;
+mca/device/cuda/device_cuda_module.c:1503:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1519:    parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
+mca/device/cuda/device_cuda_module.c:1523:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1583:                         gpu_device->super.name, parsec_gpu_describe_gpu_task(tmp, MAX_TASK_STRLEN, gpu_task),
+mca/device/cuda/device_cuda_module.c:1588:                         gpu_device->super.name, gpu_task, __FILE__, __LINE__);
+mca/device/cuda/device_cuda_module.c:1627:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:1667:                                 gpu_device->super.name, gpu_task->ec->data[0].data_in, gpu_task->ec->data[0].data_in->super.super.obj_reference_count,
+mca/device/cuda/device_cuda_module.c:1669:            parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
+mca/device/cuda/device_cuda_module.c:1788:    assert(gpu_stream == gpu_device->exec_stream[0]);
+mca/device/cuda/device_cuda_module.c:1792:                         gpu_device->super.name, parsec_task_snprintf(task_str, MAX_TASK_STRLEN, task));
+mca/device/cuda/device_cuda_module.c:1809:                                                       gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:1816:                                       gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:1824:            if( PARSEC_DEV_CUDA == src_device->super.type ) {
+mca/device/cuda/device_cuda_module.c:1834:                    om = src_device->mutex;
+mca/device/cuda/device_cuda_module.c:1837:                        if( parsec_atomic_cas_int32(&src_device->mutex, 0, -1) )
+mca/device/cuda/device_cuda_module.c:1852:                    if( parsec_atomic_cas_int32(&src_device->mutex, om, om+1) )
+mca/device/cuda/device_cuda_module.c:1864:                                         gpu_device->super.name, task->data[i].data_in,
+mca/device/cuda/device_cuda_module.c:1865:                                         task->data[i].data_in->super.super.obj_reference_count, src_device->super.name,
+mca/device/cuda/device_cuda_module.c:1871:                                             gpu_device->super.name, task->data[i].data_in,
+mca/device/cuda/device_cuda_module.c:1875:                        parsec_list_push_back(&src_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+mca/device/cuda/device_cuda_module.c:1876:                        src_device->data_avail_epoch++;
+mca/device/cuda/device_cuda_module.c:1880:                    rc = parsec_atomic_cas_int32(&src_device->mutex, -1, 0); (void)rc;
+mca/device/cuda/device_cuda_module.c:1886:                                         gpu_device->super.name, src_device->super.name, task->data[i].data_in,
+mca/device/cuda/device_cuda_module.c:1897:                             gpu_device->super.name, parsec_task_snprintf(task_str, MAX_TASK_STRLEN, task),
+mca/device/cuda/device_cuda_module.c:1925:                             gpu_device->super.name, gpu_copy, gpu_copy->super.super.obj_reference_count,
+mca/device/cuda/device_cuda_module.c:1935:                                 gpu_device->super.name, gpu_copy, gpu_copy->super.super.obj_reference_count, gtask, gtask->ec);
+mca/device/cuda/device_cuda_module.c:1936:            parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_copy);
+mca/device/cuda/device_cuda_module.c:1991:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2059:                                 gpu_device->super.name, (void*)task);
+mca/device/cuda/device_cuda_module.c:2064:                                 gpu_device->super.name, (void*)task->ec);
+mca/device/cuda/device_cuda_module.c:2081:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2112:    if( gpu_task->last_data_check_epoch == gpu_device->data_avail_epoch )
+mca/device/cuda/device_cuda_module.c:2117:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2125:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2130:        if( NULL != gpu_task->ec->data[0].data_in->original->device_copies[gpu_device->super.device_index] &&
+mca/device/cuda/device_cuda_module.c:2131:            gpu_task->ec->data[0].data_in->original->owner_device == gpu_device->super.device_index ) {
+mca/device/cuda/device_cuda_module.c:2135:                                 gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2137:                                 gpu_device->super.device_index,
+mca/device/cuda/device_cuda_module.c:2138:                                 gpu_task->ec->data[0].data_in->original->device_copies[gpu_device->super.device_index]);
+mca/device/cuda/device_cuda_module.c:2147:        gpu_task->last_data_check_epoch = gpu_device->data_avail_epoch;
+mca/device/cuda/device_cuda_module.c:2169:                             gpu_device->super.name, flow->name,
+mca/device/cuda/device_cuda_module.c:2180:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2231:                        gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2263:                                     gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2274:                                     gpu_device->super.name, gpu_copy, gpu_copy->super.super.obj_reference_count, flow->name);
+mca/device/cuda/device_cuda_module.c:2277:                parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_copy);
+mca/device/cuda/device_cuda_module.c:2284:                                 gpu_device->super.name, gpu_copy, gpu_copy->super.super.obj_reference_count, flow->name, gpu_copy->readers);
+mca/device/cuda/device_cuda_module.c:2287:            assert( gpu_copy == parsec_data_get_copy(gpu_copy->original, gpu_device->super.device_index) );
+mca/device/cuda/device_cuda_module.c:2291:                                 gpu_device->super.name, gpu_copy, gpu_copy->super.super.obj_reference_count, flow->name);
+mca/device/cuda/device_cuda_module.c:2294:            gpu_device->super.required_data_out += nb_elts;
+mca/device/cuda/device_cuda_module.c:2304:                                     gpu_device->super.name, flow->name, original->key, gpu_copy, gpu_copy->super.super.obj_reference_count,
+mca/device/cuda/device_cuda_module.c:2340:                gpu_device->super.transferred_data_out += nb_elts; /* TODO: not hardcoded, use datatype size */
+mca/device/cuda/device_cuda_module.c:2351:        gpu_device->data_avail_epoch++;
+mca/device/cuda/device_cuda_module.c:2355:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2356:                         parsec_task_snprintf(tmp, MAX_TASK_STRLEN, this_task), return_code, gpu_device->data_avail_epoch );
+mca/device/cuda/device_cuda_module.c:2377:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2426:                             gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2444:            parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_copy);
+mca/device/cuda/device_cuda_module.c:2449:            parsec_list_push_back(&gpu_device->gpu_mem_owned_lru, (parsec_list_item_t*)gpu_copy);
+mca/device/cuda/device_cuda_module.c:2485:                        gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2505:        parsec_data_copy_detach(original, gpu_copy, gpu_device->super.device_index);
+mca/device/cuda/device_cuda_module.c:2515:            parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_copy);
+mca/device/cuda/device_cuda_module.c:2524:        gpu_device->data_avail_epoch++;
+mca/device/cuda/device_cuda_module.c:2574:        rc = gpu_device->mutex;
+mca/device/cuda/device_cuda_module.c:2577:            if( parsec_atomic_cas_int32( &gpu_device->mutex, rc, rc+1 ) ) {
+mca/device/cuda/device_cuda_module.c:2587:        parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
+mca/device/cuda/device_cuda_module.c:2591:                         gpu_device->super.name, __FILE__, __LINE__);
+mca/device/cuda/device_cuda_module.c:2599:    status = cudaSetDevice( cuda_device->cuda_index );
+mca/device/cuda/device_cuda_module.c:2607:                             gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2612:                          gpu_device->exec_stream[0],
+mca/device/cuda/device_cuda_module.c:2623:            PARSEC_PUSH_TASK(gpu_device->exec_stream[0]->fifo_pending, (parsec_list_item_t*)progress_task);
+mca/device/cuda/device_cuda_module.c:2634:    exec_stream = (exec_stream + 1) % (gpu_device->max_exec_streams - 2);  /* Choose an exec_stream */
+mca/device/cuda/device_cuda_module.c:2636:        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tExecute %s priority %d", gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2641:                          gpu_device->exec_stream[2+exec_stream],
+mca/device/cuda/device_cuda_module.c:2667:        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tRetrieve data (if any) for %s priority %d", gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2673:                          gpu_device->exec_stream[1],
+mca/device/cuda/device_cuda_module.c:2697:    gpu_task = (parsec_gpu_task_t*)parsec_fifo_try_pop( &(gpu_device->pending) );
+mca/device/cuda/device_cuda_module.c:2700:        gpu_task->last_data_check_epoch = gpu_device->data_avail_epoch - 1;  /* force at least one tour */
+mca/device/cuda/device_cuda_module.c:2701:        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tGet from shared queue %s priority %d", gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2711:                                 gpu_device->super.name, gpu_device->mutex, pop_null);
+mca/device/cuda/device_cuda_module.c:2719:                         gpu_device->super.name,
+mca/device/cuda/device_cuda_module.c:2735:    gpu_device->super.executed_tasks++;
+mca/device/cuda/device_cuda_module.c:2737:    // Load problem: was parsec_device_load[gpu_device->super.device_index] -= gpu_task->load;
+mca/device/cuda/device_cuda_module.c:2738:    parsec_device_load[gpu_device->super.device_index] -= parsec_device_sweight[gpu_device->super.device_index];
+mca/device/cuda/device_cuda_module.c:2739:    PARSEC_DEBUG_VERBOSE(3, parsec_gpu_output_stream,"GPU[%s]: gpu_task %p freed at %s:%d", gpu_device->super.name, 
+mca/device/cuda/device_cuda_module.c:2742:    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
+mca/device/cuda/device_cuda_module.c:2750:                             gpu_device->super.name, __FILE__, __LINE__);
+parsec_internal.h:629: * @brief Device-level info
+parsec_internal.h:645: * @details infos stored under this handle exist per device-stream:
+data.c:97:            if ( !(device->type & PARSEC_DEV_CUDA) ){

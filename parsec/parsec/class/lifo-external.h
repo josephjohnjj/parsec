@@ -1,0 +1,198 @@
+/*
+ * Copyright (c) 2019-2022 The University of Tennessee and The University
+ *                         of Tennessee Research Foundation.  All rights
+ *                         reserved.
+ */
+
+#ifndef LIFO_EXTERNAL_H_HAS_BEEN_INCLUDED
+#define LIFO_EXTERNAL_H_HAS_BEEN_INCLUDED
+
+#if defined(PARSEC_ATOMIC_ACCESS_TO_INTERNALS_ALLOWED)
+#error "This file should never be used while building PaRSEC internally"
+#endif  /* defined(PARSEC_ATOMIC_ACCESS_TO_INTERNALS_ALLOWED) */
+
+#include "parsec/class/list_item.h"
+
+BEGIN_C_DECLS
+
+/**
+ * @brief opaque structure to hold a LIFO
+ */
+typedef struct parsec_lifo_opaque_s parsec_lifo_t;
+PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(parsec_lifo_t);
+struct parsec_lifo_opaque_s {
+    parsec_object_t           super;
+    uint8_t                   alignment;
+    union {
+#if defined(PARSEC_ATOMIC_HAS_ATOMIC_CAS_INT128)
+        __int128_t            int128_private;
+#else
+        int64_t               int64_private;
+#endif  /* defined(PARSEC_ATOMIC_HAS_ATOMIC_CAS_INT128) */
+        char                  lifo_private[16];
+    };
+    /* IMPORTANT:
+     *  This structure needs to be kept in sync both with the
+     *  beginning of parsec_lifo_s ***AND*** with the structure
+     *  in src_root/CMakeLists.txt to match both the offset of
+     *  the lifo_private member as well as the alignment of the
+     *  LIFO itself. Both these checks can be done during CMake.
+     *
+     *  The alignment of this struct must be as restrictive as the
+     *  alignment of the internal parsec_lifo_t, to ensure that the
+     *  contained fields have the correct alignment even for static
+     *  objects.
+     */
+};
+
+/**
+ * @brief check if the LIFO is empty
+ *
+ * @param[inout] lifo the LIFO to check
+ * @return 0 if lifo is not empty, 1 otherwise
+x*
+ * @remark this function is thread safe
+ */
+PARSEC_DECLSPEC int
+parsec_lifo_is_empty( parsec_lifo_t* lifo );
+
+/**
+ * @brief check if the LIFO is empty, without forcing atomicity.
+ *
+ * @param[inout] lifo the LIFO to check
+ * @return 0 if lifo is not empty, 1 otherwise
+ *
+ * @remark this function is not thread safe
+ */
+PARSEC_DECLSPEC int
+parsec_nolock_lifo_is_empty( parsec_lifo_t* lifo );
+
+/**
+ * @brief Push an element in the LIFO
+ *
+ * @details push an element at the front of the LIFO
+ *
+ * @param[inout] lifo the LIFO into which to push the element
+ * @param[inout] item the element to push in lifo
+ *
+ * @remark this function is thread safe
+ */
+PARSEC_DECLSPEC void
+parsec_lifo_push(parsec_lifo_t* lifo, parsec_list_item_t* item);
+
+/**
+ * @brief Push an element in the LIFO, without forcing atomicity.
+ *
+ * @details push an element at the front of the LIFO
+ *
+ * @param[inout] lifo the LIFO into which to push the element
+ * @param[inout] item the element to push in lifo
+ *
+ * @remark this function is not thread safe
+ */
+PARSEC_DECLSPEC void
+parsec_lifo_nolock_push(parsec_lifo_t* lifo, parsec_list_item_t* item);
+
+/**
+ * @brief Chain a ring of elements in front of a LIFO
+ *
+ * @details Take a ring of elements (items->prev points to the last
+ *          element in items), and push all the elements of items in
+ *          front of the LIFO, preserving the order in items.
+ *
+ * @param[inout] lifo the LIFO into which to push the elements
+ * @param[inout] items the elements ring to push in front
+ *
+ * @remark this function is thread safe
+ */
+PARSEC_DECLSPEC void
+parsec_lifo_chain(parsec_lifo_t* lifo, parsec_list_item_t* items);
+
+/**
+ * @brief Chain a ring of elements in front of a LIFO, without
+ *        forcing atomicity.
+ *
+ * @details Take a ring of elements (items->prev points to the last
+ *          element in items), and push all the elements of items in
+ *          front of the LIFO, preserving the order in items.
+ *
+ * @param[inout] lifo the LIFO into which to push the elements
+ * @param[inout] items the elements ring to push in front
+ *
+ * @remark this function is not thread safe
+ */
+PARSEC_DECLSPEC void
+parsec_lifo_nolock_chain(parsec_lifo_t* lifo, parsec_list_item_t* items);
+
+/**
+ * @brief Pop an element from the LIFO
+ *
+ * @details Pop the first element in the LIFO
+ *
+ * @param[inout] lifo the LIFO from which to pop the element
+ * @return the element that was removed from the LIFO (NULL if
+ *         the LIFO was empty)
+ *
+ * @remark this function is thread safe
+ */
+PARSEC_DECLSPEC parsec_list_item_t*
+parsec_lifo_pop(parsec_lifo_t* lifo);
+
+/**
+ * @brief Try popping an element from the LIFO
+ *
+ * @details Try popping the first element in the LIFO
+ *
+ * @param[inout] lifo the LIFO from which to pop the element
+ * @return the element that was removed from the LIFO (NULL if
+ *         the LIFO was empty)
+ *
+ * @remark this function is thread safe
+ */
+PARSEC_DECLSPEC parsec_list_item_t*
+parsec_lifo_try_pop(parsec_lifo_t* lifo);
+
+/**
+ * @brief Pop an element from the LIFO, without forcing atomicity.
+ *
+ * @details Pop the first element in the LIFO
+ *
+ * @param[inout] lifo the LIFO from which to pop the element
+ * @return the element that was removed from the LIFO (NULL if
+ *         the LIFO was empty)
+ *
+ * @remark this function is not thread safe
+ */
+PARSEC_DECLSPEC parsec_list_item_t*
+parsec_lifo_nolock_pop(parsec_lifo_t* lifo);
+
+/**
+ * @brief Allocate a lifo item.
+ *
+ * @details Allocate an element that is correctly aligned to be 
+ * used in the lifo. One may change the alignment of elements before
+ * allocating the first item in the lifo by changing lifo->alignment.
+ *
+ * @param[in] lifo the LIFO the element will be used with.
+ * @return The element that was allocated.
+ */
+PARSEC_DECLSPEC parsec_list_item_t*
+parsec_lifo_item_alloc(parsec_lifo_t* lifo, size_t truesize);
+
+/**
+ * @brief Free a lifo item.
+ *
+ * @details Free an item that was allocated by parsec_lifo_item_alloc.
+ *
+ * @param[inout] item the LIFO the element to free.
+ *
+ * @return none.
+ *
+ * @remarks The item must not be present in any lifo.
+ */
+PARSEC_DECLSPEC void
+parsec_lifo_item_free(parsec_list_item_t* item);
+
+END_C_DECLS
+
+#endif  /* LIFO_EXTERNAL_H_HAS_BEEN_INCLUDED */
