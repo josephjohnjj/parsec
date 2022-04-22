@@ -182,16 +182,14 @@ parsec_cuda_change_device( int dealer_device_index)
     int starving_device_index;
     parsec_device_gpu_module_t* starving_gpu_device;
 
-    printf("parsec_cuda_change_device: Total_Dev %d  Dealer_Dev %d\n", 
-        parsec_device_cuda_enabled, dealer_device_index);
-    
     starving_device_index = find_starving_device(dealer_device_index);
     
     if(starving_device_index == -1)
         starving_device_index = dealer_device_index;
     starving_gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(starving_device_index);
 
-    printf(" Starving_dev %d \n", starving_device_index);
+    printf(" parsec_cuda_change_device: Total_Dev %d  Dealer_Dev %d Starving_dev %d \n", 
+    parsec_device_cuda_enabled, dealer_device_index, starving_device_index);
 
     return starving_gpu_device;
 }
@@ -250,17 +248,6 @@ int parsec_cuda_kernel_migrate( parsec_execution_stream_t *es,
                                 int starving_device_index,
                                 parsec_gpu_task_t *migrated_gpu_task)
 {
-    printf("TRIAL parsec_cuda_kernel_migrate \n");
-
-    //int starving_device_index, dealer_device_index;
-    //parsec_device_gpu_module_t* starving_gpu_device;
-    //
-    //dealer_device_index = dealer_device->super.device_index;
-    //starving_device_index = find_starving_device(dealer_device_index);
-
-    //if(starving_device_index == -1)
-    //    return -1;
-
     parsec_cuda_kernel_enqueue(es, (parsec_task_t *) migrated_gpu_task, starving_device_index); 
     parsec_cuda_set_device_task(starving_device_index, 1);
     printf("Task migrated to device %d \n", starving_device_index);
@@ -294,7 +281,11 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     {
         migrated_gpu_task = (parsec_gpu_task_t*)parsec_fifo_try_pop( &(dealer_device->pending) );
         if(migrated_gpu_task != NULL)
-             parsec_cuda_kernel_migrate(es, starving_device_index, migrated_gpu_task);
+        {
+            parsec_cuda_set_device_load(dealer_device_index, -1); // decrement task count at the dealer device
+            parsec_cuda_set_device_load(starving_device_index, 1); // increment task count at the starving device
+            parsec_cuda_kernel_migrate(es, starving_device_index, migrated_gpu_task);
+        }
         else
             break;
 
