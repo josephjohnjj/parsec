@@ -19,7 +19,7 @@ int parsec_cuda_migrate_init(int ndevices)
 {
     int i;
     cudaError_t cudastatus;
-    #if defined(PARSEC_HAVE_CUDA_NVML)
+    #if defined(PARSEC_HAVE_CUDA)
     nvmlReturn_t nvml_ret;
     #endif
 
@@ -34,7 +34,7 @@ int parsec_cuda_migrate_init(int ndevices)
         migrated_task_list[i] = PARSEC_OBJ_NEW(parsec_list_t);
     }
 
-    #if defined(PARSEC_HAVE_CUDA_NVML)
+    #if defined(PARSEC_HAVE_CUDA)
     nvml_ret = nvmlInit_v2();
     #endif
 
@@ -47,7 +47,7 @@ int parsec_cuda_migrate_fini()
     int i;
 
     free(device_info); 
-    #if defined(PARSEC_HAVE_CUDA_NVML)
+    #if defined(PARSEC_HAVE_CUDA)
     nvmlShutdown();
     #endif
 
@@ -76,9 +76,10 @@ int parsec_cuda_get_device_load(int device)
 {
     unsigned int nvml_dev;
 
-    #if defined(PARSEC_HAVE_CUDA_NVML)
+    #if defined(PARSEC_HAVE_CUDA)
     nvmlDevice_t nvml_device;
     nvmlUtilization_t nvml_utilization;
+    nvmlReturn_t nvml_ret;
     
     nvmlDeviceGetHandleByIndex_v2(device, &nvml_device);
     nvml_ret = nvmlDeviceGetUtilizationRates ( nvml_device, &nvml_utilization);
@@ -87,7 +88,7 @@ int parsec_cuda_get_device_load(int device)
     printf("NVML Device Load GPU %d Memory %d \n", nvml_utilization.gpu, nvml_utilization.memory);
     #else
 	device_info[device].load = device_info[device].task_count;
-    #endif /* PARSEC_HAVE_CUDA_NVML */
+    #endif /* PARSEC_HAVE_CUDA */
 
     return device_info[device].load;
  
