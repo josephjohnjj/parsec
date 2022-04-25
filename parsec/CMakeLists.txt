@@ -236,6 +236,7 @@ if( BUILD_PARSEC )
     $<$<BOOL:${MPI_C_FOUND}>:MPI::MPI_C>
     $<$<BOOL:${PARSEC_HAVE_CUDA}>:CUDA::cudart>
     $<$<BOOL:${PARSEC_HAVE_HIP}>:hip::host>
+    $<$<BOOL:${PARSEC_HAVE_CUDA}>:CUDA::nvml>
     ${EXTRA_LIBS}
     INTERFACE
     ${PARSEC_ATOMIC_SUPPORT_LIBS}
