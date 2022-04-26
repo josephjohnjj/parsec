@@ -8,7 +8,7 @@
 #include "parsec/scheduling.h"
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-
+#include <nvml.h>
 
 typedef struct parsec_device_cuda_info_s {
     int                       task_count;
