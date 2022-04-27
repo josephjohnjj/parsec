@@ -17,6 +17,7 @@ typedef struct parsec_device_cuda_info_s {
 } parsec_device_cuda_info_t;
 
 int parsec_cuda_migrate_init(int ndevices);
+int parsec_cuda_migrate_fini();
 int parsec_cuda_get_device_load(int device);
 int parsec_cuda_get_device_task(int device);
 int parsec_cuda_set_device_load(int device, int load);
@@ -27,6 +28,10 @@ parsec_device_gpu_module_t* parsec_cuda_change_device( int dealer_device_index);
 int parsec_cuda_kernel_migrate( parsec_execution_stream_t *es,
                                 int starving_device_index,
                                 parsec_gpu_task_t *migrated_gpu_task);
+int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device,
+                      parsec_gpu_task_t* migrated_gpu_task);
+int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device);
+
 
 
 #endif
