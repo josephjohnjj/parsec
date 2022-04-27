@@ -2540,6 +2540,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                               parsec_gpu_task_t         *gpu_task,
                               int which_gpu )
 {
+    //which_gpu = 2; //CHANGE THIS, only for testing. device 0 is cpu, device 1 is recursive, device 2 is the first cuda gpu
+    //printf("Which_gpu = %d \n", which_gpu-2);
+
     parsec_device_gpu_module_t* gpu_device;
     parsec_device_cuda_module_t *cuda_device;
     cudaError_t status;
@@ -2614,7 +2617,15 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                              gpu_task->ec->priority );
     }
 
-    //migrate_if_starving(es,  gpu_device);
+    //if(which_gpu == 2) //CHANGE THIS, only for testing
+    //{
+    //    printf("Immediatly Migrate task from device %d \n", which_gpu-2);
+    //    if(migrate_immediate(es,  gpu_device, gpu_task))
+	//    {
+	//        rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
+	//        return PARSEC_HOOK_RETURN_ASYNC;
+	//    }
+    //}
     
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[0],
@@ -2712,7 +2723,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * the manager checks if there are any starving devices and migrate tasks,
      * to the starving device, if there are available tasks to migrate.
      */
-    //migrate_if_starving(es,  gpu_device);
+    printf("Available tasks %d \n", gpu_device->mutex);
+    rc = migrate_if_starving(es,  gpu_device);
+    if( rc > 0)
+        parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
+        //parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
 
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {

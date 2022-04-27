@@ -26,6 +26,8 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
+#include "parsec/mca/device/cuda/device_cuda_migrate.h"
+
 PARSEC_OBJ_CLASS_INSTANCE(parsec_device_cuda_module_t, parsec_device_module_t, NULL, NULL);
 
 static int device_cuda_component_open(void);
@@ -252,6 +254,8 @@ static int device_cuda_component_open(void)
         return MCA_ERROR;
     }
 
+    parsec_cuda_migrate_init(parsec_device_cuda_enabled);
+
     return MCA_SUCCESS;
 }
 
@@ -270,6 +274,8 @@ static int device_cuda_component_close(void)
     if( NULL == parsec_device_cuda_component.modules ) {  /* No devices */
         return MCA_SUCCESS;
     }
+
+    parsec_cuda_migrate_fini();
 
     for( i = 0; NULL != (cdev = (parsec_device_cuda_module_t*)parsec_device_cuda_component.modules[i]); i++ ) {
         parsec_device_cuda_component.modules[i] = NULL;

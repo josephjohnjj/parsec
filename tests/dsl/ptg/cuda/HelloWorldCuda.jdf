@@ -1,6 +1,7 @@
 extern "C" %{
 
 #include "parsec.h"
+#include <stdlib.h> 
 #include<mpi.h>
 
 #include "parsec/parsec_config.h"
@@ -23,23 +24,55 @@ extern "C" %{
 
 %}
 
-HelloWorldCuda(k)
+NT        [ type="int" ]
+NL        [ type="int" ]
+
+
+Start(k)
 
 k = 0 .. 0
 
 : taskdist( k )
 
-WRITE A <- NEW
+WRITE  A <- NEW
+         -> A HelloWorldCuda( 1 .. NT )
+
+BODY
+{
+   printf("Start on the CPU \n");
+}
+END
+
+
+
+HelloWorldCuda(k)
+
+k = 1 .. NT
+
+: taskdist( k )
+
+READ A <- A Start( 0 )
 
 BODY [type=CUDA weight=1]
 {
-    fprintf(stderr, "HelloWorldCuda on GPU \n");
+    int i, j, a[100];
+    for( i = 0; i < NL; i++ )
+        for( j = 1; j < 100; j++ )
+            a[i] = a[i] + a[i-1]; 
+
+
+    printf("HelloWorldCuda on GPU \n");
 }
 END
 
 BODY
 {
-    fprintf(stderr, "HelloWorldCuda is running on a CPU, which is not the intended behavior \n");
+    int i, j, a[100];
+    for( i = 0; i < NL; i++ )
+        for( j = 1; j < 100; j++ )
+            a[i] = a[i] + a[i-1]; 
+            
+    printf("HelloWorldCuda is running on a CPU, which is not the intended behavior \n");
 }
 END
 
@@ -74,10 +107,21 @@ data_key(parsec_data_collection_t *desc, ...)
 int main(int argc, char *argv[])
 {
     parsec_context_t* parsec;
-    int rc;
-    int rank, world;
+    int rc, rank, world, NT = 10, NL = 1;
     parsec_data_collection_t taskdist;
     parsec_HelloWorldCuda_taskpool_t *tp;
+
+    if(argc < 3)
+    {
+        printf("Usasge example: HelloWorldCuda [#tasks] [#loops per task]");
+	exit(0);
+    }
+    else
+    {
+        NT = atoi(argv[1]);
+        NL = atoi(argv[2]);
+    }
+        
 
 #if defined(PARSEC_HAVE_MPI)
     {
@@ -99,7 +143,7 @@ int main(int argc, char *argv[])
     taskdist.vpid_of = vpid_of;
     taskdist.data_key = data_key;
 
-    tp = parsec_HelloWorldCuda_new(&taskdist);
+    tp = parsec_HelloWorldCuda_new(&taskdist, NT, NL);
 
     //parsec_add2arena( &tp->arenas_datatypes[PARSEC_HelloWorldCuda_DEFAULT_ADT_IDX],
     //                  parsec_datatype_double_complex_t,
