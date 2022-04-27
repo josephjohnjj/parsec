@@ -297,11 +297,12 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     int half = 0, nb_migrated = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
 
-    if(dealer_device->mutex < 3) // make sure dealer does not starve
+    //dealer_task_count = parsec_cuda_get_device_task(dealer_device_index);
+    dealer_device_index = dealer_device->super.device_index - 2;
+
+    if(parsec_cuda_get_device_task(dealer_device_index) < 3) // make sure dealer does not starve
         return -1;
     
-    //dealer_task_count = parsec_cuda_get_device_task(dealer_device_index);
-    dealer_device_index = dealer_device->super.device_index;
     starving_device_index = find_starving_device(dealer_device_index);
     if(starving_device_index == -1)
         return -1;
@@ -351,7 +352,7 @@ int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t
     if(starving_device_index == -1)
         return -1;
 
-    dealer_device_index = dealer_device->super.device_index;
+    dealer_device_index = dealer_device->super.device_index - 2;
 
     
     if(migrated_gpu_task != NULL)
