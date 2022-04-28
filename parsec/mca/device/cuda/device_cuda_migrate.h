@@ -10,6 +10,8 @@
 #include <cuda_runtime_api.h>
 #include <nvml.h>
 
+#define CUDA_DEVICE_NUM(DEVICE_NUM) (DEVICE_NUM - 2)
+
 typedef struct parsec_device_cuda_info_s {
     int                       task_count;
     int                       load;

@@ -2589,7 +2589,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
     }
 
-    parsec_cuda_set_device_task(gpu_device->super.device_index, 1); // increment task count for this device
+    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1); // increment task count for this device
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
@@ -2657,13 +2657,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                              gpu_task->ec->priority );
     }
 
-    /**
-     * @brief decrement the task count for the device. The decrement is done
-     * immediatly befor the execution of the task.
-     * TODO: Should this be moved to when the task is completed?
-     */
-    parsec_cuda_set_device_task(gpu_device->super.device_index, -1); 
-
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[2+exec_stream],
                           NULL,
@@ -2723,11 +2716,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * the manager checks if there are any starving devices and migrate tasks,
      * to the starving device, if there are available tasks to migrate.
      */
-    printf("Available tasks %d \n", gpu_device->mutex);
-    rc = migrate_if_starving(es,  gpu_device);
-    if( rc > 0)
-        parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
-        //parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
+    //printf("Available tasks %d \n", gpu_device->mutex);
+    //rc = migrate_if_starving(es,  gpu_device);
+    //if( rc > 0)
+    //    parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
+    //    //parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
 
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
@@ -2772,6 +2765,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
     __parsec_complete_execution( es, gpu_task->ec );
     gpu_device->super.executed_tasks++;
+
+     /**
+     * @brief decrement the task count for the device. The decrement is done
+     * immediatly befor the execution of the task.
+     * TODO: Should this be moved to when the task is completed?
+     */
+    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1); 
+    
  remove_gpu_task:
     // Load problem: was parsec_device_load[gpu_device->super.device_index] -= gpu_task->load;
     parsec_device_load[gpu_device->super.device_index] -= parsec_device_sweight[gpu_device->super.device_index];
