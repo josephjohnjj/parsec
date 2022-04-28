@@ -8,7 +8,7 @@
 #if BLAS_WITH_ESSL
 #include "essl.h"
 #else
-#include "cblas.h"
+#include "mkl_cblas.h"
 #endif
 #endif
 
