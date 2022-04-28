@@ -47,8 +47,6 @@ int parsec_cuda_migrate_init(int ndevices)
 int parsec_cuda_migrate_fini()
 {
     int i;
-
-
 	
     #if defined(PARSEC_HAVE_CUDA)
     nvmlShutdown();
@@ -58,10 +56,8 @@ int parsec_cuda_migrate_fini()
     {
         PARSEC_OBJ_RELEASE(migrated_task_list[i]); 
     }
-    //free(migrated_task_list);
-
-    //free(device_info); 
-
+    free(migrated_task_list);
+    free(device_info); 
 
     printf("Migration module shut down \n");
 
