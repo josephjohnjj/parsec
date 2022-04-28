@@ -2717,10 +2717,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * to the starving device, if there are available tasks to migrate.
      */
     //printf("Available tasks %d \n", gpu_device->mutex);
-    //rc = migrate_if_starving(es,  gpu_device);
-    //if( rc > 0)
-    //    parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
-    //    //parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
+    rc = migrate_if_starving(es,  gpu_device);
+    if( rc > 0)
+        parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
 
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
