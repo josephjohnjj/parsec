@@ -291,13 +291,12 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
 
     //dealer_task_count = parsec_cuda_get_device_task(dealer_device_index);
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);  
-
     if(parsec_cuda_get_device_task(dealer_device_index) < 3) // make sure dealer does not starve
-        return -1;
+        return 0;
     
     starving_device_index = find_starving_device(dealer_device_index);
     if(starving_device_index == -1)
-        return -1;
+        return 0;
 
     //do
     //{
