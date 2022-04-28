@@ -1,4 +1,3 @@
-
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
 
 extern int parsec_device_cuda_enabled;
@@ -255,8 +254,8 @@ int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es)
 
     if(task != NULL)  
     { 
-	PARSEC_LIST_ITEM_SINGLETON(task);
-       //printf("Dequeue task  %s from %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), i);	
+	PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)task);
+        //printf("Dequeue task  %s from %d\n", parsec_gpu_describe_gpu_task(tmp, MAX_TASK_STRLEN, task), i);	
         printf("Dequeue Task(%d) from %d\n", task->locals[0].value , i);	
         parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) task, i+2); /* device 0 is the CPU, device 1 is recursive, cuda device count starts from 2 */ 
     }
@@ -307,7 +306,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         if(migrated_gpu_task != NULL)
         {
 	    
-	    PARSEC_LIST_ITEM_SINGLETON(migrated_gpu_task);
+	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)migrated_gpu_task);
             nb_migrated++;
             parsec_cuda_set_device_task(dealer_device_index, -1); // decrement task count at the dealer device
             parsec_cuda_set_device_task(starving_device_index, 1); // increment task count at the starving device
