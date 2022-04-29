@@ -11,9 +11,18 @@
 #include <nvml.h>
 
 #define CUDA_DEVICE_NUM(DEVICE_NUM) (DEVICE_NUM - 2)
+/**
+ * @brief 
+ * level 0 - task has been enqueued to the pending queue of the device. It has not been progressed.
+ * level 1 - task has been dequeued from the pending queue of the device and it has been moved to 
+ *           the queue that deals with movement of the task data to the GPU, but has not yet been moved
+ * level 2 - task data has been moved to the GPU, GPU is in control of the data and Task.
+ * 
+ */
+#define EXECUTION_LEVEL 3
 
 typedef struct parsec_device_cuda_info_s {
-    int                       task_count;
+    int                       task_count[EXECUTION_LEVEL];
     int                       load;
     //parsec_atomic_lock_t    lock;
 } parsec_device_cuda_info_t;
@@ -21,9 +30,9 @@ typedef struct parsec_device_cuda_info_s {
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
 int parsec_cuda_get_device_load(int device);
-int parsec_cuda_get_device_task(int device);
 int parsec_cuda_set_device_load(int device, int load);
-int parsec_cuda_set_device_task(int device, int task_count);
+int parsec_cuda_get_device_task(int device, int level);
+int parsec_cuda_set_device_task(int device, int task_count, int level);
 int is_starving(int device);
 int find_starving_device(int dealer_device);
 parsec_device_gpu_module_t* parsec_cuda_change_device( int dealer_device_index);
