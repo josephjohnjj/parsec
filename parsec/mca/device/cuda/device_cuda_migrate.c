@@ -147,7 +147,8 @@ int parsec_cuda_set_device_task(int device, int task_count)
  */
 int is_starving(int device)
 {
-    if( device_info[device].load < 1 && device_info[device].task_count < 1 )
+    //if( device_info[device].load < 1 && device_info[device].task_count < 1 )
+    if( device_info[device].task_count < 1 )
         return 1;
     else
         return 0;
@@ -170,11 +171,11 @@ int find_starving_device(int dealer_device)
     // 0 device is the CPU, 1 is recursive
     for(i = 0; i < NDEVICES; i++)
     {
-        if( i == dealer_device || i == 0) 
+        if( i == dealer_device ) 
             continue;
 
 	//printf("Find_starving_device: Total_Dev %d  Dealer_Dev %d starving device %d\n", NDEVICES, dealer_device, i);
-        //if(is_starving(i))
+        if(is_starving(i))
             return i;
     }
 
