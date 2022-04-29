@@ -2589,7 +2589,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
     }
 
-    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1); // increment task count for this device
+    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
@@ -2770,7 +2770,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * immediatly befor the execution of the task.
      * TODO: Should this be moved to when the task is completed?
      */
-    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1); 
+    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
     
  remove_gpu_task:
     // Load problem: was parsec_device_load[gpu_device->super.device_index] -= gpu_task->load;
