@@ -223,7 +223,7 @@ int parsec_cuda_kernel_enqueue( parsec_execution_stream_t *es,
     char tmp[MAX_TASK_STRLEN];
     parsec_list_t* li = migrated_task_list[starving_device_index];
     parsec_list_chain_sorted(li, (parsec_list_item_t*) task, parsec_execution_context_priority_comparator);
-    printf("Enqueue task %s to device %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), starving_device_index);
+    printf("Enqueue task %s to device queue %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), starving_device_index);
     return 0;
 }
 
@@ -258,7 +258,7 @@ int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es)
     if(task != NULL)  
     { 
 	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)task);
-        printf("Dequeue task %s from device %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), i);	
+        printf("Dequeue task %s from device queue %d and schedule\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), i);	
         parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) task, i+2); /* device 0 is the CPU, device 1 is recursive, cuda device count starts from 2 */ 
     }
 }
@@ -296,15 +296,17 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
 
     //dealer_task_count = parsec_cuda_get_device_task(dealer_device_index);
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);  
-    if(parsec_cuda_get_device_task(dealer_device_index, /* level */ 0) < 3) // make sure dealer does not starve
+    //if(parsec_cuda_get_device_task(dealer_device_index, /* level */ 0) < 3) // make sure dealer does not starve
+    //    return 0;
+    if(is_starving(dealer_device_index))
         return 0;
     
     starving_device_index = find_starving_device(dealer_device_index);
     if(starving_device_index == -1)
         return 0;
 
-    //do
-    //{
+    do
+    {
         migrated_gpu_task = (parsec_gpu_task_t*)parsec_fifo_try_pop( &(dealer_device->pending) );
         if(migrated_gpu_task != NULL)
         {
@@ -316,11 +318,11 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
 	        printf("Task %s migrated from device %d to device %d: nb_migrated %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) migrated_gpu_task)->ec), dealer_device_index, starving_device_index, nb_migrated);
 	        parsec_cuda_kernel_migrate(es, starving_device_index, migrated_gpu_task);
         }
-        //else
-        //    break;
+        else
+            break;
 
-        //half++;
-    //}while(half < (dealer_task_count / 2) );
+        half++;
+    }while(half < (dealer_task_count / 2) );
 
     //if(nb_migrated > 0)
     //	printf("Tasks migrated from device %d to device %d: %d \n", dealer_device_index, starving_device_index, nb_migrated);
