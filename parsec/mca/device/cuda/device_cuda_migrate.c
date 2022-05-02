@@ -17,7 +17,7 @@ static int NDEVICES;
 int parsec_cuda_migrate_init(int ndevices)
 {
     int i, j;
-    cudaError_t cudastatus;
+    
     #if defined(PARSEC_HAVE_CUDA)
     nvmlReturn_t nvml_ret;
     #endif
@@ -189,13 +189,11 @@ int find_starving_device(int dealer_device)
 {
     int i;
 
-    // 0 device is the CPU, 1 is recursive
     for(i = 0; i < NDEVICES; i++)
     {
         if( i == dealer_device ) 
             continue;
 
-	//printf("Find_starving_device: Total_Dev %d  Dealer_Dev %d starving device %d\n", NDEVICES, dealer_device, i);
         if(is_starving(i))
             return i;
     }
@@ -276,7 +274,7 @@ int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es)
     { 
 	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)task);
         printf("Dequeue task %s from device queue %d and schedule\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), i);	
-        parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) task, i+2); /* device 0 is the CPU, device 1 is recursive, cuda device count starts from 2 */ 
+        parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) task, DEVICE_NUM(i)); /* device 0 is the CPU, device 1 is recursive, cuda device count starts from 2 */ 
     }
 }
 

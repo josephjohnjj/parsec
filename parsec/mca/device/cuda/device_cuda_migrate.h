@@ -11,6 +11,8 @@
 #include <nvml.h>
 
 #define CUDA_DEVICE_NUM(DEVICE_NUM) (DEVICE_NUM - 2)
+#define DEVICE_NUM(CUDA_DEVICE_NUM) (CUDA_DEVICE_NUM + 2)
+
 /**
  * @brief 
  * level 0 - task has been enqueued to the pending queue of the device. It has not been progressed.
