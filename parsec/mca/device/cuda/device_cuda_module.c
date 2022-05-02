@@ -2771,6 +2771,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * TODO: Should this be moved to when the task is completed?
      */
     parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
+    parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
     
  remove_gpu_task:
     // Load problem: was parsec_device_load[gpu_device->super.device_index] -= gpu_task->load;

@@ -22,9 +22,9 @@
 #define EXECUTION_LEVEL 3
 
 typedef struct parsec_device_cuda_info_s {
-    int                       task_count[EXECUTION_LEVEL];
-    int                       load;
-    //parsec_atomic_lock_t    lock;
+    int total_tasks_executed;
+    int task_count[EXECUTION_LEVEL];
+    int load;
 } parsec_device_cuda_info_t;
 
 int parsec_cuda_migrate_init(int ndevices);
@@ -33,6 +33,7 @@ int parsec_cuda_get_device_load(int device);
 int parsec_cuda_set_device_load(int device, int load);
 int parsec_cuda_get_device_task(int device, int level);
 int parsec_cuda_set_device_task(int device, int task_count, int level);
+int parsec_cuda_tasks_executed(int device);
 int is_starving(int device);
 int find_starving_device(int dealer_device);
 parsec_device_gpu_module_t* parsec_cuda_change_device( int dealer_device_index);
