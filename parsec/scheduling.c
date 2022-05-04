@@ -627,7 +627,7 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
          * This will also ensure that a migrated task gets priority in execution
          * when compared to a new task. 
          */
-        parsec_cuda_kernel_dequeue(es);
+        parsec_cuda_mig_task_dequeue(es);
         
         if( NULL == (task = es->next_task) ) {
             task = parsec_current_scheduler->module.select(es, &distance);
