@@ -251,7 +251,8 @@ int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es)
  */
 int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t *mig_task)
 {
-    parsec_list_chain_sorted(migrated_task_list, (parsec_list_item_t*) mig_task, parsec_execution_context_priority_comparator);
+    //parsec_list_chain_sorted(migrated_task_list, (parsec_list_item_t*) mig_task, parsec_execution_context_priority_comparator);
+     parsec_list_push_back(migrated_task_list, mig_task);
     
     char tmp[MAX_TASK_STRLEN];
     parsec_gpu_task_t *migrated_gpu_task = mig_task->gpu_task;
@@ -322,9 +323,6 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
 
         half++;
     }while(half < (dealer_task_count / 2) );
-
-    //if(nb_migrated > 0)
-    //	printf("Tasks migrated from device %d to device %d: %d \n", dealer_device_index, starving_device_index, nb_migrated);
 
     return nb_migrated;
 }
