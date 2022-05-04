@@ -2,7 +2,7 @@
 
 extern int parsec_device_cuda_enabled;
 parsec_device_cuda_info_t* device_info; 
-static parsec_list_t** migrated_task_list;
+static parsec_list_t* migrated_task_list;
 static int NDEVICES;
 
 
@@ -24,7 +24,7 @@ int parsec_cuda_migrate_init(int ndevices)
 
     NDEVICES = ndevices;
     device_info = (parsec_device_cuda_info_t *) calloc(ndevices, sizeof(parsec_device_cuda_info_t));
-    migrated_task_list = (parsec_list_t**) calloc(ndevices, sizeof(parsec_list_t*));
+    migrated_task_list = PARSEC_OBJ_NEW(parsec_list_t);;
 
     for(i = 0; i < NDEVICES; i++)
     {
@@ -32,7 +32,6 @@ int parsec_cuda_migrate_init(int ndevices)
             device_info[i].task_count[j] = 0;
         device_info[i].load = 0;
         device_info[i].total_tasks_executed = 0;
-        migrated_task_list[i] = PARSEC_OBJ_NEW(parsec_list_t);
     }
 
     #if defined(PARSEC_HAVE_CUDA)
@@ -56,11 +55,10 @@ int parsec_cuda_migrate_fini()
 
     for(i = 0; i < NDEVICES; i++)
     {
-        PARSEC_OBJ_RELEASE(migrated_task_list[i]); 
         printf("Total tasks executed in device %d: %d \n", i, device_info[i].total_tasks_executed);
-	printf("Test count %d: %d \n", i, parsec_cuda_get_device_task(i, 0));
+	    printf("Test count %d: %d \n", i, parsec_cuda_get_device_task(i, 0));
     }
-    free(migrated_task_list);
+    PARSEC_OBJ_RELEASE(migrated_task_list); 
     free(device_info); 
 
     printf("Migration module shut down \n");
@@ -203,45 +201,6 @@ int find_starving_device(int dealer_device)
 }
 
 
-/**
- * @brief selects a new starving device instead of the originally
- * intended device. This enables migration of a task before it
- * is scheduled to any particular device.
- * 
- * @param dealer_device_index the device the task was initially assigned to
- * @return parsec_device_gpu_module_t* 
- * 
- */
-parsec_device_gpu_module_t*
-parsec_cuda_change_device( int dealer_device_index)
-{
-    int starving_device_index;
-    parsec_device_gpu_module_t* starving_gpu_device;
-
-    starving_device_index = find_starving_device(dealer_device_index);
-    
-    if(starving_device_index == -1)
-        starving_device_index = dealer_device_index;
-    starving_gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(starving_device_index);
-
-    printf(" parsec_cuda_change_device: Total_Dev %d  Dealer_Dev %d Starving_dev %d \n", 
-    parsec_device_cuda_enabled, dealer_device_index, starving_device_index);
-
-    return starving_gpu_device;
-}
-
-
-
-int parsec_cuda_kernel_enqueue( parsec_execution_stream_t *es,
-                        parsec_task_t            *task,
-                        int   starving_device_index)
-{
-    char tmp[MAX_TASK_STRLEN];
-    parsec_list_t* li = migrated_task_list[starving_device_index];
-    parsec_list_chain_sorted(li, (parsec_list_item_t*) task, parsec_execution_context_priority_comparator);
-    printf("Enqueue task %s to device queue %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), starving_device_index);
-    return 0;
-}
 
 /**
  * @brief This function will be called in __parsec_context_wait() just before 
@@ -256,26 +215,27 @@ int parsec_cuda_kernel_enqueue( parsec_execution_stream_t *es,
  * @return int 
  */
 
-int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es)
+int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es)
 {
     int i;
     char tmp[128];
-    parsec_task_t * task = NULL;
-    parsec_list_t* li = NULL;
+    migrated_task_t *mig_task = NULL;
+    parsec_gpu_task_t *migrated_gpu_task;
+    parsec_device_gpu_module_t* dealer_device;
+    parsec_device_gpu_module_t* starving_device;
 
-    for(i = 0; i < NDEVICES; i++)
-    {
-        li = migrated_task_list[i];
-        task = (parsec_task_t*) parsec_list_pop_front(li);
-        if(task != NULL)
-            break;
-    }
+    mig_task = (migrated_task_t*) parsec_fifo_try_pop(migrated_task_list);
 
-    if(task != NULL)  
+    if(mig_task != NULL)  
     { 
-	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)task);
-        printf("Dequeue task %s from device queue %d and schedule\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) task)->ec), i);	
-        parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) task, DEVICE_NUM(i)); /* device 0 is the CPU, device 1 is recursive, cuda device count starts from 2 */ 
+        parsec_gpu_task_t *migrated_gpu_task = mig_task->gpu_task;
+        parsec_device_gpu_module_t* dealer_device = mig_task->dealer_device;
+        parsec_device_gpu_module_t* starving_device = mig_task->starving_device;
+
+	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)migrated_gpu_task);
+        printf("Dequeue task %s from device queue %d and schedule\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) migrated_gpu_task)->ec), i);	
+        parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) migrated_gpu_task, DEVICE_NUM(i)); /* device 0 is the CPU, device 1 is recursive, cuda device count starts from 2 */ 
+        free(mig_task);
     }
 }
 
@@ -286,12 +246,18 @@ int parsec_cuda_kernel_dequeue( parsec_execution_stream_t *es)
  *  Returns: negative number if any error occured.
  *           positive: starving device index.
  */
-int parsec_cuda_kernel_migrate( parsec_execution_stream_t *es,
-                                int starving_device_index,
-                                parsec_gpu_task_t *migrated_gpu_task)
+int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t *mig_task)
 {
-    parsec_cuda_kernel_enqueue(es, (parsec_task_t *) migrated_gpu_task, starving_device_index); 
-    return starving_device_index;
+    parsec_list_chain_sorted(migrated_task_list, (parsec_list_item_t*) mig_task, parsec_execution_context_priority_comparator);
+    
+    char tmp[MAX_TASK_STRLEN];
+    parsec_gpu_task_t *migrated_gpu_task = mig_task->gpu_task;
+    parsec_device_gpu_module_t* dealer_device = mig_task->dealer_device;
+    parsec_device_gpu_module_t* starving_device = mig_task->starving_device;
+    printf("Enqueue task %s to device queue %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, 
+        ((parsec_gpu_task_t *) migrated_gpu_task)->ec), CUDA_DEVICE_NUM(starving_device->super.device_index));
+
+    return 0;
 }
 
 /**
@@ -308,18 +274,18 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     int starving_device_index = -1, dealer_device_index = 0, dealer_task_count = 0;
     int half = 0, nb_migrated = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
+    parsec_device_gpu_module_t* starving_device = NULL;
+    migrated_task_t *mig_task = NULL;
     char tmp[128];
 
-    //dealer_task_count = parsec_cuda_get_device_task(dealer_device_index);
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);  
-    //if(parsec_cuda_get_device_task(dealer_device_index, /* level */ 0) < 3) // make sure dealer does not starve
-    //    return 0;
     if(is_starving(dealer_device_index))
         return 0;
     
     starving_device_index = find_starving_device(dealer_device_index);
     if(starving_device_index == -1)
         return 0;
+    starving_device = (parsec_device_cuda_module_t*)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
 
     do
     {
@@ -330,8 +296,14 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
 	        PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)migrated_gpu_task);
             nb_migrated++;
             parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); // decrement task count at the dealer device
-	    printf("Task %s migrated from device %d to device %d: nb_migrated %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) migrated_gpu_task)->ec), dealer_device_index, starving_device_index, nb_migrated);
-	        parsec_cuda_kernel_migrate(es, starving_device_index, migrated_gpu_task);
+	        printf("Task %s migrated from device %d to device %d: nb_migrated %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) migrated_gpu_task)->ec), dealer_device_index, starving_device_index, nb_migrated);
+
+            mig_task = (parsec_gpu_task_t *) malloc(sizeof(parsec_gpu_task_t));
+            mig_task->gpu_task = migrated_gpu_task;
+            mig_task->dealer_device = dealer_device;
+            mig_task->starving_device = starving_device;
+
+	        parsec_cuda_mig_task_enqueue(es, mig_task);
         }
         else
             break;
@@ -361,6 +333,7 @@ int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t
                       parsec_gpu_task_t* migrated_gpu_task)
 {
     int starving_device_index = -1, dealer_device_index = 0;
+    migrated_task_t *mig_task = NULL;
 
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index); 
     starving_device_index = find_starving_device(dealer_device_index);
@@ -371,7 +344,12 @@ int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t
     {
         parsec_cuda_set_device_task(dealer_device_index,  /* count */ -1, /* level */ 0); // decrement task count at the dealer device
         parsec_cuda_set_device_task(starving_device_index,  /* count */ 1, /* level */ 0); // increment task count at the starving device
-        parsec_cuda_kernel_migrate(es, starving_device_index, migrated_gpu_task);
+        
+        mig_task = (parsec_gpu_task_t *) malloc(sizeof(parsec_gpu_task_t));
+        mig_task->gpu_task = migrated_gpu_task;
+        mig_task->dealer_device = dealer_device;
+        mig_task->starving_device = (parsec_device_cuda_module_t*)parsec_mca_device_get(starving_device_index);
+	    parsec_cuda_mig_task_enqueue(es, mig_task);
         return 1;
     }
     
