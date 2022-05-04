@@ -23,11 +23,21 @@
  */
 #define EXECUTION_LEVEL 3
 
-typedef struct parsec_device_cuda_info_s {
+typedef struct parsec_device_cuda_info_s 
+{
     int total_tasks_executed;
     int task_count[EXECUTION_LEVEL];
     int load;
 } parsec_device_cuda_info_t;
+
+typedef struct migrated_task_s
+{
+    parsec_list_item_t list_item;
+    parsec_gpu_task_t* gpu_task;
+    parsec_device_gpu_module_t* dealer_device;
+    parsec_device_gpu_module_t* starving_device;
+
+} migrated_task_t;
 
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
@@ -39,9 +49,8 @@ int parsec_cuda_tasks_executed(int device);
 int is_starving(int device);
 int find_starving_device(int dealer_device);
 parsec_device_gpu_module_t* parsec_cuda_change_device( int dealer_device_index);
-int parsec_cuda_kernel_migrate( parsec_execution_stream_t *es,
-                                int starving_device_index,
-                                parsec_gpu_task_t *migrated_gpu_task);
+int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t *mig_task);
+int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es);
 int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device,
                       parsec_gpu_task_t* migrated_gpu_task);
 int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device);
