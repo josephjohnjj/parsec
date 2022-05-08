@@ -4,6 +4,7 @@
 
 #include "parsec/parsec_config.h"
 #include "parsec/parsec_internal.h"
+#include "parsec/utils/zone_malloc.h"
 #include "parsec/mca/device/cuda/device_cuda_internal.h"
 #include "parsec/scheduling.h"
 #include <cuda.h>
@@ -12,6 +13,10 @@
 
 #define CUDA_DEVICE_NUM(DEVICE_NUM) (DEVICE_NUM - 2)
 #define DEVICE_NUM(CUDA_DEVICE_NUM) (CUDA_DEVICE_NUM + 2)
+
+#define PARSEC_DATA_STATUS_SHOULD_MIGRATE ((parsec_data_coherency_t)0x3)
+#define PARSEC_DATA_STATUS_UNDER_MIGRATION ((parsec_data_coherency_t)0x4)
+#define PARSEC_DATA_STATUS_MIGRATION_COMPLETE ((parsec_data_coherency_t)0x5)
 
 /**
  * @brief 
@@ -54,6 +59,11 @@ int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es);
 int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device,
                       parsec_gpu_task_t* migrated_gpu_task);
 int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device);
+int parsec_gpu_data_reserve_device_space_for_flow( parsec_device_gpu_module_t* gpu_device,
+                                      parsec_gpu_task_t *gpu_task, const parsec_flow_t *flow);
+int increment_readers(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device);
+int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* src_dev,
+                 parsec_device_gpu_module_t* dest_dev);
 
 
 
