@@ -311,9 +311,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
             parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); // decrement task count at the dealer device
 	        printf("Task %s migrated from device %d to device %d: nb_migrated %d\n", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) migrated_gpu_task)->ec), dealer_device_index, starving_device_index, nb_migrated);
 
-	    //increment_readers(migrated_gpu_task, dealer_device);
-            //migrate_data_d2d(migrated_gpu_task, dealer_device, starving_device);
-            test_task_permission(migrated_gpu_task, dealer_device);
+            change_task_features(migrated_gpu_task, dealer_device);
             mig_task = (migrated_task_t *) malloc(sizeof(migrated_task_t));
             mig_task->gpu_task = migrated_gpu_task;
             mig_task->dealer_device = dealer_device;
@@ -330,7 +328,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     return nb_migrated;
 }
 
-int test_task_permission(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device)
+int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device)
 {
     int i = 0;
     parsec_task_t *task = gpu_task->ec;
@@ -399,155 +397,3 @@ int test_task_permission(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
     return 0;
 }
-
-
-
-
-int increment_readers(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device)
-{
-    int i = 0;
-    parsec_task_t *task = gpu_task->ec;
-    char tmp[128];
-
-    for(i = 0; i < task->task_class->nb_flows; i++)
-    {
-        if (task->data[i].data_out == NULL)
-            continue;
-        /**
-         * @brief if the owner of the data is not the dealer device, so data_out
-         * has never been populated with the latest data.
-         * So, dont bother with any operation.
-         */
-        if(task->data[i].data_out->original->owner_device != dealer_device->super.device_index)
-        {
-            if(PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & gpu_task->flow[i]->flow_flags)) //CTL flow
-                continue;
-            task->data[i].data_out = NULL;
-            continue;
-        }
-
-        task->data[i].data_out->readers++;
-        PARSEC_OBJ_RETAIN(task->data[i].data_out);
-        printf("%s: Reader incremented for copy %p [reader = %d], in GPU[%s] \n", 
-            parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)gpu_task)->ec),
-            task->data[i].data_out, task->data[i].data_out->readers,
-            dealer_device->super.name);
-    }
-
-    return 0;
-}
-
-int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* src_dev,
-                 parsec_device_gpu_module_t* dst_dev)
-{
-    int i = 0, rc = 0, count = 0;
-    parsec_task_t *task = gpu_task->ec;
-    const parsec_flow_t *flow;
-    parsec_data_copy_t * src_data;
-    parsec_data_copy_t * dst_data;
-    parsec_data_t* original; // = task->data[flow->flow_index].data_out->original;;
-    for(i = 0; i < task->task_class->nb_flows; i++)
-    {
-        if(PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & flow->flow_flags)) //CTL flow
-            continue;
-
-        /**
-         * @brief if the owner of the data is not the dealer device, the NULL is 
-         * set in increment_readers(), so dont bother with any operation.
-         */
-        if (task->data[i].data_out == NULL)
-            continue;
-
-        original = task->data[flow->flow_index].data_in->original;
-        flow = gpu_task->flow[i];
-
-        count = parsec_gpu_data_reserve_device_space_for_flow(dst_dev, gpu_task, flow);
-        if(rc == PARSEC_HOOK_RETURN_DONE)
-        { 
-           //parsec_atomic_lock(&original->lock);
-           //src_data = task->data[i].data_in;
-           src_data =  original->device_copies[src_dev->super.device_index];
-           dst_data = task->data[i].data_out;
-           dst_data->data_transfer_status = PARSEC_DATA_STATUS_UNDER_TRANSFER;
-           //count = (src_data->original->nb_elts <= dst_data->original->nb_elts) ?
-           //               src_data->original->nb_elts : dst_data->original->nb_elts;
-
-           printf("Moving data from GPU[%s] copy %p at real address %p to GPU[%s] copy %p at real address %p (original %p) \n",
-            src_dev->super.name, src_data, src_data->device_private, 
-            dst_dev->super.name, dst_data, dst_data->device_private,
-            original);
-
-           rc = (cudaError_t)cudaMemcpyAsync( dst_data->device_private,
-                                               src_data->device_private,
-                                               count,
-                                               cudaMemcpyDeviceToDevice,
-                                               dst_dev->exec_stream[0] );
-            PARSEC_CUDA_CHECK_ERROR( "cudaMemcpyAsync ", rc, { return PARSEC_ERROR; } );
-            //parsec_atomic_unlock(&original->lock);
-            dst_data->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
-            src_data->readers--;
-            PARSEC_OBJ_RELEASE(src_data);
-            parsec_list_push_back(&src_dev->gpu_mem_lru, (parsec_list_item_t*)src_data);
-            parsec_list_push_back(&dst_dev->gpu_mem_lru, (parsec_list_item_t*)dst_data);
-             
-        }
-    }
-    return 0;
-}
-
-/**
- * return 0: reserving space successfull
- * return -1: reserving space failed
- */
-
-int parsec_gpu_data_reserve_device_space_for_flow( parsec_device_gpu_module_t* gpu_device,
-                                      parsec_gpu_task_t *gpu_task, const parsec_flow_t *flow)
-{
-    parsec_task_t *this_task = gpu_task->ec;
-    parsec_gpu_data_copy_t* gpu_elem;
-    parsec_data_t* original;
-    int count = 0;
-
-    original = this_task->data[flow->flow_index].data_in->original;
-    count = this_task->data[flow->flow_index].data_out->original->nb_elts;
-    parsec_atomic_lock(&original->lock);
-    //gpu_elem = PARSEC_DATA_GET_COPY(original, gpu_device->super.device_index);
-    //this_task->data[flow->flow_index].data_out = gpu_elem;
-    //if(gpu_elem != NULL)
-    //    printf(" The data is already present. Why is this hapening? \n");
-
-    gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
-    gpu_elem->flags = PARSEC_DATA_FLAG_PARSEC_OWNED | PARSEC_DATA_FLAG_PARSEC_MANAGED;
-    gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[flow->flow_index]);
-    if( NULL == gpu_elem->device_private ) 
-    {
-        printf("ERROR: No memory in starving node. This should never happen \n");
-        exit(0);
-        //return -1;
-    }
-    printf("GPU[%s] Succeeded Allocating CUDA copy %p at real address %p [ref_count %d] for data %p \n",
-            gpu_device->super.name, gpu_elem, gpu_elem->device_private, 
-            gpu_elem->super.super.obj_reference_count, original);
-      
-    assert( 0 == gpu_elem->readers );
-    gpu_elem->coherency_state = PARSEC_DATA_COHERENCY_INVALID;
-    gpu_elem->version = this_task->data[flow->flow_index].data_out->version;
-    parsec_data_copy_attach(original, gpu_elem, gpu_device->super.device_index);
-    gpu_elem->push_task = gpu_task->ec;
-    /* set the new datacopy type to the correct one */
-    gpu_elem->dtt = this_task->data[flow->flow_index].data_out->dtt;
-    original->device_copies[gpu_device->super.device_index] = gpu_elem;
-    
-    //keep a copy in data_in so that we can use ot for cudaMemcpyAsync
-    //this_task->data[flow->flow_index].data_in = this_task->data[flow->flow_index].data_out;
-    this_task->data[flow->flow_index].data_in->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-    //attach the memory in the gpu device to data_out
-    this_task->data[flow->flow_index].data_out = gpu_elem;
-    this_task->data[flow->flow_index].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
-    parsec_atomic_unlock(&original->lock);
-
-    return count;
-}
-
-
-
