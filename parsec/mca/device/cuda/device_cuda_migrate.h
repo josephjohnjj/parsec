@@ -44,6 +44,14 @@ typedef struct migrated_task_s
 
 } migrated_task_t;
 
+typedef struct migration_accounting_s
+{
+    int total_tasks_executed;
+    int level0;
+    int level1;
+    int level2;
+} migration_accounting_t;
+
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
 int parsec_cuda_get_device_load(int device);
