@@ -4,6 +4,7 @@ extern int parsec_device_cuda_enabled;
 parsec_device_cuda_info_t* device_info; 
 static parsec_list_t* migrated_task_list;
 static int NDEVICES;
+migration_accounting_t* accounting;
 
 
 /**
@@ -24,6 +25,7 @@ int parsec_cuda_migrate_init(int ndevices)
 
     NDEVICES = ndevices;
     device_info = (parsec_device_cuda_info_t *) calloc(ndevices, sizeof(parsec_device_cuda_info_t));
+    accounting = (migration_accounting_t *) calloc(ndevices, sizeof(migration_accounting_t));
     migrated_task_list = PARSEC_OBJ_NEW(parsec_list_t);;
 
     for(i = 0; i < NDEVICES; i++)
@@ -31,7 +33,11 @@ int parsec_cuda_migrate_init(int ndevices)
         for(j = 0; j < EXECUTION_LEVEL; j++)
             device_info[i].task_count[j] = 0;
         device_info[i].load = 0;
-        device_info[i].total_tasks_executed = 0;
+        
+        accounting[i].level0 = 0;
+        accounting[i].level1 = 0;
+        accounting[i].level2 = 0;
+        accounting[i].total_tasks_executed = 0;
     }
 
     #if defined(PARSEC_HAVE_CUDA)
@@ -55,8 +61,11 @@ int parsec_cuda_migrate_fini()
 
     for(i = 0; i < NDEVICES; i++)
     {
-        printf("Total tasks executed in device %d: %d \n", i, device_info[i].total_tasks_executed);
-	    printf("Test count %d: %d \n", i, parsec_cuda_get_device_task(i, 0));
+        printf("*********** DEVICE %d *********** \n", i);
+        printf("Total tasks executed: %d \n", accounting[i].total_tasks_executed);
+            printf("Tasks migrated: level0 %d, level1 %d, level2 %d (Total %d)\n",
+            accounting[i].level0, accounting[i].level1, accounting[i].level2,
+            accounting[i].level0 + accounting[i].level1 + accounting[i].level2);
     }
     PARSEC_OBJ_RELEASE(migrated_task_list); 
     free(device_info); 
@@ -153,7 +162,7 @@ int parsec_cuda_set_device_task(int device, int task_count, int level)
 
 int parsec_cuda_tasks_executed(int device)
 {
-    int rc = parsec_atomic_fetch_add_int32(&(device_info[device].total_tasks_executed), 1);
+    int rc = parsec_atomic_fetch_add_int32(&(accounting[device].total_tasks_executed), 1);
     return rc + 1;
 }
 
