@@ -371,6 +371,8 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         nb_migrated++;
         parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); // decrement task count at the dealer device
 
+        migrated_gpu_task->migrate_status = 1; //change migrate_status
+
         mig_task = (migrated_task_t *) calloc(1, sizeof(migrated_task_t));
 	    PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
         mig_task->gpu_task = migrated_gpu_task;
@@ -450,7 +452,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             }
 
             src_copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-            src_copy->data_transfer_status = PARSEC_DATA_STATUS_SHOULD_MIGRATE;
 
             parsec_atomic_unlock( &original->lock );  
         }
