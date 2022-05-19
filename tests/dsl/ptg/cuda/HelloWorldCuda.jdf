@@ -21,21 +21,20 @@ extern "C" %{
 #include <cublas.h>
 #endif  /* defined(PARSEC_HAVE_CUDA) */
 
+void HelloWorld_cuda_kernel(double *A_double, int k);
 
 %}
 
-NT        [ type="int" ]
-NL        [ type="int" ]
-
+dcA       [type = "parsec_matrix_block_cyclic_t*"]
 
 Start(k)
 
 k = 0 .. 0
 
-: taskdist( k )
+: dcA(0, 0 )
 
-WRITE  A <- NEW
-         -> A HelloWorldCuda( 1 .. NT )
+RW  A <- dcA(0, 0 )
+         -> A HelloWorldCuda( 1 )
 
 BODY
 {
@@ -47,82 +46,28 @@ END
 
 HelloWorldCuda(k)
 
-k = 1 .. NT
+k = 1 .. 20
 
-: taskdist( k )
+: dcA(0, 0 )
 
-READ A <- A Start( 0 )
+RW A <- ( k == 1) ? A Start( 0 ) : A HelloWorldCuda(k-1)
+     -> ( k < 20) ? A HelloWorldCuda(k+1) : dcA(0, 0 )
 
 BODY [type=CUDA weight=1]
 { 
-    int a[2048];
-    int i, j;
-    for( i = 0; i < NL; i++ )
-        for( j = 1; j < 2048; j++ )
-            a[i] = a[i] + a[i-1];
-
-
-    printf("HelloWorldCuda on GPU \n");
+    HelloWorld_cuda_kernel((double *) A, k);
 }
 END
 
-BODY
-{
-    int i, j, a[100];
-    for( i = 0; i < NL; i++ )
-        for( j = 1; j < 100; j++ )
-            a[i] = a[i] + a[i-1]; 
-            
-    printf("HelloWorldCuda is running on a CPU, which is not the intended behavior \n");
-}
-END
 
 extern "C" %{
- 
-static uint32_t
-rank_of(parsec_data_collection_t *desc, ...)
-{
-    (void)desc;
-    return 0;
-}
-
-static int32_t
-vpid_of(parsec_data_collection_t *desc, ...)
-{
-    (void)desc;
-    return 0;
-}
-
-static parsec_data_key_t
-data_key(parsec_data_collection_t *desc, ...)
-{
-    int k;
-    va_list ap;
-    (void)desc;
-    va_start(ap, desc);
-    k = va_arg(ap, int);
-    va_end(ap);
-    return (uint64_t)k;
-}
 
 int main(int argc, char *argv[])
 {
     parsec_context_t* parsec;
-    int rc, rank, world, NT = 10, NL = 1;
-    parsec_data_collection_t taskdist;
+    int i, rc, rank, world;
     parsec_HelloWorldCuda_taskpool_t *tp;
-
-    if(argc < 3)
-    {
-        printf("Usasge example: HelloWorldCuda [#tasks] [#loops per task]");
-	exit(0);
-    }
-    else
-    {
-        NT = atoi(argv[1]);
-        NL = atoi(argv[2]);
-    }
-        
+    parsec_matrix_block_cyclic_t *dcA;  
 
 #if defined(PARSEC_HAVE_MPI)
     {
@@ -132,35 +77,48 @@ int main(int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &world);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #else
-    world = 1;
-    rank = 0;
+    printf("Works only with MPI!!!);
+    exit(0);
 #endif
 
     parsec = parsec_init(-1, &argc, &argv);
 
+    dcA = (parsec_matrix_block_cyclic_t*)calloc(1, sizeof(parsec_matrix_block_cyclic_t));
+    parsec_matrix_block_cyclic_init(dcA,
+                               PARSEC_MATRIX_DOUBLE,
+                               PARSEC_MATRIX_TILE,
+                               0,
+                               100, 100,   /* Tile size */
+                               100, 100,   /* Global matrix size (what is stored)*/
+                               0, 0,    /* Staring point in the global matrix */
+                               100, 100,    /* Submatrix size (the one concerned by the computation */
+                               1, 1,    /* process process grid */
+                               1, 1,   /* k-cyclicity */
+                               0, 0);   /* starting point on the process grid */
 
-    parsec_data_collection_init(&taskdist, world, rank);
-    taskdist.rank_of = rank_of;
-    taskdist.vpid_of = vpid_of;
-    taskdist.data_key = data_key;
+    dcA->mat = parsec_data_allocate((size_t)dcA->super.nb_local_tiles *
+                                    (size_t)dcA->super.bsiz *
+                                    (size_t)parsec_datadist_getsizeoftype(dcA->super.mtype));
 
-    tp = parsec_HelloWorldCuda_new(&taskdist, NT, NL);
+    parsec_data_collection_set_key((parsec_data_collection_t*)dcA, "A");
 
-    //parsec_add2arena( &tp->arenas_datatypes[PARSEC_HelloWorldCuda_DEFAULT_ADT_IDX],
-    //                  parsec_datatype_double_complex_t,
-    //                  PARSEC_MATRIX_FULL, 1, 10, 10, 10,
-    //                  PARSEC_ARENA_ALIGNMENT_SSE, -1 );
-    
-    parsec_arena_datatype_construct( &tp->arenas_datatypes[PARSEC_HelloWorldCuda_DEFAULT_ADT_IDX],
-                                     sizeof(int), PARSEC_ARENA_ALIGNMENT_SSE,
-                                     parsec_datatype_int_t );
+    for(i = 0; i < dcA->super.nb_local_tiles * dcA->super.mb * dcA->super.nb; i++)
+        ((double*)dcA->mat)[i] = 0;
+
+    tp = parsec_HelloWorldCuda_new(dcA);
+
+    parsec_add2arena( &tp->arenas_datatypes[PARSEC_HelloWorldCuda_DEFAULT_ADT_IDX],
+                      parsec_datatype_double_t, PARSEC_MATRIX_FULL,
+                      1, dcA->super.mb, dcA->super.nb, dcA->super.mb,
+                      PARSEC_ARENA_ALIGNMENT_SSE, -1 );
+
    
     rc = parsec_context_add_taskpool( parsec, &tp->super );
     rc = parsec_context_start(parsec);
     rc = parsec_context_wait(parsec);
 
-    parsec_taskpool_free(&tp->super);
-    parsec_data_collection_destroy(&taskdist);
+    free(dcA->mat);
+    parsec_tiled_matrix_destroy((parsec_tiled_matrix_t*)dcA);
 
     parsec_fini(&parsec);
 #if defined(PARSEC_HAVE_MPI)

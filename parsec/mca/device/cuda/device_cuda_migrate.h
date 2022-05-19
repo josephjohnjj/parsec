@@ -41,7 +41,7 @@ typedef struct migrated_task_s
     parsec_gpu_task_t* gpu_task;
     parsec_device_gpu_module_t* dealer_device;
     parsec_device_gpu_module_t* starving_device;
-
+    int stage_in_status;
 } migrated_task_t;
 
 typedef struct migration_accounting_s
@@ -50,6 +50,7 @@ typedef struct migration_accounting_s
     int level0;
     int level1;
     int level2;
+    int received;
 } migration_accounting_t;
 
 int parsec_cuda_migrate_init(int ndevices);
@@ -72,6 +73,9 @@ int parsec_gpu_data_reserve_device_space_for_flow( parsec_device_gpu_module_t* g
 int increment_readers(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device);
 int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* src_dev,
                  parsec_device_gpu_module_t* dest_dev);
+int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device,
+                         int stage_in_status);
+int gpu_data_version_increment(parsec_gpu_task_t *gpu_task);
 
 
 
