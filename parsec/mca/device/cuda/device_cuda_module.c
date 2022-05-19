@@ -1345,8 +1345,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
             if(gpu_device->peer_access_mask & (1 << target->cuda_index)) {
                 parsec_data_copy_t *candidate = original->device_copies[t];
 
-                if( (NULL != candidate && candidate->version == in_elem->version) 
-                /* || (NULL != candidate && in_elem->data_transfer_status == PARSEC_DATA_STATUS_SHOULD_MIGRATE ) */) 
+                if( (NULL != candidate && candidate->version == in_elem->version) ) 
                 {
                     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                          "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is a potential alternative source for in_elem %p on data %p",
@@ -1518,8 +1517,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 gpu_device->super.nb_data_faults += nb_elts;
 
             ///* update the data version in GPU immediately, and mark the data under transfer */
-            //assert((gpu_elem->version != in_elem->version) || (gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_NOT_TRANSFER)
-			//     || (in_elem->data_transfer_status == PARSEC_DATA_STATUS_SHOULD_MIGRATE));
+            assert((gpu_elem->version != in_elem->version) || (gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_NOT_TRANSFER)
+			     || (in_elem->data_transfer_status == PARSEC_DATA_STATUS_SHOULD_MIGRATE));
             gpu_elem->version = in_elem->version;
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "GPU[%s]: GPU copy %p [ref_count %d] gets the same version %d as copy %p [ref_count %d] at %s:%d",
