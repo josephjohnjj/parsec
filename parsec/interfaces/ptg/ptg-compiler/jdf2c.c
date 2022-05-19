@@ -6898,6 +6898,7 @@ static void jdf_generate_code_hook_gpu(const jdf_t *jdf,
     string_arena_free(info.sa);
 
     coutput("  parsec_device_load[dev_index] += gpu_task->load;\n"
+            "  gpu_task->migrate_status = 0;\n"
             "\n"
             "  return parsec_%s_kernel_scheduler( es, gpu_task, dev_index );\n"
             "}\n\n",

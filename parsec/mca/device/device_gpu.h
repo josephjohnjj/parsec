@@ -84,6 +84,7 @@ struct parsec_gpu_task_s {
     parsec_complete_stage_function_t complete_stage;
     parsec_stage_in_function_t      *stage_in;
     parsec_stage_out_function_t     *stage_out;
+    int migrate_status;
 #if defined(PARSEC_PROF_TRACE)
     int                              prof_key_end;
     uint64_t                         prof_event_id;
