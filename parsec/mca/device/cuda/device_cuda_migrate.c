@@ -243,9 +243,9 @@ int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es)
 
     if(mig_task != NULL)  
     { 
-
         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)mig_task);
         migrated_gpu_task = mig_task->gpu_task;
+        assert( migrated_gpu_task->migrate_status != TASK_NOT_MIGRATED );
         dealer_device = mig_task->dealer_device;
         starving_device = mig_task->starving_device;
         stage_in_status = mig_task->stage_in_status;
@@ -371,7 +371,11 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         nb_migrated++;
         parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); // decrement task count at the dealer device
 
-        migrated_gpu_task->migrate_status = 1; //change migrate_status
+        //change migrate_status
+        if( execution_level == 2 )
+            migrated_gpu_task->migrate_status = TASK_MIGRATED_AFTER_STAGE_IN; 
+        else
+            migrated_gpu_task->migrate_status = TASK_MIGRATED_BEFORE_STAGE_IN;
 
         mig_task = (migrated_task_t *) calloc(1, sizeof(migrated_task_t));
 	    PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
