@@ -442,7 +442,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             else if( !(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) 
                 && (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags) )
             {
-                parsec_atomic_fetch_dec_int32(&task->data[i].data_out->readers);
+                parsec_atomic_fetch_inc_int32(&task->data[i].data_out->readers);
                 parsec_list_item_ring_chop((parsec_list_item_t*)src_copy);
                 PARSEC_LIST_ITEM_SINGLETON(src_copy);  
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)src_copy);
