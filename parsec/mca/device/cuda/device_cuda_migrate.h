@@ -18,6 +18,10 @@
 #define PARSEC_DATA_STATUS_UNDER_MIGRATION ((parsec_data_coherency_t)0x4)
 #define PARSEC_DATA_STATUS_MIGRATION_COMPLETE ((parsec_data_coherency_t)0x5)
 
+#define TASK_NOT_MIGRATED 0 
+#define TASK_MIGRATED_BEFORE_STAGE_IN 1
+#define TASK_MIGRATED_AFTER_STAGE_IN 2
+
 /**
  * @brief 
  * level 0 - task has been enqueued to the pending queue of the device. It has not been progressed.
