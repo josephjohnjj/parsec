@@ -57,6 +57,19 @@ typedef struct migration_accounting_s
     int received;
 } migration_accounting_t;
 
+typedef struct migrated_data_s
+{
+    parsec_hash_table_item_t  ht_item;   
+    parsec_data_copy_t        *old_copy[MAX_PARAM_COUNT];
+} migrated_data_t;
+
+static parsec_key_fn_t migrated_data_key_fns = {
+        .key_equal = parsec_hash_table_generic_64bits_key_equal,
+        .key_print = parsec_hash_table_generic_64bits_key_print,
+        .key_hash  = parsec_hash_table_generic_64bits_key_hash
+};
+
+
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
 int parsec_cuda_get_device_load(int device);
@@ -80,6 +93,9 @@ int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* sr
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device,
                          int stage_in_status);
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task);
+int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task );
+int migrate_hash_table_delete( parsec_gpu_task_t *migrated_gpu_task);
+
 
 
 

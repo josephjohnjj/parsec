@@ -923,10 +923,6 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
                 return PARSEC_HOOK_RETURN_AGAIN;
             }
 
-            //compensate for the reader incremeneted during the first strage_in
-            if( gpu_task->migrate_status ==  TASK_MIGRATED_AFTER_STAGE_IN)
-                old_data->readers--;
-
             parsec_atomic_unlock(&master->lock);
             continue;
         }
@@ -1547,19 +1543,19 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         parsec_atomic_fetch_dec_int32( &in_elem->readers );
     assert( gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER );
 
-    if(gpu_task->migrate_status != TASK_NOT_MIGRATED)
-    {
-        in_elem->data_transfer_status = PARSEC_DATA_STATUS_NOT_TRANSFER;
-        parsec_device_gpu_module_t *in_elem_dev = 
-            (parsec_device_gpu_module_t *)parsec_mca_device_get( in_elem->device_index);
-        if( ((parsec_device_module_t *)in_elem_dev)->type == PARSEC_DEV_CUDA)
-        {
-            parsec_atomic_fetch_dec_int32( &in_elem->readers );
-            //parsec_list_item_ring_chop((parsec_list_item_t*)in_elem);
-            //PARSEC_LIST_ITEM_SINGLETON(in_elem);
-            //parsec_list_push_back(&in_elem_dev->gpu_mem_lru, (parsec_list_item_t*)in_elem);
-        }
-    }
+    //if(gpu_task->migrate_status != TASK_NOT_MIGRATED)
+    //{
+    //    in_elem->data_transfer_status = PARSEC_DATA_STATUS_NOT_TRANSFER;
+    //    parsec_device_gpu_module_t *in_elem_dev = 
+    //        (parsec_device_gpu_module_t *)parsec_mca_device_get( in_elem->device_index);
+    //    if( ((parsec_device_module_t *)in_elem_dev)->type == PARSEC_DEV_CUDA)
+    //    {
+    //        parsec_atomic_fetch_dec_int32( &in_elem->readers );
+    //        //parsec_list_item_ring_chop((parsec_list_item_t*)in_elem);
+    //        //PARSEC_LIST_ITEM_SINGLETON(in_elem);
+    //        //parsec_list_push_back(&in_elem_dev->gpu_mem_lru, (parsec_list_item_t*)in_elem);
+    //    }
+    //}
 
     parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
 
@@ -2227,6 +2223,9 @@ parsec_cuda_kernel_push( parsec_device_gpu_module_t      *gpu_device,
         }
     }
 
+    if( gpu_task->migrate_status > TASK_NOT_MIGRATED )
+        migrate_hash_table_delete(gpu_task);
+
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]: Push task %s DONE",
                          gpu_device->super.name,
@@ -2802,6 +2801,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->ec = NULL;
         goto remove_gpu_task;
     }
+    //if( gpu_task->migrate_status > TASK_NOT_MIGRATED )
+    //    migrate_hash_table_delete(gpu_task);
+        
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
     __parsec_complete_execution( es, gpu_task->ec );
     gpu_device->super.executed_tasks++;
