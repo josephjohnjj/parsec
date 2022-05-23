@@ -249,7 +249,8 @@ parsec_gpu_create_w2r_task(parsec_device_gpu_module_t *gpu_device,
             }
             parsec_list_item_ring_chop((parsec_list_item_t*)gpu_copy);
             PARSEC_LIST_ITEM_SINGLETON(gpu_copy);
-            gpu_copy->readers++;
+            //gpu_copy->readers++;
+            PARSEC_DATA_COPY_INC_READERS(gpu_copy);
             d2h_task->data[nb_cleaned].data_out = gpu_copy;
             gpu_copy->data_transfer_status = PARSEC_DATA_STATUS_UNDER_TRANSFER;  /* mark the copy as in transfer */
             parsec_atomic_unlock( &gpu_copy->original->lock );
@@ -301,7 +302,8 @@ int parsec_gpu_complete_w2r_task(parsec_device_gpu_module_t *gpu_device,
     for( int i = 0; i < task->locals[0].value; i++ ) {
         gpu_copy = task->data[i].data_out;
         parsec_atomic_lock(&gpu_copy->original->lock);
-        gpu_copy->readers--;
+        //gpu_copy->readers--;
+        PARSEC_DATA_COPY_DEC_READERS(gpu_copy);
         gpu_copy->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
         gpu_device->super.data_out_to_host += gpu_copy->original->nb_elts; /* TODO: not hardcoded, use datatype size */
         assert(gpu_copy->readers >= 0);

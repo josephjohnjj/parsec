@@ -418,7 +418,8 @@ int parsec_data_start_transfer_ownership_to_copy(parsec_data_t* data,
     assert( (!transfer_required) || (data->device_copies[valid_copy]->version >= copy->version) );
 
     if( PARSEC_FLOW_ACCESS_READ & access_mode ) {
-        copy->readers++;
+        //copy->readers++;
+        PARSEC_DATA_COPY_INC_READERS(copy);
     }
     if( PARSEC_FLOW_ACCESS_WRITE & access_mode ) {
         data->owner_device = (uint8_t)device;
