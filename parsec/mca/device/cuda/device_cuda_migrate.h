@@ -60,6 +60,7 @@ typedef struct migration_accounting_s
 typedef struct migrated_data_s
 {
     parsec_hash_table_item_t  ht_item;   
+    parsec_device_gpu_module_t* dealer_device;
     parsec_data_copy_t        *old_copy[MAX_PARAM_COUNT];
 } migrated_data_t;
 
@@ -87,13 +88,12 @@ int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t
 int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device);
 int parsec_gpu_data_reserve_device_space_for_flow( parsec_device_gpu_module_t* gpu_device,
                                       parsec_gpu_task_t *gpu_task, const parsec_flow_t *flow);
-int increment_readers(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device);
 int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* src_dev,
                  parsec_device_gpu_module_t* dest_dev);
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device,
                          int stage_in_status);
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task);
-int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task );
+int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task, parsec_device_gpu_module_t* dealer_device );
 int migrate_hash_table_delete( parsec_gpu_task_t *migrated_gpu_task);
 
 

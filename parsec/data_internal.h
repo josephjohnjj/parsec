@@ -11,6 +11,22 @@
 #ifndef DATA_INTERNAL_H_HAS_BEEN_INCLUDED
 #define DATA_INTERNAL_H_HAS_BEEN_INCLUDED
 
+#define PARSEC_DATA_COPY_DEC_READERS(COPY) \
+    do{                                    \
+        COPY->readers--;                   \
+        assert(COPY->readers >= 0);        \
+    }while(0);                             \
+
+#define PARSEC_DATA_COPY_INC_READERS(COPY) COPY->readers++;
+
+#define PARSEC_DATA_COPY_DEC_READERS_ATOMIC(COPY)        \
+    do{                                                  \
+        parsec_atomic_fetch_dec_int32( &COPY->readers ); \
+        assert(COPY->readers >= 0);                      \
+    }while(0);                                           \
+
+#define PARSEC_DATA_COPY_INC_READERS_ATOMIC(COPY) parsec_atomic_fetch_inc_int32( &COPY->readers ); 
+
 /** @addtogroup parsec_internal_data
  *  @{
  */

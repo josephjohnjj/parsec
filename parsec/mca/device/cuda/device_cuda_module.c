@@ -816,7 +816,7 @@ parsec_cuda_flush_lru( parsec_device_module_t *device )
     if( (in_use = zone_in_use(gpu_device->memory)) != 0 ) {
         parsec_warning("GPU[%s] memory leak detected: %lu bytes still allocated on GPU",
                        device->name, in_use);
-        //assert(0);
+        assert(0);
     }
 #endif
     return PARSEC_SUCCESS;
@@ -1368,7 +1368,9 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                          "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate to to Device to Device copy, increasing its readers to %d",
                                          gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
-                    parsec_atomic_fetch_inc_int32( &candidate->readers );
+                    //parsec_atomic_fetch_inc_int32( &candidate->readers );
+                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
+
                     undo_readers_inc_if_no_transfer = 1;
                     /* We swap data_in with candidate, so we update the reference counters */
                     PARSEC_OBJ_RETAIN(candidate);
@@ -1540,22 +1542,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         return 1;
     }
     if( undo_readers_inc_if_no_transfer )
-        parsec_atomic_fetch_dec_int32( &in_elem->readers );
+    {
+        //parsec_atomic_fetch_dec_int32( &in_elem->readers );
+        PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
+    }
     assert( gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER );
-
-    //if(gpu_task->migrate_status != TASK_NOT_MIGRATED)
-    //{
-    //    in_elem->data_transfer_status = PARSEC_DATA_STATUS_NOT_TRANSFER;
-    //    parsec_device_gpu_module_t *in_elem_dev = 
-    //        (parsec_device_gpu_module_t *)parsec_mca_device_get( in_elem->device_index);
-    //    if( ((parsec_device_module_t *)in_elem_dev)->type == PARSEC_DEV_CUDA)
-    //    {
-    //        parsec_atomic_fetch_dec_int32( &in_elem->readers );
-    //        //parsec_list_item_ring_chop((parsec_list_item_t*)in_elem);
-    //        //PARSEC_LIST_ITEM_SINGLETON(in_elem);
-    //        //parsec_list_push_back(&in_elem_dev->gpu_mem_lru, (parsec_list_item_t*)in_elem);
-    //    }
-    //}
 
     parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
 
@@ -1898,7 +1889,8 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                     /* Nobody is at the door to handle that event on the source of that data...
                      * we do the command directly */
                     parsec_atomic_lock( &task->data[i].data_in->original->lock );
-                    task->data[i].data_in->readers--;
+                    //task->data[i].data_in->readers--;
+                    PARSEC_DATA_COPY_DEC_READERS(task->data[i].data_in);
                     PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                                          "GPU[%s]:\tExecuting D2D transfer complete for copy %p [ref_count %d] for "
                                          "device %s -- readers now %d",
@@ -1967,7 +1959,8 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                              tmp,
                              gpu_copy->readers, gpu_copy->device_index, gpu_copy->version,
                              gpu_copy->flags, gpu_copy->coherency_state, gpu_copy->data_transfer_status);
-        gpu_copy->readers--;
+        //gpu_copy->readers--;
+        PARSEC_DATA_COPY_DEC_READERS(gpu_copy);
         if( 0 == gpu_copy->readers ) {
             parsec_list_item_ring_chop((parsec_list_item_t*)gpu_copy);
             PARSEC_LIST_ITEM_SINGLETON(gpu_copy);
@@ -2307,7 +2300,8 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
         }
         parsec_atomic_lock(&original->lock);
         if( flow->flow_flags & PARSEC_FLOW_ACCESS_READ ) {
-            gpu_copy->readers--;
+            //gpu_copy->readers--;
+            PARSEC_DATA_COPY_DEC_READERS(gpu_copy);
             if( gpu_copy->readers < 0 ) {
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                      "GPU[%s]: While trying to Pop %s, gpu_copy %p [ref_count %d] on flow %d with original %p had already 0 readers",
@@ -2391,7 +2385,7 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
                 gpu_device->super.transferred_data_out += nb_elts; /* TODO: not hardcoded, use datatype size */
                 how_many++;
             } else {
-               // assert( 0 == gpu_copy->readers );
+               assert( 0 == gpu_copy->readers );
             }
         }
         parsec_atomic_unlock(&original->lock);
