@@ -929,6 +929,7 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
 
 #if !defined(PARSEC_GPU_CUDA_ALLOC_PER_TILE)
         gpu_elem = PARSEC_OBJ_NEW(parsec_data_copy_t);
+        PARSEC_DATA_COPY_READERS_SET_ZERO(gpu_elem);
         PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                              "GPU[%s]:%s: Allocate CUDA copy %p sz %d[ref_count %d] for data %p",
                              gpu_device->super.name, task_name,
@@ -1971,7 +1972,7 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                              gpu_copy->readers, gpu_copy->device_index, gpu_copy->version,
                              gpu_copy->flags, gpu_copy->coherency_state, gpu_copy->data_transfer_status);
         //gpu_copy->readers--;
-        PARSEC_DATA_COPY_DEC_READERS_ATOMOC(gpu_copy);
+        PARSEC_DATA_COPY_DEC_READERS_ATOMIC(gpu_copy);
         if( 0 == gpu_copy->readers ) {
             parsec_list_item_ring_chop((parsec_list_item_t*)gpu_copy);
             PARSEC_LIST_ITEM_SINGLETON(gpu_copy);
@@ -2227,8 +2228,8 @@ parsec_cuda_kernel_push( parsec_device_gpu_module_t      *gpu_device,
         }
     }
 
-    if( gpu_task->migrate_status > TASK_NOT_MIGRATED )
-        migrate_hash_table_delete(gpu_task);
+    if( gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN )
+        gpu_data_compensate_reader(gpu_task);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]: Push task %s DONE",
@@ -2396,7 +2397,7 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
                 gpu_device->super.data_out_to_host += nb_elts; /* TODO: not hardcoded, use datatype size */
                 how_many++;
             } else {
-               assert( 0 == gpu_copy->readers );
+               //assert( 0 == gpu_copy->readers );
             }
         }
         parsec_atomic_unlock(&original->lock);
@@ -2489,7 +2490,7 @@ parsec_cuda_kernel_epilog( parsec_device_gpu_module_t *gpu_device,
          */
         this_task->data[i].data_out = cpu_copy;
 
-        assert( 0 == gpu_copy->readers );
+        //assert( 0 == gpu_copy->readers );
 
         if( gpu_task->pushout & (1 << i) ) {
             PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
