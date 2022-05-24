@@ -1890,7 +1890,7 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                      * we do the command directly */
                     parsec_atomic_lock( &task->data[i].data_in->original->lock );
                     //task->data[i].data_in->readers--;
-                    PARSEC_DATA_COPY_DEC_READERS(task->data[i].data_in);
+                    PARSEC_DATA_COPY_DEC_READERS_ATOMIC(task->data[i].data_in);
                     PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                                          "GPU[%s]:\tExecuting D2D transfer complete for copy %p [ref_count %d] for "
                                          "device %s -- readers now %d",
@@ -1960,7 +1960,7 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                              gpu_copy->readers, gpu_copy->device_index, gpu_copy->version,
                              gpu_copy->flags, gpu_copy->coherency_state, gpu_copy->data_transfer_status);
         //gpu_copy->readers--;
-        PARSEC_DATA_COPY_DEC_READERS(gpu_copy);
+        PARSEC_DATA_COPY_DEC_READERS_ATOMOC(gpu_copy);
         if( 0 == gpu_copy->readers ) {
             parsec_list_item_ring_chop((parsec_list_item_t*)gpu_copy);
             PARSEC_LIST_ITEM_SINGLETON(gpu_copy);
@@ -2301,7 +2301,7 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
         parsec_atomic_lock(&original->lock);
         if( flow->flow_flags & PARSEC_FLOW_ACCESS_READ ) {
             //gpu_copy->readers--;
-            PARSEC_DATA_COPY_DEC_READERS(gpu_copy);
+            PARSEC_DATA_COPY_DEC_READERS_ATOMIC(gpu_copy);
             if( gpu_copy->readers < 0 ) {
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                      "GPU[%s]: While trying to Pop %s, gpu_copy %p [ref_count %d] on flow %d with original %p had already 0 readers",
