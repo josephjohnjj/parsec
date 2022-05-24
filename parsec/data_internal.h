@@ -17,7 +17,11 @@
         assert(COPY->readers >= 0);        \
     }while(0);                             \
 
-#define PARSEC_DATA_COPY_INC_READERS(COPY) COPY->readers++;
+#define PARSEC_DATA_COPY_INC_READERS(COPY) \
+    do{                                    \
+        COPY->readers++;                   \
+        assert(COPY->readers >= 0);        \
+    }while(0);                             \
 
 #define PARSEC_DATA_COPY_DEC_READERS_ATOMIC(COPY)        \
     do{                                                  \
@@ -25,7 +29,19 @@
         assert(COPY->readers >= 0);                      \
     }while(0);                                           \
 
-#define PARSEC_DATA_COPY_INC_READERS_ATOMIC(COPY) parsec_atomic_fetch_inc_int32( &COPY->readers ); 
+#define PARSEC_DATA_COPY_INC_READERS_ATOMIC(COPY)        \
+    do{                                                  \
+        parsec_atomic_fetch_inc_int32( &COPY->readers ); \
+        assert(COPY->readers >= 0);                      \
+    }while(0); 
+
+#define PARSEC_DATA_COPY_READERS_SET_ZERO(COPY)          \
+    do{                                                  \
+        COPY->readers = 0;                                \
+        assert(COPY->readers == 0);                      \
+    }while(0); 
+
+
 
 /** @addtogroup parsec_internal_data
  *  @{
