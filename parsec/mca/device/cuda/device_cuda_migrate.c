@@ -446,6 +446,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             //staged in data is already available it data_out
             task->data[i].data_in = task->data[i].data_out;
             task->data[i].data_in->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+            PARSEC_OBJ_RETAIN(task->data[i].data_in);
 
             /**
              * @brief If the task only has write access remove it from owned LRU and add
@@ -455,10 +456,11 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             if( !(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
             {
-               PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
-               parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
-               PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-               parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                assert(task->data[i].data_in->readers > 0);
+                PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
+                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
             }
             /**
              * @brief For read_write the flow the readers will already be inceremnetd
@@ -467,6 +469,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             if( (PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
             {
+               assert(task->data[i].data_in->readers > 0);
                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
@@ -474,6 +477,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             }
 
             assert(task->data[i].data_in->original == task->data[i].data_out->original);
+            assert( task->data[i].data_in->original != NULL);
             if( (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)  )
                 assert( task->data[i].data_out->version == task->data[i].data_in->version);
             assert(task->data[i].data_out != NULL);
@@ -483,6 +487,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             assert( task->data[i].data_out->version == task->data[i].data_in->version);
             if(task->data[i].data_out->original->owner_device != dealer_device->super.device_index)
                 assert(task->data[i].data_out->version == task->data[i].data_in->version);
+            assert(task->data[i].data_in->device_index == dealer_device->super.device_index);
 
             parsec_atomic_unlock( &original->lock );  
 
@@ -515,7 +520,24 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
         }
     }
 
-    //migrate_hash_table_insert(gpu_task, dealer_device);
+    return 0;
+}
+
+int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task)
+{
+    int i;
+    parsec_task_t *task = gpu_task->ec;
+
+    for(i = 0; i < task->task_class->nb_flows; i++)
+    {
+        if (task->data[i].data_in == NULL)
+            continue;
+        if(PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & gpu_task->flow[i]->flow_flags)) //CTL flow
+            continue;
+            
+       PARSEC_DATA_COPY_DEC_READERS_ATOMIC(  task->data[i].data_in );
+        
+    }
 
     return 0;
 }
@@ -548,24 +570,7 @@ int gpu_data_version_increment(parsec_gpu_task_t *gpu_task)
     return 0;
 }
 
-int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task)
-{
-    int i;
-    parsec_task_t *task = gpu_task->ec;
 
-    for(i = 0; i < task->task_class->nb_flows; i++)
-    {
-        if (task->data[i].data_in == NULL)
-            continue;
-        if(PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & gpu_task->flow[i]->flow_flags)) //CTL flow
-            continue;
-            
-        PARSEC_DATA_COPY_DEC_READERS_ATOMIC(  task->data[i].data_in );
-        
-    }
-
-    return 0;
-}
 
 
 int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task, parsec_device_gpu_module_t* dealer_device)
