@@ -95,7 +95,8 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task);
 int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task, parsec_device_gpu_module_t* dealer_device );
 int migrate_hash_table_delete( parsec_gpu_task_t *migrated_gpu_task);
-int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task);
+int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *gpu_device);
+
 
 
 
