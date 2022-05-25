@@ -469,11 +469,17 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             if( (PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
             {
-               assert(task->data[i].data_in->readers > 0);
-               parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
-               PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-               parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
+                assert(task->data[i].data_in->readers > 0);
+                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
 
+            }
+            if( (PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
+                !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
+            {
+                PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
             }
 
             assert(task->data[i].data_in->original == task->data[i].data_out->original);
@@ -523,7 +529,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
     return 0;
 }
 
-int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task)
+int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *gpu_device)
 {
     int i;
     parsec_task_t *task = gpu_task->ec;
@@ -535,7 +541,24 @@ int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task)
         if(PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & gpu_task->flow[i]->flow_flags)) //CTL flow
             continue;
             
-       PARSEC_DATA_COPY_DEC_READERS_ATOMIC(  task->data[i].data_in );
+        parsec_atomic_lock( &task->data[i].data_in->original->lock );
+
+        PARSEC_DATA_COPY_DEC_READERS_ATOMIC(  task->data[i].data_in );
+        //PARSEC_OBJ_RELEASE(task->data[i].data_in);
+        parsec_device_gpu_module_t *src_device =
+                    (parsec_device_gpu_module_t*)parsec_mca_device_get( task->data[i].data_in->device_index );
+        if(0 == task->data[i].data_in->readers)
+        {
+            assert( ((parsec_list_item_t*)task->data[i].data_in)->list_next != (parsec_list_item_t*)task->data[i].data_in );
+            assert( ((parsec_list_item_t*)task->data[i].data_in)->list_prev != (parsec_list_item_t*)task->data[i].data_in );
+            
+            //parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+            //PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+            //parsec_list_push_back(&src_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+            
+        }
+
+        parsec_atomic_unlock( &task->data[i].data_in->original->lock );
         
     }
 
