@@ -2229,7 +2229,7 @@ parsec_cuda_kernel_push( parsec_device_gpu_module_t      *gpu_device,
     }
 
     if( gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN )
-        gpu_data_compensate_reader(gpu_task);
+        gpu_data_compensate_reader(gpu_task, gpu_device);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]: Push task %s DONE",
