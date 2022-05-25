@@ -2228,8 +2228,8 @@ parsec_cuda_kernel_push( parsec_device_gpu_module_t      *gpu_device,
         }
     }
 
-    if( gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN )
-        gpu_data_compensate_reader(gpu_task, gpu_device);
+    //if( gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN )
+    //    gpu_data_compensate_reader(gpu_task, gpu_device);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]: Push task %s DONE",
@@ -2397,7 +2397,8 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
                 gpu_device->super.data_out_to_host += nb_elts; /* TODO: not hardcoded, use datatype size */
                 how_many++;
             } else {
-               //assert( 0 == gpu_copy->readers );
+                //assert( 0 == gpu_copy->readers );
+                PARSEC_DATA_COPY_READERS_SET_ZERO(gpu_copy);
             }
         }
         parsec_atomic_unlock(&original->lock);
