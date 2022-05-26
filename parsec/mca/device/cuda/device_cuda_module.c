@@ -1423,6 +1423,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     /* Do not need to be tranferred */
     if( -1 == transfer_from ) {
         gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
+
+        /**
+         * When we are migrating of the data is already in the destination
+         * GPU we have to compensate for the reader increment made during 
+         * the first stage_in
+         */
+        if(gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN)
+            PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
     } else {
         /* Update the transferred required_data_in size */
         gpu_device->super.required_data_in += original->nb_elts;
@@ -2072,7 +2080,7 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
          * to here. This will make sure that tasks update the version 
          * only if it is sure to execute in the corresponding GPU.
          */
-        gpu_data_version_increment(task);
+        gpu_data_version_increment(task, gpu_device);
 #if defined(PARSEC_DEBUG_PARANOID)
         int i;
         const parsec_flow_t *flow;
@@ -2386,8 +2394,7 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
                 gpu_device->super.transferred_data_out += nb_elts; /* TODO: not hardcoded, use datatype size */
                 how_many++;
             } else {
-                //assert( 0 == gpu_copy->readers );
-                PARSEC_DATA_COPY_READERS_SET_ZERO(gpu_copy);
+                assert( 0 == gpu_copy->readers  );
             }
         }
         parsec_atomic_unlock(&original->lock);
@@ -2480,7 +2487,7 @@ parsec_cuda_kernel_epilog( parsec_device_gpu_module_t *gpu_device,
          */
         this_task->data[i].data_out = cpu_copy;
 
-        //assert( 0 == gpu_copy->readers );
+        assert( 0 == gpu_copy->readers );
 
         if( gpu_task->pushout & (1 << i) ) {
             PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
@@ -2797,8 +2804,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->ec = NULL;
         goto remove_gpu_task;
     }
-    //if( gpu_task->migrate_status > TASK_NOT_MIGRATED )
-    //    migrate_hash_table_delete(gpu_task);
         
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
     __parsec_complete_execution( es, gpu_task->ec );
