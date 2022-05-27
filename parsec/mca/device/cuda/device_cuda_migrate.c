@@ -458,9 +458,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             {
                 assert(task->data[i].data_in->readers > 0);
                 PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
-                //parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
-                //PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-                //parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+                parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_in);
             }
             /**
              * @brief For read_write the flow the readers will already be inceremnetd
@@ -471,9 +471,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             {
                 //PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
                 assert(task->data[i].data_in->readers > 0);
-                //parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
-                //PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-                //parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+                parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_in);
 
             }
             if( (PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
