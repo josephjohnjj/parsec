@@ -565,7 +565,7 @@ int gpu_data_compensate_reader(parsec_gpu_task_t *gpu_task, parsec_device_gpu_mo
     return 0;
 }
 
-int gpu_data_version_increment(parsec_gpu_task_t *gpu_task)
+int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* gpu_device)
 {
     int i;
     parsec_task_t *task = gpu_task->ec;
