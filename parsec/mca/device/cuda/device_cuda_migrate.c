@@ -325,7 +325,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         return 0;
     starving_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
 
-    #if 0
+    //#if 0
     migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_front( &(dealer_device->pending) ); //level 0
     execution_level = 0;
     if(migrated_gpu_task == NULL)
@@ -346,18 +346,18 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
             }
         }
     }
-    #endif
+    //#endif
 
-    for(j = 0; j < (dealer_device->max_exec_streams - 2); j++)
-    {
-        migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( dealer_device->exec_stream[ (2 + j) ]->fifo_pending ); //level2
-        if(migrated_gpu_task != NULL)
-        {
-            execution_level = 2;
-            stream_index = 2 + j;
-            break;
-        }
-    }
+    //for(j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+    //{
+    //    migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( dealer_device->exec_stream[ (2 + j) ]->fifo_pending ); //level2
+    //    if(migrated_gpu_task != NULL)
+    //    {
+    //        execution_level = 2;
+    //        stream_index = 2 + j;
+    //        break;
+    //    }
+    //}
     
 
     if(migrated_gpu_task != NULL)
@@ -507,20 +507,23 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
              */
             if(task->data[i].data_out->original->owner_device != dealer_device->super.device_index)
                 continue;
-            if( task->data[i].data_in->version == task->data[i].data_out->version)
-                continue;
-        
-            task->data[i].data_in = task->data[i].data_out;
+            //if( task->data[i].data_in->version == task->data[i].data_out->version)
+            //    continue;
+        //
+            //task->data[i].data_in = task->data[i].data_out;
+
+
+            if(task->data[i].data_out->original->owner_device != dealer_device->super.device_index)
+                assert( task->data[i].data_out->version == task->data[i].data_out->original->device_copies[0]->version); 
             parsec_data_t* original = task->data[i].data_in->original;
             parsec_atomic_lock( &original->lock );
 
-            parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
-            PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+            //parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+            //PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
             
             assert(task->data[i].data_in->readers >= 0);
 
             task->data[i].data_in->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-            task->data[i].data_in->data_transfer_status = PARSEC_DATA_STATUS_SHOULD_MIGRATE;
 
             parsec_atomic_unlock( &original->lock );   
         }
