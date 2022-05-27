@@ -369,7 +369,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
          * @brief if the GPU task is a not a computational kerenel
          * stop migration.
          */
-        if(migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL)
+        if(migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
         {
             if(execution_level == 0)
             {
