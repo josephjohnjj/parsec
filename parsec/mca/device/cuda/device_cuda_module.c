@@ -1300,19 +1300,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
      */
     if( PARSEC_FLOW_ACCESS_WRITE & type ) {
         if (gpu_elem->readers > 0 ) {
-            //we are migrating the data of task that has already been staged in.
-            // So we have incremented the reader for this data in change_task_features().
-            //if(gpu_task->migrate_status > TASK_NOT_MIGRATED)
-            //{
-            //    if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) ) {
-            //        parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
-            //                       "(possible anti-dependency,\n"
-            //                       "or concurrent accesses), please prevent that with CTL dependencies\n",
-            //                       gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count, gpu_elem->readers);
-            //        parsec_atomic_unlock( &original->lock );
-            //        return -1;
-            //    }
-            //}
+            if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) ) {
+                parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
+                               "(possible anti-dependency,\n"
+                               "or concurrent accesses), please prevent that with CTL dependencies\n",
+                               gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count, gpu_elem->readers);
+                parsec_atomic_unlock( &original->lock );
+                return -1;
+            }   
         }
         PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                              "GPU[%s]:\tDetach writable CUDA copy %p [ref_count %d] from any lists",
@@ -1326,10 +1321,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
      * Current limitations: only for read-only data used read-only on the hosting GPU. */
     parsec_device_cuda_module_t *in_elem_dev = (parsec_device_cuda_module_t*)parsec_mca_device_get( in_elem->device_index );
     if( ((PARSEC_FLOW_ACCESS_READ & type) && !(PARSEC_FLOW_ACCESS_WRITE & type))
-        || (gpu_task->migrate_status > TASK_NOT_MIGRATED)) 
+        || (gpu_task->migrate_status > TASK_NOT_MIGRATED) /* make sure limitation does not affect migrated tasks */) 
     {
-        parsec_data_status_t old_status = in_elem->data_transfer_status;
-
         int potential_alt_src = 0;
         if( PARSEC_DEV_CUDA == in_elem_dev->super.super.type ) {
             if( gpu_device->peer_access_mask & (1 << in_elem_dev->cuda_index) ) {
@@ -2089,7 +2082,8 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
         /**
          * The change in data versioning is moved from stage_in step
          * to here. This will make sure that tasks update the version 
-         * only if it is sure to execute in the corresponding GPU.
+         * only if it is sure to execute in the corresponding GPU, in
+         * the last moment.
          */
         gpu_data_version_increment(task, gpu_device);
 #if defined(PARSEC_DEBUG_PARANOID)
@@ -2235,9 +2229,6 @@ parsec_cuda_kernel_push( parsec_device_gpu_module_t      *gpu_device,
             return ret;
         }
     }
-
-    //if( gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN )
-    //    gpu_data_compensate_reader(gpu_task, gpu_device);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]: Push task %s DONE",
@@ -2769,8 +2760,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * @brief Before a new task is selectd by the device manager for execution,
      * the manager checks if there are any starving devices and migrate tasks,
      * to the starving device, if there are available tasks to migrate.
+     * 
+     * rc will return the total number of tasks selected for migration and that 
+     * is deducted from the total number of tasks that will be executed by this
+     * GPU.
      */
-    //printf("Available tasks %d \n", gpu_device->mutex);
     rc = migrate_if_starving(es,  gpu_device);
     if( rc > 0)
         parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
