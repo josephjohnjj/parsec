@@ -796,7 +796,7 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
          * before we get here (aka below parsec_fini), the destructor of the data
          * collection must have been called, releasing all the copies.
          */
-        PARSEC_OBJ_RELEASE(gpu_copy); assert(NULL == gpu_copy);
+        PARSEC_OBJ_RELEASE(gpu_copy); //assert(NULL == gpu_copy);
     }
 }
 
