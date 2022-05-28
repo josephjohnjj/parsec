@@ -531,6 +531,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_atomic_lock( &original->lock );
                 task->data[i].data_in = task->data[i].data_out;
                 task->data[i].data_in->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+                PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
                 PARSEC_OBJ_RETAIN(task->data[i].data_in);
                 parsec_atomic_unlock( &original->lock );
             }
