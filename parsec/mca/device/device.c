@@ -168,7 +168,7 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
                           parsec_task_snprintf(task_str, MAX_TASK_STRLEN, this_task), dev_index, i);
          }
      }
-    dev_index = 2; //CHANGE THIS, only for testing all task mapped to first GPU device
+    //dev_index = 2; //CHANGE THIS, only for testing all task mapped to first GPU device
     return dev_index;
 }
 
