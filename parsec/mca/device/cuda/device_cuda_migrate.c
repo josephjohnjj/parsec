@@ -7,6 +7,8 @@ static int NDEVICES;
 migration_accounting_t* accounting;
 static parsec_hash_table_t *migrated_data_hash_table = NULL;
 
+double start = 0;
+double end = 0;
 
 PARSEC_OBJ_CLASS_INSTANCE(migrated_task_t, parsec_list_item_t, NULL, NULL);
 
@@ -25,6 +27,8 @@ int parsec_cuda_migrate_init(int ndevices)
     #if defined(PARSEC_HAVE_CUDA)
     nvmlReturn_t nvml_ret;
     #endif
+
+    start = MPI_Wtime();
 
     NDEVICES = ndevices;
     device_info = (parsec_device_cuda_info_t *) calloc(ndevices, sizeof(parsec_device_cuda_info_t));
@@ -69,6 +73,8 @@ int parsec_cuda_migrate_init(int ndevices)
 int parsec_cuda_migrate_fini()
 {
     int i;
+
+    end = MPI_Wtime();
 	
     #if defined(PARSEC_HAVE_CUDA)
     nvmlShutdown();
@@ -83,6 +89,7 @@ int parsec_cuda_migrate_fini()
             accounting[i].level0 + accounting[i].level1 + accounting[i].level2);
         printf("Task received %d \n", accounting[i].received);
     }
+    printf("---------Execution time = %lf ------------ \n", end - start); 
     PARSEC_OBJ_RELEASE(migrated_task_list); 
     free(device_info); 
 
@@ -333,6 +340,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     {
         migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_front( dealer_device->exec_stream[0]->fifo_pending ); //level 1
         execution_level = 1;
+
         if( migrated_gpu_task == NULL)
         {
             for(j = 0; j < (dealer_device->max_exec_streams - 2); j++)
