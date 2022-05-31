@@ -2745,6 +2745,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
  fetch_task_from_shared_queue:
 
+    printf(" time %lf device %d level0 %d level1 %d level2 %d total %d \n",
+        current_time(),
+        CUDA_DEVICE_NUM(gpu_device->super.device_index), 
+        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
+        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
+        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
+        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 3));
+
     /**
      * @brief Before a new task is selectd by the device manager for execution,
      * the manager checks if there are any starving devices and migrate tasks,
