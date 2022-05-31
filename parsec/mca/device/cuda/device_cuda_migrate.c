@@ -82,20 +82,20 @@ int parsec_cuda_migrate_fini()
 
     for(i = 0; i < NDEVICES; i++)
     {
-        printf("*********** DEVICE %d *********** \n", i);
+        printf("\n*********** DEVICE %d *********** \n", i);
         printf("Total tasks executed: %d \n", accounting[i].total_tasks_executed);
-        printf("Tasks migrated: level0 %d, level1 %d, level2 %d (Total %d)\n",
+        printf("Tasks migrated      : level0 %d, level1 %d, level2 %d (Total %d)\n",
             accounting[i].level0, accounting[i].level1, accounting[i].level2,
             accounting[i].level0 + accounting[i].level1 + accounting[i].level2);
-        printf("Task check: level0 %d level1 %d level2 %d total %d \n", 
+        printf("Task check          : level0 %d level1 %d level2 %d total %d \n", 
             parsec_cuda_get_device_task(i, 0),
             parsec_cuda_get_device_task(i, 1), 
             parsec_cuda_get_device_task(i, 2),
             parsec_cuda_get_device_task(i, -1));
-        printf("Task received %d \n", accounting[i].received);
+        printf("Task received       : %d \n", accounting[i].received);
         
     }
-    printf("---------Execution time = %lf ------------ \n", end - start); 
+    printf("\n---------Execution time = %lf ------------ \n", end - start); 
     PARSEC_OBJ_RELEASE(migrated_task_list); 
     free(device_info); 
 
@@ -414,13 +414,21 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         assert( (migrated_gpu_task != NULL) && (migrated_gpu_task->ec != NULL) );
 
         if(execution_level == 0)
-            accounting[CUDA_DEVICE_NUM(dealer_device->super.device_index)].level0++;
+        {
+            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); 
+            accounting[dealer_device_index].level0++;
+        }
         if(execution_level == 1)
-            accounting[CUDA_DEVICE_NUM(dealer_device->super.device_index)].level1++;
+        {
+            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1); 
+            accounting[dealer_device_index].level1++;
+        }
         if(execution_level == 2)
-            accounting[CUDA_DEVICE_NUM(dealer_device->super.device_index)].level2++;
+        {
+            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2); 
+            accounting[dealer_device_index].level2++;
+        }
         nb_migrated++;
-        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); // decrement task count at the dealer device
 
         /**
          * @brief change migrate_status according to the status of the stage in of the
