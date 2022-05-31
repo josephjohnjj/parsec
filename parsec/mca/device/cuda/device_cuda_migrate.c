@@ -101,6 +101,12 @@ int parsec_cuda_migrate_fini()
 
 }
 
+
+double current_time()
+{
+    return ( MPI_Wtime() - start);
+}
+
 /**
  * @brief returns the load of a particular device
  * 
@@ -157,6 +163,11 @@ int parsec_cuda_set_device_load(int device, int load)
 
 int parsec_cuda_get_device_task(int device, int level)
 {
+    if( level == 3)
+        return (device_info[device].task_count[0] +
+                device_info[device].task_count[1] +
+                device_info[device].task_count[2]);
+                
     return device_info[device].task_count[level];
 }
 
