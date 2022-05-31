@@ -87,7 +87,13 @@ int parsec_cuda_migrate_fini()
         printf("Tasks migrated: level0 %d, level1 %d, level2 %d (Total %d)\n",
             accounting[i].level0, accounting[i].level1, accounting[i].level2,
             accounting[i].level0 + accounting[i].level1 + accounting[i].level2);
+        printf("Task check: level0 %d level1 %d level2 %d total %d \n", 
+            parsec_cuda_get_device_task(i, 0),
+            parsec_cuda_get_device_task(i, 1), 
+            parsec_cuda_get_device_task(i, 2),
+            parsec_cuda_get_device_task(i, 3));
         printf("Task received %d \n", accounting[i].received);
+        
     }
     printf("---------Execution time = %lf ------------ \n", end - start); 
     PARSEC_OBJ_RELEASE(migrated_task_list); 
