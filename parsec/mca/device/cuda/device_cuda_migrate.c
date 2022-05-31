@@ -91,7 +91,7 @@ int parsec_cuda_migrate_fini()
             parsec_cuda_get_device_task(i, 0),
             parsec_cuda_get_device_task(i, 1), 
             parsec_cuda_get_device_task(i, 2),
-            parsec_cuda_get_device_task(i, 3));
+            parsec_cuda_get_device_task(i, -1));
         printf("Task received %d \n", accounting[i].received);
         
     }
@@ -169,7 +169,7 @@ int parsec_cuda_set_device_load(int device, int load)
 
 int parsec_cuda_get_device_task(int device, int level)
 {
-    if( level == 3)
+    if( level == -1)
         return (device_info[device].task_count[0] +
                 device_info[device].task_count[1] +
                 device_info[device].task_count[2]);
@@ -216,8 +216,16 @@ int parsec_cuda_tasks_executed(int device)
  */
 int is_starving(int device)
 {
-    //if( device_info[device].load < 1 && device_info[device].task_count < 1 )
-    if( device_info[device].task_count[/* level */ 0] < 1 )
+    if( parsec_cuda_get_device_task(device, -1) < 1 )
+        return 1;
+    else
+        return 0;
+}
+
+
+int will_starve(int device)
+{
+    if( parsec_cuda_get_device_task(device, -1) <  3)
         return 1;
     else
         return 0;
@@ -236,6 +244,8 @@ int is_starving(int device)
 int find_starving_device(int dealer_device)
 {
     int i;
+    if( will_starve(dealer_device) )
+        return -1;
 
     for(i = 0; i < NDEVICES; i++)
     {

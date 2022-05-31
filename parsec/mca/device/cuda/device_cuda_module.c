@@ -2763,7 +2763,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
         parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
         parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
-        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 3));
+        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1));
 
     /**
      * @brief Before a new task is selectd by the device manager for execution,
