@@ -2612,7 +2612,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     parsec_device_gpu_module_t* gpu_device;
     parsec_device_cuda_module_t *cuda_device;
     cudaError_t status;
-    int rc, exec_stream = 0;
+    int rc, exec_stream = 0, nb_migrated = 0;
     parsec_gpu_task_t *progress_task, *out_task_submit = NULL, *out_task_pop = NULL;
 #if defined(PARSEC_DEBUG_NOISIER)
     char tmp[MAX_TASK_STRLEN];
@@ -2768,13 +2768,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
  fetch_task_from_shared_queue:
 
-    printf(" time %lf device %d level0 %d level1 %d level2 %d total %d \n",
-        current_time(),
-        CUDA_DEVICE_NUM(gpu_device->super.device_index), 
-        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
-        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
-        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
-        parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1));
+    //printf(" time %lf device %d level0 %d level1 %d level2 %d total %d \n",
+    //    current_time(),
+    //    CUDA_DEVICE_NUM(gpu_device->super.device_index), 
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1));
 
     /**
      * @brief Before a new task is selectd by the device manager for execution,
@@ -2785,9 +2785,17 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * is deducted from the total number of tasks that will be executed by this
      * GPU.
      */
-    rc = migrate_if_starving(es,  gpu_device);
-    if( rc > 0)
-        parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * rc);
+    nb_migrated = migrate_if_starving(es,  gpu_device);
+    if( nb_migrated > 0 ) 
+    {
+        while(1) 
+        {
+            rc = gpu_device->mutex;
+            if( parsec_atomic_cas_int32( &gpu_device->mutex, rc, rc - nb_migrated ) ) 
+                    break; 
+        }
+    }
+        
 
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
