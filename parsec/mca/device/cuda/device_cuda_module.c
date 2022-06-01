@@ -2788,8 +2788,15 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         while(1) 
         {
             rc = gpu_device->mutex;
-            if( parsec_atomic_cas_int32( &gpu_device->mutex, rc, rc - nb_migrated ) ) 
-                    break; 
+            if( parsec_atomic_cas_int32( &gpu_device->mutex, rc, rc - nb_migrated ) ) {
+                ///* update the expected load on the GPU device */
+                parsec_device_load[gpu_device->super.device_index] -= nb_migrated * parsec_device_sweight[gpu_device->super.device_index];
+                if( gpu_device->mutex == 0) {
+                    rc = 1;
+                    goto crappy_code;
+                }
+                break; 
+            }
         }
     }
         
@@ -2849,6 +2856,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                          gpu_task, __FILE__, __LINE__);
     free( gpu_task );
     rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
+crappy_code:
     if( 1 == rc ) {  /* I was the last one */
 #if defined(PARSEC_PROF_TRACE)
         if( parsec_gpu_trackable_events & PARSEC_PROFILE_GPU_TRACK_OWN )
