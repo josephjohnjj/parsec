@@ -14,10 +14,6 @@
 #define CUDA_DEVICE_NUM(DEVICE_NUM) (DEVICE_NUM - 2)
 #define DEVICE_NUM(CUDA_DEVICE_NUM) (CUDA_DEVICE_NUM + 2)
 
-#define PARSEC_DATA_STATUS_SHOULD_MIGRATE ((parsec_data_coherency_t)0x3)
-#define PARSEC_DATA_STATUS_UNDER_MIGRATION ((parsec_data_coherency_t)0x4)
-#define PARSEC_DATA_STATUS_MIGRATION_COMPLETE ((parsec_data_coherency_t)0x5)
-
 #define TASK_NOT_MIGRATED 0 
 #define TASK_MIGRATED_BEFORE_STAGE_IN 1
 #define TASK_MIGRATED_AFTER_STAGE_IN 2
@@ -37,6 +33,10 @@ typedef struct parsec_device_cuda_info_s
     int total_tasks_executed;
     int task_count[EXECUTION_LEVEL];
     int load;
+    int level0;
+    int level1;
+    int level2;
+    int received;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
@@ -47,29 +47,6 @@ typedef struct migrated_task_s
     parsec_device_gpu_module_t* starving_device;
     int stage_in_status;
 } migrated_task_t;
-
-typedef struct migration_accounting_s
-{
-    int total_tasks_executed;
-    int level0;
-    int level1;
-    int level2;
-    int received;
-} migration_accounting_t;
-
-typedef struct migrated_data_s
-{
-    parsec_hash_table_item_t  ht_item;   
-    parsec_device_gpu_module_t* dealer_device;
-    parsec_data_copy_t        *old_copy[MAX_PARAM_COUNT];
-} migrated_data_t;
-
-static parsec_key_fn_t migrated_data_key_fns = {
-        .key_equal = parsec_hash_table_generic_64bits_key_equal,
-        .key_print = parsec_hash_table_generic_64bits_key_print,
-        .key_hash  = parsec_hash_table_generic_64bits_key_hash
-};
-
 
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
@@ -93,8 +70,6 @@ int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* sr
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device,
                          int stage_in_status);
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* gpu_device);
-int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task, parsec_device_gpu_module_t* dealer_device );
-int migrate_hash_table_delete( parsec_gpu_task_t *migrated_gpu_task);
 double current_time();
 
 

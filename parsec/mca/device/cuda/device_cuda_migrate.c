@@ -4,8 +4,6 @@ extern int parsec_device_cuda_enabled;
 parsec_device_cuda_info_t* device_info; 
 static parsec_list_t* migrated_task_list;
 static int NDEVICES;
-migration_accounting_t* accounting;
-static parsec_hash_table_t *migrated_data_hash_table = NULL;
 
 double start = 0;
 double end = 0;
@@ -32,7 +30,6 @@ int parsec_cuda_migrate_init(int ndevices)
 
     NDEVICES = ndevices;
     device_info = (parsec_device_cuda_info_t *) calloc(ndevices, sizeof(parsec_device_cuda_info_t));
-    accounting = (migration_accounting_t *) calloc(ndevices, sizeof(migration_accounting_t));
     migrated_task_list = PARSEC_OBJ_NEW(parsec_list_t);;
 
     for(i = 0; i < NDEVICES; i++)
@@ -41,22 +38,16 @@ int parsec_cuda_migrate_init(int ndevices)
             device_info[i].task_count[j] = 0;
         device_info[i].load = 0;
 
-        accounting[i].level0 = 0;
-        accounting[i].level1 = 0;
-        accounting[i].level2 = 0;
-        accounting[i].total_tasks_executed = 0;
-        accounting[i].received = 0;
+        device_info[i].level0 = 0;
+        device_info[i].level1 = 0;
+        device_info[i].level2 = 0;
+        device_info[i].total_tasks_executed = 0;
+        device_info[i].received = 0;
     }
 
     #if defined(PARSEC_HAVE_CUDA)
     nvml_ret = nvmlInit_v2();
     #endif
-
-    migrated_data_hash_table = PARSEC_OBJ_NEW(parsec_hash_table_t); 
-    parsec_hash_table_init(migrated_data_hash_table,
-                           offsetof(migrated_data_t, ht_item),
-                           8, migrated_data_key_fns, NULL);
-    
 
     char hostname[256];
     gethostname(hostname, sizeof(hostname));
@@ -83,23 +74,21 @@ int parsec_cuda_migrate_fini()
     for(i = 0; i < NDEVICES; i++)
     {
         printf("\n*********** DEVICE %d *********** \n", i);
-        printf("Total tasks executed: %d \n", accounting[i].total_tasks_executed);
+        printf("Total tasks executed: %d \n", device_info[i].total_tasks_executed);
         printf("Tasks migrated      : level0 %d, level1 %d, level2 %d (Total %d)\n",
-            accounting[i].level0, accounting[i].level1, accounting[i].level2,
-            accounting[i].level0 + accounting[i].level1 + accounting[i].level2);
+            device_info[i].level0, device_info[i].level1, device_info[i].level2,
+            device_info[i].level0 + device_info[i].level1 + device_info[i].level2);
         printf("Task check          : level0 %d level1 %d level2 %d total %d \n", 
             parsec_cuda_get_device_task(i, 0),
             parsec_cuda_get_device_task(i, 1), 
             parsec_cuda_get_device_task(i, 2),
             parsec_cuda_get_device_task(i, -1));
-        printf("Task received       : %d \n", accounting[i].received);
+        printf("Task received       : %d \n", device_info[i].received);
         
     }
     printf("\n---------Execution time = %lf ------------ \n", end - start); 
     PARSEC_OBJ_RELEASE(migrated_task_list); 
     free(device_info); 
-
-    parsec_hash_table_fini(migrated_data_hash_table);
 
     printf("Migration module shut down \n");
 
@@ -202,7 +191,7 @@ int parsec_cuda_set_device_task(int device, int task_count, int level)
 
 int parsec_cuda_tasks_executed(int device)
 {
-    int rc = parsec_atomic_fetch_add_int32(&(accounting[device].total_tasks_executed), 1);
+    int rc = parsec_atomic_fetch_add_int32(&(device_info[device].total_tasks_executed), 1);
     return rc + 1;
 }
 
@@ -244,8 +233,6 @@ int will_starve(int device)
 int find_starving_device(int dealer_device)
 {
     int i;
-    if( will_starve(dealer_device) )
-        return -1;
 
     for(i = 0; i < NDEVICES; i++)
     {
@@ -298,7 +285,7 @@ int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es)
         change_task_features(migrated_gpu_task, dealer_device, stage_in_status);
 
 	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)migrated_gpu_task);	
-        parsec_atomic_fetch_inc_int32(&accounting[CUDA_DEVICE_NUM(starving_device->super.device_index)].received); 
+        parsec_atomic_fetch_inc_int32(&device_info[CUDA_DEVICE_NUM(starving_device->super.device_index)].received); 
         parsec_cuda_kernel_scheduler(es, (parsec_gpu_task_t *) migrated_gpu_task, starving_device->super.device_index);  
 	    PARSEC_OBJ_DESTRUCT(mig_task);
         free(mig_task);
@@ -349,7 +336,7 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     migrated_task_t *mig_task = NULL;
 
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);  
-    if(is_starving(dealer_device_index))
+    if( will_starve(dealer_device_index) )
         return 0;
     
     starving_device_index = find_starving_device(dealer_device_index);
@@ -361,11 +348,11 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
      * @brief Tasks are searched in different levels one by one. At this point we assume
      * that the cost of migration increases, as the level increase.
      */
-    migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_front( &(dealer_device->pending) ); //level 0
+    migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_back( &(dealer_device->pending) ); //level 0
     execution_level = 0;
     if(migrated_gpu_task == NULL)
     {
-        migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_front( dealer_device->exec_stream[0]->fifo_pending ); //level 1
+        migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_back( dealer_device->exec_stream[0]->fifo_pending ); //level 1
         execution_level = 1;
 
         if( migrated_gpu_task == NULL)
@@ -396,18 +383,12 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         if(migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
         {
             if(execution_level == 0)
-            {
-                parsec_list_push_front(&(dealer_device->pending), (parsec_list_item_t*) migrated_gpu_task );
-            }
+                parsec_list_push_back(&(dealer_device->pending), (parsec_list_item_t*) migrated_gpu_task );
             if(execution_level == 1)
-            {
-                parsec_list_push_front( dealer_device->exec_stream[0]->fifo_pending, (parsec_list_item_t*) migrated_gpu_task );
-            }
+                parsec_list_push_back( dealer_device->exec_stream[0]->fifo_pending, (parsec_list_item_t*) migrated_gpu_task );
             if(execution_level == 2)
-            {
-                parsec_list_push_front( dealer_device->exec_stream[stream_index]->fifo_pending, (parsec_list_item_t*) migrated_gpu_task );
-            }
-            
+                parsec_list_push_back( dealer_device->exec_stream[stream_index]->fifo_pending, (parsec_list_item_t*) migrated_gpu_task );
+                
             return nb_migrated;
         }
 
@@ -416,17 +397,17 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
         if(execution_level == 0)
         {
             parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0); 
-            accounting[dealer_device_index].level0++;
+            device_info[dealer_device_index].level0++;
         }
         if(execution_level == 1)
         {
             parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1); 
-            accounting[dealer_device_index].level1++;
+            device_info[dealer_device_index].level1++;
         }
         if(execution_level == 2)
         {
             parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2); 
-            accounting[dealer_device_index].level2++;
+            device_info[dealer_device_index].level2++;
         }
         nb_migrated++;
 
@@ -614,80 +595,3 @@ int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_mo
 }
 
 
-
-
-int migrate_hash_table_insert( parsec_gpu_task_t *migrated_gpu_task, parsec_device_gpu_module_t* dealer_device)
-{
-    int i;
-    migrated_data_t *migrated_data_item = NULL;
-    parsec_task_t *task = migrated_gpu_task->ec;
-    migrated_data_item = (migrated_data_t *) calloc(1, sizeof(migrated_data_t));
-    migrated_data_item->dealer_device = dealer_device;
-    migrated_data_item->ht_item.key = (parsec_key_t) task->task_class->make_key((const parsec_taskpool_t*)task->taskpool, 
-                                                                                (const parsec_assignment_t*)&task->locals);
-    for( i = 0; i < task->task_class->nb_flows; i++) 
-    {     
-        if(PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & migrated_gpu_task->flow[i]->flow_flags)) //CTL flow
-        {
-            migrated_data_item->old_copy[i] = NULL;
-            continue;   
-        }
-
-        if(task->data->data_out == NULL)   
-            migrated_data_item->old_copy[i] = NULL;
-        else
-            migrated_data_item->old_copy[i] = task->data->data_out;
-    }
-
-    parsec_hash_table_lock_bucket(migrated_data_hash_table, migrated_data_item->ht_item.key);                                                                                             
-    parsec_hash_table_nolock_insert(migrated_data_hash_table, &migrated_data_item->ht_item);
-    parsec_hash_table_unlock_bucket(migrated_data_hash_table, migrated_data_item->ht_item.key);
-
-    return 1;
-}
-
-int migrate_hash_table_delete( parsec_gpu_task_t *migrated_gpu_task)
-{
-    int i;
-    migrated_data_t* migrated_data_item = NULL;
-    parsec_task_t* task = migrated_gpu_task->ec;
-    parsec_key_t key;
-
-    
-    key = (parsec_key_t) migrated_gpu_task->ec->task_class->make_key((const parsec_taskpool_t*)migrated_gpu_task->ec->taskpool, 
-                                                                     (const parsec_assignment_t*)&migrated_gpu_task->ec->locals);
-
-    parsec_hash_table_lock_bucket(migrated_data_hash_table, key);                                                                                             
-    migrated_data_item = (migrated_data_t*) parsec_hash_table_nolock_remove(migrated_data_hash_table, key);
-    parsec_hash_table_unlock_bucket(migrated_data_hash_table, key);
-    
-    if( migrated_data_item != NULL)
-    {
-        if( migrated_gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN)
-        {
-            for( i = 0; i < task->task_class->nb_flows; i++)   
-            {     
-                if(migrated_data_item->old_copy[i] == NULL)   
-                    continue;
-
-                parsec_data_t* original = migrated_data_item->old_copy[i]->original;
-                parsec_atomic_lock( &original->lock );
-
-                if( (PARSEC_FLOW_ACCESS_READ & migrated_gpu_task->flow[i]->flow_flags) )
-                {
-                    PARSEC_DATA_COPY_DEC_READERS_ATOMIC(migrated_data_item->old_copy[i]);
-                }
-
-                parsec_list_push_back(&migrated_data_item->dealer_device->gpu_mem_lru, 
-                    (parsec_list_item_t*)migrated_data_item->old_copy[i]);
-
-                parsec_atomic_unlock( &original->lock );
-            }
-        }
-
-        free(migrated_data_item);
-    }
-
-
-    return 1;
-}

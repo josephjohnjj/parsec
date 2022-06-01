@@ -2606,9 +2606,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                               parsec_gpu_task_t         *gpu_task,
                               int which_gpu )
 {
-    //which_gpu = 2; //CHANGE THIS, only for testing. device 0 is cpu, device 1 is recursive, device 2 is the first cuda gpu
-    //printf("Which_gpu = %d \n", which_gpu-2);
-
     parsec_device_gpu_module_t* gpu_device;
     parsec_device_cuda_module_t *cuda_device;
     cudaError_t status;
