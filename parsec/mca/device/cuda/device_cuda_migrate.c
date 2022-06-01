@@ -205,19 +205,14 @@ int parsec_cuda_tasks_executed(int device)
  */
 int is_starving(int device)
 {
-    if( parsec_cuda_get_device_task(device, -1) < 1 )
-        return 1;
-    else
-        return 0;
+    return ( parsec_cuda_get_device_task(device, -1) < 1 ) ? 1 : 0;
+
 }
 
 
 int will_starve(int device)
 {
-    if( parsec_cuda_get_device_task(device, -1) <  3)
-        return 1;
-    else
-        return 0;
+    return ( parsec_cuda_get_device_task(device, -1) <  3 ) ? 1 : 0;
 }
 
 /**
