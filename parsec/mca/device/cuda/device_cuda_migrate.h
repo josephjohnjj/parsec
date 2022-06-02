@@ -62,7 +62,7 @@ int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t
 int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es);
 int migrate_immediate(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device,
                       parsec_gpu_task_t* migrated_gpu_task);
-int migrate_to_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device);
+int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device);
 int parsec_gpu_data_reserve_device_space_for_flow( parsec_device_gpu_module_t* gpu_device,
                                       parsec_gpu_task_t *gpu_task, const parsec_flow_t *flow);
 int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* src_dev,

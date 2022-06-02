@@ -2782,11 +2782,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * is deducted from the total number of tasks that will be executed by this
      * GPU.
      */
-    nb_migrated = migrate_to_starving(es,  gpu_device);
+    nb_migrated = migrate_to_starving_device(es,  gpu_device);
     if( nb_migrated > 0 ) 
     {
-        rc = parsec_atomic_fetch_add_int32( &(gpu_device->mutex), (-1 * nb_migrated) );
-        if(rc == 1)
+        //rc = parsec_atomic_fetch_add_int32( &(gpu_device->mutex), (-1 * nb_migrated) );
+        //if(rc == 1)
             goto crappy_code;    
     }
         
@@ -2844,8 +2844,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     PARSEC_DEBUG_VERBOSE(3, parsec_gpu_output_stream,"GPU[%s]: gpu_task %p freed at %s:%d", gpu_device->super.name, 
                          gpu_task, __FILE__, __LINE__);
     free( gpu_task );
-    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
 crappy_code:
+    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
     if( 1 == rc ) {  /* I was the last one */
 #if defined(PARSEC_PROF_TRACE)
         if( parsec_gpu_trackable_events & PARSEC_PROFILE_GPU_TRACK_OWN )
