@@ -266,7 +266,7 @@ int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es)
     int stage_in_status = 0;
 
 
-    mig_task = (migrated_task_t*) parsec_list_pop_front(migrated_task_list);
+    mig_task = (migrated_task_t*) parsec_list_try_pop_front(migrated_task_list);
 
     if(mig_task != NULL)  
     { 
@@ -322,7 +322,7 @@ int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t
  * @return int 
  */
 
-int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device)
+int migrate_to_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device)
 {
     int starving_device_index = -1, dealer_device_index = 0;
     int nb_migrated = 0, execution_level = 0, stream_index = 0, j = 0;
@@ -343,11 +343,11 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
      * @brief Tasks are searched in different levels one by one. At this point we assume
      * that the cost of migration increases, as the level increase.
      */
-    migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_back( &(dealer_device->pending) ); //level 0
+    migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( &(dealer_device->pending) ); //level 0
     execution_level = 0;
     if(migrated_gpu_task == NULL)
     {
-        migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_pop_back( dealer_device->exec_stream[0]->fifo_pending ); //level 1
+        migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( dealer_device->exec_stream[0]->fifo_pending ); //level 1
         execution_level = 1;
 
         if( migrated_gpu_task == NULL)
@@ -439,6 +439,8 @@ int migrate_if_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module
     }
     
     migrated_gpu_task = NULL;
+    ///* update the expected load on the GPU device */
+    parsec_device_load[dealer_device->super.device_index] -= nb_migrated * parsec_device_sweight[dealer_device->super.device_index];
     return nb_migrated;
 }
 

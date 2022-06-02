@@ -2771,25 +2771,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * is deducted from the total number of tasks that will be executed by this
      * GPU.
      */
-    nb_migrated = migrate_if_starving(es,  gpu_device);
+    nb_migrated = migrate_to_starving(es,  gpu_device);
     if( nb_migrated > 0 ) 
     {
-        while(1) 
-        {
-            rc = gpu_device->mutex;
-            if( parsec_atomic_cas_int32( &gpu_device->mutex, rc, rc - nb_migrated ) ) {
-                ///* update the expected load on the GPU device */
-                parsec_device_load[gpu_device->super.device_index] -= nb_migrated * parsec_device_sweight[gpu_device->super.device_index];
-                if( gpu_device->mutex == 0) {
-                    rc = 1;
-                    goto crappy_code;
-                }
-                break; 
-            }
-        }
+        rc = parsec_atomic_fetch_add_int32( &(gpu_device->mutex), (-1 * nb_migrated) );
+        if(rc == 1)
+            goto crappy_code;    
     }
         
-
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
         parsec_gpu_sort_pending_list(gpu_device);
