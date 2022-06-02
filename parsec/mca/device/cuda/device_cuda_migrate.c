@@ -322,7 +322,7 @@ int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t
  * @return int 
  */
 
-int migrate_to_starving(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device)
+int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu_module_t* dealer_device)
 {
     int starving_device_index = -1, dealer_device_index = 0;
     int nb_migrated = 0, execution_level = 0, stream_index = 0, j = 0;
