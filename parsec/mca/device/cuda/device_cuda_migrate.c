@@ -306,7 +306,7 @@ int parsec_cuda_mig_task_enqueue( parsec_execution_stream_t *es, migrated_task_t
     parsec_gpu_task_t *migrated_gpu_task = mig_task->gpu_task;
     parsec_device_gpu_module_t* starving_device = mig_task->starving_device;
     char tmp[MAX_TASK_STRLEN];
-    PARSEC_DEBUG_VERBOSE(10, "Enqueue task %s to device queue %d", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, 
+    PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Enqueue task %s to device queue %d", parsec_task_snprintf(tmp, MAX_TASK_STRLEN, 
         ((parsec_gpu_task_t *) migrated_gpu_task)->ec), CUDA_DEVICE_NUM(starving_device->super.device_index));
 
     (void)es;
@@ -433,7 +433,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu
 	    parsec_cuda_mig_task_enqueue(es, mig_task);
 
         char tmp[MAX_TASK_STRLEN];
-        PARSEC_DEBUG_VERBOSE(10, "Task %s migrated (level %d, stage_in %d) from device %d to device %d: nb_migrated %d", 
+        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d: nb_migrated %d", 
             parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *) migrated_gpu_task)->ec), 
             execution_level, mig_task->stage_in_status, dealer_device_index, starving_device_index, nb_migrated);
     }
