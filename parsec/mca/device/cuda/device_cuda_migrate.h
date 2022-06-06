@@ -68,8 +68,11 @@ int parsec_gpu_data_reserve_device_space_for_flow( parsec_device_gpu_module_t* g
 int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* src_dev,
                  parsec_device_gpu_module_t* dest_dev);
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device,
-                         int stage_in_status);
+                         parsec_device_gpu_module_t* starving_device, int stage_in_status);
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* gpu_device);
+int gurantee_ownership_transfer(parsec_gpu_task_t *gpu_task, parsec_data_t* data, int flow_index,
+                                parsec_data_copy_t* src_copy, parsec_data_copy_t* dst_copy,
+                                uint8_t stage_in_device, uint8_t access_mode);
 double current_time();
 
 

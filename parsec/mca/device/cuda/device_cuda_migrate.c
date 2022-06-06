@@ -277,7 +277,7 @@ int parsec_cuda_mig_task_dequeue( parsec_execution_stream_t *es)
         starving_device = mig_task->starving_device;
         stage_in_status = mig_task->stage_in_status;
 
-        change_task_features(migrated_gpu_task, dealer_device, stage_in_status);
+        change_task_features(migrated_gpu_task, dealer_device, starving_device, stage_in_status);
 
 	    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)migrated_gpu_task);	
         parsec_atomic_fetch_inc_int32(&device_info[CUDA_DEVICE_NUM(starving_device->super.device_index)].received); 
@@ -350,19 +350,19 @@ int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu
         migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( dealer_device->exec_stream[0]->fifo_pending ); //level 1
         execution_level = 1;
 
-        if( migrated_gpu_task == NULL)
-        {
-            for(j = 0; j < (dealer_device->max_exec_streams - 2); j++)
-            {
-                migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( dealer_device->exec_stream[ (2 + j) ]->fifo_pending ); //level2
-                if(migrated_gpu_task != NULL)
-                {
-                    execution_level = 2;
-                    stream_index = 2 + j;
-                    break;
-                }
-            }
-        }
+        //if( migrated_gpu_task == NULL)
+        //{
+        //    for(j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+        //    {
+        //        migrated_gpu_task = (parsec_gpu_task_t*)parsec_list_try_pop_back( dealer_device->exec_stream[ (2 + j) ]->fifo_pending ); //level2
+        //        if(migrated_gpu_task != NULL)
+        //        {
+        //            execution_level = 2;
+        //            stream_index = 2 + j;
+        //            break;
+        //        }
+        //    }
+        //}
     }
     
 
@@ -455,11 +455,12 @@ int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu
  */
 
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t* dealer_device,
-                         int stage_in_status)
+                         parsec_device_gpu_module_t* starving_device, int stage_in_status)
 {
     int i = 0;
     parsec_task_t *task = gpu_task->ec;
     parsec_data_copy_t *src_copy = NULL;
+    char tmp[128];
 
     for(i = 0; i < task->task_class->nb_flows; i++)
     {
@@ -517,7 +518,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 assert(task->data[i].data_in->readers > 0);
                 parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-                parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_in);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
 
             }
             
@@ -545,15 +546,31 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
          */
         else 
         {
-            if(task->data[i].data_out->original->owner_device == dealer_device->super.device_index &&
+            assert( task->data[i].data_in != NULL);
+            if( (task->data[i].data_out->original->owner_device == dealer_device->super.device_index) &&
                 (task->data[i].data_out->version != task->data[i].data_out->original->device_copies[0]->version) )
             {
                 parsec_data_t* original = task->data[i].data_out->original;
+
+                assert(original->device_copies[0] != NULL);
+                assert(original->device_copies[original->owner_device] != NULL);
+                
                 parsec_atomic_lock( &original->lock );
                 task->data[i].data_in = task->data[i].data_out;
                 task->data[i].data_in->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
                 PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
                 PARSEC_OBJ_RETAIN(task->data[i].data_in);
+
+                PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
+                         "Migrate data: data %p of original %p migrated from device %d to %d for task %s",
+                         task->data[i].data_out, original, dealer_device->super.device_index,
+                         starving_device->super.device_index, 
+                         parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)gpu_task)));
+
+                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+
                 parsec_atomic_unlock( &original->lock );
             }
         }
@@ -589,6 +606,33 @@ int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_mo
     }
 
     return 0;
+}
+
+int gurantee_ownership_transfer(parsec_gpu_task_t *gpu_task, parsec_data_t* data, int flow_index,
+                                parsec_data_copy_t* src_copy, parsec_data_copy_t* dst_copy,
+                                uint8_t stage_in_device, uint8_t access_mode)
+{
+    assert( dst_copy != NULL );
+    parsec_task_t *task = gpu_task->ec;
+
+    /**
+     * @brief we are doing a D2D copy from the dealer node to the starving node.
+     */
+    if( task->data[flow_index].data_in == src_copy && src_copy->device_index > 1)
+    {
+        if( PARSEC_FLOW_ACCESS_READ & access_mode ) 
+        {
+            if( data->owner_device == src_copy->device_index)
+                data->owner_device = (uint8_t)stage_in_device;
+        }
+
+        if( PARSEC_FLOW_ACCESS_WRITE & access_mode ) 
+        {
+            data->owner_device = (uint8_t)stage_in_device;
+            //parsec_data_copy_detach(data, src_copy, src_copy->device_index);
+        }
+
+    }
 }
 
 
