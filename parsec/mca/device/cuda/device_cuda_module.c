@@ -771,6 +771,8 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
         assert(0 != (gpu_copy->flags & PARSEC_DATA_FLAG_PARSEC_OWNED) );
 
 #if defined(PARSEC_GPU_CUDA_ALLOC_PER_TILE)
+        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p attached to original %p at %s:%d",
+                    gpu_copy, gpu_copy->original, __FILE__, __LINE__);
         cudaFree( gpu_copy->device_private );
 #else
 
@@ -788,6 +790,8 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
                                          gpu_device->super.device_index, NULL, 0);
         }
 #endif
+        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p attached to original %p at %s:%d",
+                    gpu_copy, gpu_copy->original, __FILE__, __LINE__);
         zone_free( cuda_device->super.memory, (void*)gpu_copy->device_private );
 #endif
         gpu_copy->device_private = NULL;
@@ -796,6 +800,8 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
          * before we get here (aka below parsec_fini), the destructor of the data
          * collection must have been called, releasing all the copies.
          */
+        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
+                    gpu_copy, gpu_copy->original, __FILE__, __LINE__);
         PARSEC_OBJ_RELEASE(gpu_copy); //assert(NULL == gpu_copy);
     }
 }
@@ -816,7 +822,7 @@ parsec_cuda_flush_lru( parsec_device_module_t *device )
     if( (in_use = zone_in_use(gpu_device->memory)) != 0 ) {
         parsec_warning("GPU[%s] memory leak detected: %lu bytes still allocated on GPU",
                        device->name, in_use);
-        assert(0);
+        //assert(0);
     }
 #endif
     return PARSEC_SUCCESS;
@@ -967,6 +973,8 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
                     parsec_list_push_front(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)temp_loc[j]);
                 }
 #if !defined(PARSEC_GPU_CUDA_ALLOC_PER_TILE)
+                PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
+                    gpu_elem, gpu_elem->original, __FILE__, __LINE__);
                 PARSEC_OBJ_RELEASE(gpu_elem);
 #endif
                 parsec_atomic_unlock(&master->lock);
@@ -1119,6 +1127,8 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
             }
 #endif
             assert( 0 != (lru_gpu_elem->flags & PARSEC_DATA_FLAG_PARSEC_OWNED) );
+            PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p attached to original %p at %s:%d",
+                    lru_gpu_elem, lru_gpu_elem->original, __FILE__, __LINE__);
             zone_free( gpu_device->memory, (void*)(lru_gpu_elem->device_private) );
             lru_gpu_elem->device_private = NULL;
             data_avail_epoch++;
@@ -1126,6 +1136,8 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
                                  "GPU[%s]:%s: Release LRU-retrieved CUDA copy %p [ref_count %d: must be 1]",
                                  gpu_device->super.name, task_name,
                                  lru_gpu_elem, lru_gpu_elem->super.super.obj_reference_count);
+            PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
+                    lru_gpu_elem, lru_gpu_elem->original, __FILE__, __LINE__);
             PARSEC_OBJ_RELEASE(lru_gpu_elem);
             assert( NULL == lru_gpu_elem );
             goto malloc_data;
@@ -1156,6 +1168,11 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
                              gpu_elem, gpu_elem->super.super.obj_reference_count,
                              __FILE__, __LINE__);
         parsec_data_copy_attach(master, gpu_elem, gpu_device->super.device_index);
+        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                             "Allocated copy %p in original %p with device_index %d %s:%d",
+                             gpu_elem, master, gpu_device->super.device_index,
+                             __FILE__, __LINE__);
+
         this_task->data[i].data_out = gpu_elem;
         /* set the new datacopy type to the correct one */
         this_task->data[i].data_out->dtt = this_task->data[i].data_in->dtt;
@@ -1424,6 +1441,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
          */
         if(gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN)
             PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
+
     } else {
         /* Update the transferred required_data_in size */
         gpu_device->super.required_data_in += original->nb_elts;
@@ -1513,7 +1531,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 }
                 parsec_atomic_unlock( &original->lock );
                 if( NULL != release_after_data_in_is_attached )
+                {
+                    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
+                    release_after_data_in_is_attached, release_after_data_in_is_attached->original, __FILE__, __LINE__);
                     PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
+                }
                 assert(0);
                 return -1;
             }
@@ -1540,9 +1562,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         gpu_elem->push_task = gpu_task->ec;  /* only the task who does the transfer can modify the data status later. */
         parsec_atomic_unlock( &original->lock );
         if( NULL != release_after_data_in_is_attached )
+        {
+            PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
+                    release_after_data_in_is_attached, release_after_data_in_is_attached->original, __FILE__, __LINE__);
             PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
+        }
         return 1;
     }
+
     if( undo_readers_inc_if_no_transfer )
     {
         //parsec_atomic_fetch_dec_int32( &in_elem->readers );
@@ -1552,6 +1579,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
     parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
 
+    //if( gpu_task->migrate_status > TASK_NOT_MIGRATED)
+    //    gurantee_ownership_transfer(gpu_task, original, flow->flow_index,
+    //                            in_elem, gpu_elem,
+    //                            gpu_device->super.device_index, type);
+
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]:\t\tNO Move %s for data copy %p [ref_count %d, key %x] of %d bytes (host v:%d / device v:%d)",
                          gpu_device->super.name,
@@ -1560,7 +1592,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                          in_elem->version, gpu_elem->version);
     parsec_atomic_unlock( &original->lock );
     if( NULL != release_after_data_in_is_attached )
+    {
+        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
+                    release_after_data_in_is_attached, release_after_data_in_is_attached->original, __FILE__, __LINE__);
         PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
+    }
     /* TODO: data keeps the same coherence flags as before */
     return 0;
 }
@@ -2340,6 +2376,7 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
                                  "GPU[%s]:\tread copy %p [ref_count %d] on flow %s has readers (%i)",
                                  gpu_device->super.name, gpu_copy, gpu_copy->super.super.obj_reference_count, flow->name, gpu_copy->readers);
         }
+        
         if( flow->flow_flags & PARSEC_FLOW_ACCESS_WRITE ) {
             assert( gpu_copy == parsec_data_get_copy(gpu_copy->original, gpu_device->super.device_index) );
 
@@ -2399,6 +2436,7 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
             } else {
                 assert( 0 == gpu_copy->readers  );
             }
+            original->device_copies[0]->version = gpu_copy->version;
         }
         parsec_atomic_unlock(&original->lock);
     }
@@ -2772,13 +2810,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * GPU.
      */
     nb_migrated = migrate_to_starving_device(es,  gpu_device);
-    if( nb_migrated > 0 ) 
-    {
-        //rc = parsec_atomic_fetch_add_int32( &(gpu_device->mutex), (-1 * nb_migrated) );
-        //if(rc == 1)
+    if( nb_migrated > 0 )   
             goto crappy_code;    
-    }
-        
+      
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
         parsec_gpu_sort_pending_list(gpu_device);
