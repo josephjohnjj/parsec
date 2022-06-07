@@ -465,6 +465,8 @@ void* remote_dep_dequeue_main(parsec_context_t* context)
     remote_dep_bind_thread(context);
     PARSEC_PAPI_SDE_THREAD_INIT();
 
+    remote_dep_ce_init(context);
+
     /* Now synchronize with the main thread */
     pthread_mutex_lock(&mpi_thread_mutex);
     pthread_cond_signal(&mpi_thread_condition);

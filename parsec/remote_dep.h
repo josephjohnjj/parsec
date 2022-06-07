@@ -231,7 +231,6 @@ int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
 #define parsec_remote_dep_progress(ctx)        0
 #define parsec_remote_dep_activate(ctx, o, r) -1
 #define parsec_remote_dep_new_taskpool(ctx)    0
-#define remote_dep_mpi_initialize_execution_stream(ctx) 0
 #endif /* DISTRIBUTED */
 
 /* check if this data description represents a CTL dependency */
