@@ -486,61 +486,70 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
              */
             task->data[i].data_in = task->data[i].data_out;
             task->data[i].data_in->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-            PARSEC_OBJ_RETAIN(task->data[i].data_in);
-            gpu_task->data_retained |= 1 << i;
 
-            /**
-             * @brief If the task only WRITE access, then we have to increment the
-             * reader of the data_in, so that it does not go into negative value
-             * when we call complete_stage( parsec_gpu_callback_complete_push() ) 
-             * after the second stage in of the task is completed (on the starving device).
-             * 
-             * If the task only as READ access it is already in the gpu_mem_owned_lru of
-             * the dealer device. If it has WRITE and READ-WRITE access we move the data
-             * to gpu_mem_owned_lru.
-             */
             if( (PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
             {
                 assert(  task->data[i].data_in->readers > 0 );
-            }
-            if( !(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
-                (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
-            {
-                assert(task->data[i].data_in->readers >= 0);
-                PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
+
+                PARSEC_OBJ_RETAIN(task->data[i].data_in);
+                gpu_task->data_retained |= 1 << i;
+                
                 parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                //assert( task->data[i].data_in->super.super.obj_reference_count == 1);
+                if( task->data[i].data_in->version > original->device_copies[0]->version)
+                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                else
+                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_in);
+
             }
             if( (PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
             {
                 assert(task->data[i].data_in->readers > 0);
+                
+                PARSEC_OBJ_RETAIN(task->data[i].data_in);
+                gpu_task->data_retained |= 1 << i;
+                
                 parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
-                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                //assert( task->data[i].data_in->super.super.obj_reference_count == 1);
+                if( task->data[i].data_in->version > original->device_copies[0]->version)
+                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+                else
+                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_in);
 
             }
+            if( !(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
+                (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)) 
+            {
+                assert(task->data[i].data_in->readers == 0);
+
+                PARSEC_OBJ_RETAIN(task->data[i].data_in);
+                gpu_task->data_retained |= 1 << i;
+            
+                PARSEC_DATA_COPY_INC_READERS_ATOMIC(  task->data[i].data_in );
+                parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
+                assert( task->data[i].data_in->super.super.obj_reference_count == 1);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_in);
+            }
+            
 
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
-                         "Migrate: data %p of original %p migrated from device %d to %d (stage_in: %d)",
-                         task->data[i].data_out, original, dealer_device->super.device_index,
-                         starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+                "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
+                task->data[i].data_out, original, task->data[i].data_out->readers,
+                task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
+                starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
             
-            assert(task->data[i].data_in->original == task->data[i].data_out->original);
-            assert( task->data[i].data_in->original != NULL);
-            if( (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags)  )
-                assert( task->data[i].data_out->version == task->data[i].data_in->version);
+            
             assert(task->data[i].data_out != NULL);
             assert(original->device_copies[dealer_device->super.device_index]!= NULL);
             assert(original->device_copies[dealer_device->super.device_index] == task->data[i].data_out);
-            assert(task->data[i].data_in->readers >= 0);
-            assert( task->data[i].data_out->version == task->data[i].data_in->version);
-            if(task->data[i].data_out->original->owner_device != dealer_device->super.device_index)
-                assert(task->data[i].data_out->version == task->data[i].data_in->version);
             assert(task->data[i].data_in->device_index == dealer_device->super.device_index);
             assert(task->data[i].data_in->device_private != NULL);
+            assert( task->data[i].data_in->device_index == dealer_device->super.device_index );
 
             parsec_atomic_unlock( &original->lock );  
 
@@ -569,10 +578,14 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 PARSEC_OBJ_RETAIN(task->data[i].data_in);
                 gpu_task->data_retained |= 1 << i;
 
+                assert( task->data[i].data_in->device_index == dealer_device->super.device_index );
+
+            
                 PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
-                         "Migrate: data %p of original %p migrated from device %d to %d (stage_in: %d)",
-                         task->data[i].data_out, original, dealer_device->super.device_index,
-                         starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
+                    "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
+                    task->data[i].data_out, original, task->data[i].data_out->readers,
+                    task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
+                    starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
 
                 parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_in);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_in);
