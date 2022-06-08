@@ -790,8 +790,8 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
                                          gpu_device->super.device_index, NULL, 0);
         }
 #endif
-        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p attached to original %p at %s:%d",
-                    gpu_copy, gpu_copy->original, __FILE__, __LINE__);
+        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p [dev_prvt %p] attached to original %p at %s:%d",
+                    gpu_copy, gpu_copy->device_private, gpu_copy->original, __FILE__, __LINE__);
         zone_free( cuda_device->super.memory, (void*)gpu_copy->device_private );
 #endif
         gpu_copy->device_private = NULL;
@@ -800,9 +800,9 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
          * before we get here (aka below parsec_fini), the destructor of the data
          * collection must have been called, releasing all the copies.
          */
-        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at %s:%d",
-                    gpu_copy, gpu_copy->original, __FILE__, __LINE__);
-        PARSEC_OBJ_RELEASE(gpu_copy); //assert(NULL == gpu_copy);
+        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p [dev_prvt %p] attached to original %p at %s:%d",
+                    gpu_copy, gpu_copy->device_private, gpu_copy->original, __FILE__, __LINE__);
+        PARSEC_OBJ_RELEASE(gpu_copy); assert(NULL == gpu_copy);
     }
 }
 
@@ -915,15 +915,15 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
         /* There is already a copy on the device */
         if( NULL != gpu_elem ) {
             PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
-                                 "GPU[%s]:%s: Flow %s:%i has a copy on the device %p%s",
+                                 "GPU[%s]:%s: Flow %s:%i has a copy %p (original %p) on the device  with status %s",
                                  gpu_device->super.name, task_name,
-                                 flow->name, i, gpu_elem,
+                                 flow->name, i, gpu_elem, master,
                                  gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_UNDER_TRANSFER ? " [in transfer]" : "");
             if ( gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_UNDER_TRANSFER ) {
                 PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
-                                     "GPU[%s]:%s: Copy %p [ref_count %d] is still in transfer, descheduling...",
+                                     "GPU[%s]:%s: Copy %p [ref_count %d, original %p] is still in transfer, descheduling...",
                                      gpu_device->super.name, task_name,
-                                     gpu_elem, gpu_elem->super.super.obj_reference_count);
+                                     gpu_elem, master, gpu_elem->super.super.obj_reference_count);
                 SET_HIGHEST_PRIORITY(gpu_task->ec, parsec_execution_context_priority_comparator);
                 parsec_atomic_unlock(&master->lock);
                 return PARSEC_HOOK_RETURN_AGAIN;
@@ -1517,6 +1517,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 #endif
             /* Push data into the GPU from the source device */
 
+            PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
+                "Stage in on cuda device %d from copy %p (device_private %p original %p) to copy %p (device_private %p)",
+                cuda_device->cuda_index, in_elem, in_elem->device_private, in_elem->original,
+                gpu_elem, gpu_elem->device_private);
+
             if(PARSEC_SUCCESS != (gpu_task->stage_in ? gpu_task->stage_in(gpu_task, (1U << flow->flow_index), gpu_stream): PARSEC_SUCCESS)) {
                 parsec_warning( "%s:%d %s", __FILE__, __LINE__,
                                 "gpu_task->stage_in");
@@ -1577,10 +1582,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
     parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
 
-    //if( gpu_task->migrate_status > TASK_NOT_MIGRATED)
-    //    gurantee_ownership_transfer(gpu_task, original, flow->flow_index,
-    //                            in_elem, gpu_elem,
-    //                            gpu_device->super.device_index, type);
+    if(gpu_task->migrate_status > TASK_NOT_MIGRATED)
+    {
+        if( gpu_task->data_retained & (1 << flow->flow_index) )
+            PARSEC_OBJ_RELEASE(gpu_task->ec->data[ flow->flow_index ].data_in);
+    }
 
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                          "GPU[%s]:\t\tNO Move %s for data copy %p [ref_count %d, key %x] of %d bytes (host v:%d / device v:%d)",
@@ -1962,9 +1968,9 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
             continue;
         }
         PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
-                             "GPU[%s]:\tparsec_gpu_callback_complete_push, PUSH of %s: task->data[%d].data_out = %p [ref_count = %d], and push_task is %s, %s because transfer_status is %d",
+                             "GPU[%s]:\tparsec_gpu_callback_complete_push, PUSH of %s: task->data[%d].data_out = %p [ref_count = %d, dev_prvt %p], and push_task is %s, %s because transfer_status is %d",
                              gpu_device->super.name, parsec_task_snprintf(task_str, MAX_TASK_STRLEN, task),
-                             i, task->data[i].data_out, task->data[i].data_out->super.super.obj_reference_count,
+                             i, task->data[i].data_out, task->data[i].data_out->device_private, task->data[i].data_out->super.super.obj_reference_count,
                              (NULL != task->data[i].data_out->push_task) ? parsec_task_snprintf(task_str2, MAX_TASK_STRLEN, task->data[i].data_out->push_task) : "(null)",
                              (task->data[i].data_out->data_transfer_status != PARSEC_DATA_STATUS_UNDER_TRANSFER) ?
                              "all is good" : "Assertion",

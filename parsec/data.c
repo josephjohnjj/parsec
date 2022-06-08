@@ -199,6 +199,8 @@ int parsec_data_copy_detach(parsec_data_t* data,
      */
     if( data->owner_device == device)
     {
+        parsec_atomic_lock( &data->lock );
+
         for( i = 0; i < parsec_nb_devices; i++ ) 
         {
             if( i == device) continue;
@@ -213,20 +215,26 @@ int parsec_data_copy_detach(parsec_data_t* data,
             new_owner_copy = data->device_copies[i];
         }
 
+        parsec_atomic_unlock( &data->lock );
+
         if( (new_owner_copy == NULL) && (younger_version == -1) ) 
         {
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
-                         "DEV[%d]: parsec_data_copy_detach failed to identify new owner (last copy): data %p device_copy %p",
+                         "DEV[%d]: parsec_data_copy_detach failed to identify new owner (last copy): original %p device_copy %p",
                          device, data, copy);
             data->owner_device = -1;
         }
         if( (new_owner_copy == NULL) && (device > 1) && (younger_version > -1) ) 
         {
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
-                         "DEV[%d]: parsec_data_copy_detach failed to identify new owner (younger version exists in device %d): data %p device_copy %p",
+                         "DEV[%d]: parsec_data_copy_detach failed to identify new owner (younger version exists in device %d): original %p device_copy %p",
                          device, younger_version, data, copy);
             assert(0);
         }
+        if( new_owner_copy != NULL ) 
+            PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
+                         "DEV[%d]: parsec_data_copy_detach identified new owner original %p device_copy %p",
+                         device, data, copy);
 
     }
 
@@ -347,8 +355,8 @@ void parsec_data_end_transfer_ownership_to_copy(parsec_data_t* data,
     assert(NULL != data);
     copy = data->device_copies[device];
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
-                         "DEV[%d]: end transfer ownership of data %p to copy %p in mode %d",
-                         device, data, copy, access_mode);
+                         "DEV[%d]: end transfer ownership of data %p to copy %p [dev_prvt %p] in mode %d",
+                         device, data, copy, copy->device_private, access_mode);
     assert( NULL != copy );
     if( PARSEC_FLOW_ACCESS_READ & access_mode ) {
         copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
