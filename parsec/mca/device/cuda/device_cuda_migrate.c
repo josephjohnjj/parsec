@@ -369,7 +369,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu
     if(migrated_gpu_task != NULL)
     {
 	    assert(migrated_gpu_task->ec != NULL);
-        parsec_list_item_ring_chop( (parsec_list_item_t*)migrated_gpu_task );
+        //parsec_list_item_ring_chop( (parsec_list_item_t*)migrated_gpu_task );
         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)migrated_gpu_task);
         /**
          * @brief if the task is a not a computational kerenel or if it is a task that has
