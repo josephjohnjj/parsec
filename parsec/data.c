@@ -233,8 +233,8 @@ int parsec_data_copy_detach(parsec_data_t* data,
         }
         if( new_owner_copy != NULL ) 
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
-                         "DEV[%d]: parsec_data_copy_detach identified new owner original %p device_copy %p",
-                         device, data, copy);
+                         "DEV[%d]: identified new owner for original %p : device_copy %p  on device_index %d (old owner was copy %p on device_index %d)",
+                         device, data, new_owner_copy, new_owner_copy->device_index, copy, copy->device_index);
 
     }
 

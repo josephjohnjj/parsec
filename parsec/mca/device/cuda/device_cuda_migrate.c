@@ -492,7 +492,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 //assert( task->data[i].data_out->super.super.obj_reference_count == 1);
-                if( task->data[i].data_out->version > original->device_copies[0]->version)
+                if( original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version )
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_out);
                 else
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_out);
@@ -506,7 +506,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_list_item_ring_chop((parsec_list_item_t*)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 //assert( task->data[i].data_out->super.super.obj_reference_count == 1);
-                if( task->data[i].data_out->version > original->device_copies[0]->version)
+                if( original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version )
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t*)task->data[i].data_out);
                 else
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t*)task->data[i].data_out);
