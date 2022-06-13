@@ -1508,15 +1508,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     /* Do not need to be tranferred */
     if( -1 == transfer_from ) {
         gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
-
-        /**
-         * When we are migrating of the data is already in the destination
-         * GPU we have to compensate for the reader increment made during 
-         * the first stage_in
-         */
-        //if(gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN)
-        //    PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
-
     } else {
         /* Update the transferred required_data_in size */
         gpu_device->super.required_data_in += original->nb_elts;
