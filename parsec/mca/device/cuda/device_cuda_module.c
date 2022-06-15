@@ -48,6 +48,8 @@ parsec_cuda_memory_reserve( parsec_device_cuda_module_t* gpu_device,
 static int parsec_cuda_memory_release( parsec_device_cuda_module_t* gpu_device );
 static int parsec_cuda_flush_lru( parsec_device_module_t *device );
 
+extern int parsec_cuda_migrate_tasks;
+
 /* look up how many FMA per cycle in single/double, per cuda MP
  * precision.
  * The following table provides updated values for future archs
@@ -2897,7 +2899,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
      * is deducted from the total number of tasks that will be executed by this
      * GPU.
      */
-    nb_migrated = migrate_to_starving_device(es,  gpu_device);
+    if(parsec_cuda_migrate_tasks)
+        nb_migrated = migrate_to_starving_device(es,  gpu_device);
     if( nb_migrated > 0 )   
             goto crappy_code;    
       
