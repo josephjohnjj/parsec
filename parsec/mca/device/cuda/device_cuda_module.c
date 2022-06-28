@@ -1413,7 +1413,18 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best possible candidate to to Device to Device copy",
                  gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
                     
-                release_after_data_in_is_attached = task_data->data_in;
+                //release_after_data_in_is_attached = task_data->data_in;
+                if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
+                    gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
+                else
+                {
+                    if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
+                    {
+                        PARSEC_OBJ_RELEASE(task_data->data_in);
+                        PARSEC_OBJ_RETAIN(candidate);
+                    }
+
+                }
                 task_data->data_in = candidate;
                 in_elem = candidate;
                 in_elem_dev = target;
@@ -1459,7 +1470,17 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                      "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate to to Device to Device copy",
                      gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
                     
-                    release_after_data_in_is_attached = task_data->data_in;
+                    //release_after_data_in_is_attached = task_data->data_in;
+                    if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
+                        gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
+                    else
+                    {
+                        if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
+                        {
+                            PARSEC_OBJ_RELEASE(task_data->data_in);
+                            PARSEC_OBJ_RETAIN(candidate);
+                        }
+                    }
                     task_data->data_in = candidate;
                     in_elem = candidate;
                     in_elem_dev = target;
@@ -1500,10 +1521,12 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                              __FILE__, __LINE__);
     }
 
-    /* If data is from NEW (it doesn't have a source_repo_entry and is not a direct data collection reference), 
-     * and nobody has touched it yet, then we don't need to pull it in, we have created it already, that's enough. */
-    if( NULL == task_data->source_repo_entry && NULL == task_data->data_in->original->dc && in_elem->version == 0 )
+    if( NULL == task_data->source_repo_entry && NULL == task_data->data_in->original->dc )
+    {
         transfer_from = -1;
+        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                             "New tile created original %p ");
+    }
 
     /* Do not need to be tranferred */
     if( -1 == transfer_from ) {
@@ -1601,14 +1624,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                                    nb_elts);
                 }
                 parsec_atomic_unlock( &original->lock );
-                if( NULL != release_after_data_in_is_attached )
-                {
-                    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p on device_index %d [readers %d, ref_count %d] at %s:%d",
-                    release_after_data_in_is_attached, release_after_data_in_is_attached->original, release_after_data_in_is_attached->device_index,
-                    release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
-                     __FILE__, __LINE__);
-                    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
-                }
+                //if( NULL != release_after_data_in_is_attached )
+                //{
+                //    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p [readers %d, ref_count %d] at %s:%d",
+                //    release_after_data_in_is_attached, release_after_data_in_is_attached->original,
+                //    release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
+                //     __FILE__, __LINE__);
+                //    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
+                //}
                 assert(0);
                 return -1;
             }
@@ -1631,14 +1654,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         }
         gpu_elem->push_task = gpu_task->ec;  /* only the task who does the transfer can modify the data status later. */
         parsec_atomic_unlock( &original->lock );
-        if( NULL != release_after_data_in_is_attached )
-        {
-            PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at on device_index %d [readers %d, ref_count %d] %s:%d",
-                    release_after_data_in_is_attached, release_after_data_in_is_attached->original, release_after_data_in_is_attached->device_index,
-                    release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
-                    __FILE__, __LINE__);
-            PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
-        }
+        //if( NULL != release_after_data_in_is_attached )
+        //{
+        //    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at [readers %d, ref_count %d] %s:%d",
+        //            release_after_data_in_is_attached, release_after_data_in_is_attached->original,
+        //            release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
+        //            __FILE__, __LINE__);
+        //    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
+        //}
         return 1;
     }
 
@@ -1659,14 +1682,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                          gpu_elem, gpu_elem->super.super.obj_reference_count, original->key, nb_elts,
                          in_elem->version, gpu_elem->version);
     parsec_atomic_unlock( &original->lock );
-    if( NULL != release_after_data_in_is_attached )
-    {
-        PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p on device_index %d [readers %d, ref_count %d] at %s:%d",
-                    release_after_data_in_is_attached, release_after_data_in_is_attached->original, release_after_data_in_is_attached->device_index,
-                    release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
-                    __FILE__, __LINE__);
-        PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
-    }
+    //if( NULL != release_after_data_in_is_attached )
+    //{
+    //    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p [readers %d, ref_count %d] at %s:%d",
+    //                release_after_data_in_is_attached, release_after_data_in_is_attached->original, 
+    //                release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
+    //                __FILE__, __LINE__);
+    //    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
+    //}
     /* TODO: data keeps the same coherence flags as before */
     return 0;
 }
@@ -2043,17 +2066,6 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                              (task->data[i].data_out->data_transfer_status != PARSEC_DATA_STATUS_UNDER_TRANSFER) ?
                              "all is good" : "Assertion",
                              task->data[i].data_out->data_transfer_status);
-<<<<<<< HEAD
-        assert(task->data[i].data_out->data_transfer_status != PARSEC_DATA_STATUS_UNDER_TRANSFER);
-        if( task->data[i].data_out->data_transfer_status == PARSEC_DATA_STATUS_UNDER_TRANSFER ) {  /* data is not
- * ready */
-            /**
-             * As long as we have only one stream to push the data on the GPU we should never
-             * end up in this case. Remove previous assert if changed.
-             */
-            return -1;
-        }
-=======
         //assert(task->data[i].data_out->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER);
         //if( task->data[i].data_out->data_transfer_status != PARSEC_DATA_STATUS_COMPLETE_TRANSFER ) {  /* data is not ready */
         //    /**
@@ -2062,7 +2074,6 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
         //     */
         //    return -1;
         //}
->>>>>>> e750a3dba (Level 2 migration implemented.)
     }
     gtask->complete_stage = NULL;
 
@@ -2954,6 +2965,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         free( gpu_task->ec );
         gpu_task->ec = NULL;
         goto remove_gpu_task;
+    }
+
+    int f = 0;
+    for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
+    {
+        if( gpu_task->original_data_in[f] != NULL )
+            PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
     }
         
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
