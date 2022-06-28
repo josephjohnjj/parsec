@@ -21,9 +21,6 @@ parsec_addtest_executable(C dtd_test_global_id_for_dc_assumed SOURCES dtd_test_g
 parsec_addtest_executable(C dtd_test_explicit_task_creation SOURCES dtd_test_explicit_task_creation.c)
 parsec_addtest_executable(C dtd_test_tp_enqueue_dequeue SOURCES dtd_test_tp_enqueue_dequeue.c)
 parsec_addtest_executable(C dtd_test_interleave_actions SOURCES dtd_test_interleave_actions.c)
-<<<<<<< HEAD
-
-=======
 parsec_addtest_executable(C dtd_test_ce SOURCES dtd_test_ce.c)
 
 if( PARSEC_HAVE_CUDA )
@@ -39,4 +36,3 @@ if( PARSEC_HAVE_CUDA )
     endif(BLAS_FOUND)
   endif( TARGET CUDA::cublas )
 endif()
->>>>>>> Attempt to backport the revamp of the communication engine (#380)

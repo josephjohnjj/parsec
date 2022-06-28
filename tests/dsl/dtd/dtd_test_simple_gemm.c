@@ -7,14 +7,6 @@
 // The file is not compiled if CUDA is not present or CUBLAS is not found
 #include "parsec/mca/device/cuda/device_cuda.h"
 #include "cublas_v2.h"
-<<<<<<< HEAD:tests/dsl/dtd/dtd_bench_simple_gemm.c
-#if HAVE_BLAS
-#if BLAS_WITH_ESSL
-#include "essl.h"
-#else
-#include "mkl_cblas.h"
-#endif
-=======
 
 #if defined(HAVE_BLAS)
 // If our CMake finds a BLAS library, it defines HAVE_BLAS
@@ -31,7 +23,6 @@ extern void cblas_dgemm(const CBLAS_LAYOUT layout, const CBLAS_TRANSPOSE TransA,
                         const CBLAS_INDEX K, const double alpha, const double  *A,
                         const CBLAS_INDEX lda, const double  *B, const CBLAS_INDEX ldb,
                         const double beta, double  *C, const CBLAS_INDEX ldc);
->>>>>>> dtd_test_simple_gemm.c relies on non-standard cblas.h file:tests/dsl/dtd/dtd_test_simple_gemm.c
 #endif
 
 #if defined(PARSEC_HAVE_MPI)
