@@ -43,6 +43,13 @@ static void parsec_data_copy_destruct(parsec_data_copy_t* obj)
 
     /* If the copy is still attached to a data we should detach it first */
     if( NULL != obj->original) {
+
+        if ( (obj->device_index == 0) && ( (obj->original != NULL && obj->original->device_copies[1] != NULL) || (obj->original != NULL && obj->original->device_copies[2] != NULL) || (obj->original != NULL && obj->original->device_copies[3] != NULL) ) )
+        {
+            PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "parsec_data_copy_destruct original %p device_0 %p device_1 %p device_2 %p", 
+            obj->original, obj->original->device_copies[0], obj->original->device_copies[1], obj->original->device_copies[2]);  
+        }
+
         parsec_data_copy_detach(obj->original, obj, obj->device_index);
         assert( NULL == obj->original );
     }
