@@ -6843,6 +6843,8 @@ static void jdf_generate_code_hook_cuda(const jdf_t *jdf,
     coutput("  parsec_device_load[dev_index] += gpu_task->load;\n"
             "  gpu_task->migrate_status = 0;\n"
             "  gpu_task->data_retained = 0;\n"
+            "  int f = 0; \n"
+            "  for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++) gpu_task->original_data_in[f] = NULL;"
             "\n"
             "  return parsec_cuda_kernel_scheduler( es, gpu_task, dev_index );\n"
             "}\n\n");
