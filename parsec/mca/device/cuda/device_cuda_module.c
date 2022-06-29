@@ -2968,6 +2968,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->ec = NULL;
         goto remove_gpu_task;
     }
+        
+    parsec_cuda_kernel_epilog( gpu_device, gpu_task );
+    __parsec_complete_execution( es, gpu_task->ec );
+    gpu_device->super.executed_tasks++;
 
     int f = 0;
     for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
@@ -2975,10 +2979,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         if( gpu_task->original_data_in[f] != NULL )
             PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
     }
-        
-    parsec_cuda_kernel_epilog( gpu_device, gpu_task );
-    __parsec_complete_execution( es, gpu_task->ec );
-    gpu_device->super.executed_tasks++;
 
     parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 2); 
     parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
