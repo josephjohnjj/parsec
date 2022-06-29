@@ -545,6 +545,9 @@ void parsec_data_copy_release(parsec_data_copy_t* copy)
 {
     /* TODO: Move the copy back to the CPU before destroying it */
     PARSEC_DATA_COPY_RELEASE(copy);
+    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+                            "PARSEC_DATA_COPY_RELEASE (parsec_cleanup_reshape_promise )copy %p [ref_count %d] for [original %p] ",
+                             copy, copy->super.super.obj_reference_count, copy->original);
 }
 
 void* parsec_data_copy_get_ptr(parsec_data_copy_t* data)

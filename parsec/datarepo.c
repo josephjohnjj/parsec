@@ -83,9 +83,9 @@ __data_repo_lookup_entry_and_create(parsec_execution_stream_t *es, data_repo_t *
 
     parsec_hash_table_nolock_insert(&repo->table, &e->ht_item);
     parsec_hash_table_unlock_bucket(&repo->table, key);
-    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %p/%s of hash table %s has been allocated with an usage count of %u/%u and is retained %d at %s:%d",
-                         e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, e->usagecnt, e->usagelmt, e->retained, file, line);
-
+    //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %p/%s of hash table %s has been allocated with an usage count of %u/%u and is retained %d at %s:%d",
+    //                     e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, e->usagecnt, e->usagelmt, e->retained, file, line);
+//
     return e;
 }
 
@@ -106,23 +106,23 @@ __data_repo_entry_used_once(data_repo_t *repo, parsec_key_t key
     e = (data_repo_entry_t*)parsec_hash_table_nolock_find(&repo->table, key);
 #if defined(PARSEC_DEBUG_NOISIER)
     if( NULL == e ) {
-        PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %s of hash table %s could not be found at %s:%d",
-                             repo->table.key_functions.key_print(estr, 64, key, repo->table.hash_data), tablename, file, line);
+        //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %s of hash table %s could not be found at %s:%d",
+        //                     repo->table.key_functions.key_print(estr, 64, key, repo->table.hash_data), tablename, file, line);
     }
 #endif
     assert( NULL != e );
     r = parsec_atomic_fetch_inc_int32(&e->usagecnt) + 1;
 
     if( (e->usagelmt == r) && (0 == e->retained) ) {
-        PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %p/%s of hash table %s has a usage count of %u/%u and is not retained: freeing it at %s:%d",
-                             e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, r, r, file, line);
+        //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %p/%s of hash table %s has a usage count of %u/%u and is not retained: freeing it at %s:%d",
+        //                     e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, r, r, file, line);
         parsec_hash_table_nolock_remove(&repo->table, key);
         parsec_hash_table_unlock_bucket(&repo->table, key);
         
         parsec_thread_mempool_free(e->data_repo_mempool_owner, e );
     } else {
-        PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %p/%s of hash table %s has %u/%u usage count and %s retained: not freeing it at %s:%d",
-                             e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, r, e->usagelmt, e->retained ? "is" : "is not", file, line);
+        //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %p/%s of hash table %s has %u/%u usage count and %s retained: not freeing it at %s:%d",
+        //                     e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, r, e->usagelmt, e->retained ? "is" : "is not", file, line);
         parsec_hash_table_unlock_bucket(&repo->table, key);
     }
 }
@@ -159,9 +159,9 @@ __data_repo_entry_addto_usage_limit(data_repo_t *repo, parsec_key_t key, uint32_
         parsec_hash_table_unlock_bucket(&repo->table, key);
         parsec_thread_mempool_free(e->data_repo_mempool_owner, e );
     } else {
-        PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
-                             "entry %p/%s of hash table %s has a usage count of %u/%u and is %s retained at %s:%d",
-                             e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, e->usagecnt, e->usagelmt, e->retained ? "still" : "no more", file, line);
+        //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+        //                     "entry %p/%s of hash table %s has a usage count of %u/%u and is %s retained at %s:%d",
+        //                     e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), tablename, e->usagecnt, e->usagelmt, e->retained ? "still" : "no more", file, line);
         parsec_hash_table_unlock_bucket(&repo->table, key);
     }
 }
@@ -172,10 +172,10 @@ static void print_data_repo_entry(void *item, void *cb_data)
     char estr[64];
     data_repo_t *repo = (data_repo_t*)cb_data;
     data_repo_entry_t *e = (data_repo_entry_t*)item;
-    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
-                         "entry %p/%s of hash table %p has a usage count of %u/%u and is"
-                         " %s retained while the repo is destroyed",
-                         e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), repo, e->usagecnt, e->usagelmt, e->retained ? "still" : "no more");
+    //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+    //                     "entry %p/%s of hash table %p has a usage count of %u/%u and is"
+    //                     " %s retained while the repo is destroyed",
+    //                     e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), repo, e->usagecnt, e->usagelmt, e->retained ? "still" : "no more");
 }
 #endif
 

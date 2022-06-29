@@ -1083,7 +1083,12 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
         assert(i < MAX_PARAM_COUNT);
         if( !((1U<<i) & mask) ) continue;
         if( NULL != origin->output[i].data.data )  /* except CONTROLs */
+        {
             PARSEC_DATA_COPY_RELEASE(origin->output[i].data.data);
+            PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+                            "PARSEC_DATA_COPY_RELEASE (remote_dep_release_incoming )copy %p [ref_count %d] for [original %p] ",
+                             origin->output[i].data.data, origin->output[i].data.data->super.super.obj_reference_count, origin->output[i].data.data->original);
+        }
     }
 #if defined(PARSEC_DIST_COLLECTIVES)
     if(PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
@@ -1415,6 +1420,9 @@ static int remote_dep_nothread_memcpy(parsec_execution_stream_t* es,
                                cmd->memcpy.source, cmd->memcpy.layout.src_displ, cmd->memcpy.layout.src_datatype, cmd->memcpy.layout.src_count);
 
     PARSEC_DATA_COPY_RELEASE(cmd->memcpy.source);
+    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+                            "PARSEC_DATA_COPY_RELEASE (remote_dep_release_incoming )copy %p [ref_count %d] for [original %p] ",
+                             cmd->memcpy.source, cmd->memcpy.source->super.super.obj_reference_count, cmd->memcpy.source->original);
     remote_dep_dec_flying_messages(item->cmd.memcpy.taskpool);
     (void)es;
     return rc;
@@ -1667,6 +1675,9 @@ remote_dep_mpi_put_start(parsec_execution_stream_t* es,
 
             PARSEC_OBJ_RETAIN(reshape_data);
             PARSEC_DATA_COPY_RELEASE(old_data);/*old data has been retained for remote communication*/
+            PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+                            "PARSEC_DATA_COPY_RELEASE (remote_dep_release_incoming )copy %p [ref_count %d] for [original %p] ",
+                             old_data, old_data->super.super.obj_reference_count, old_data->original);
 
             PARSEC_OBJ_RELEASE(deps->output[k].data.data_future);
             deps->output[k].data.data_future = NULL;
