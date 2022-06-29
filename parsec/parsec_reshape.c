@@ -38,6 +38,9 @@ void parsec_cleanup_reshape_promise(parsec_base_future_t *future)
          */
         if(d_fut->super.status & PARSEC_DATA_FUTURE_STATUS_TRIGGERED){
             PARSEC_DATA_COPY_RELEASE(future_in_data->data);
+            PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+                            "PARSEC_DATA_COPY_RELEASE (parsec_cleanup_reshape_promise )copy %p [ref_count %d] for [original %p]",
+                             future_in_data->data, future_in_data->data->super.super.obj_reference_count, future_in_data->data->original);
         }
         if(future_in_data->local != NULL){
             free(future_in_data->local);
@@ -51,6 +54,10 @@ void parsec_cleanup_reshape_promise(parsec_base_future_t *future)
     if(d_fut->super.tracked_data != NULL){
         parsec_data_copy_t * data = (parsec_data_copy_t*) d_fut->super.tracked_data;
         PARSEC_DATA_COPY_RELEASE(data);
+
+        PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+                            "PARSEC_DATA_COPY_RELEASE (parsec_cleanup_reshape_promise )copy %p [ref_count %d] for [original %p] ",
+                             data, data->super.super.obj_reference_count, data->original);
     }
 }
 

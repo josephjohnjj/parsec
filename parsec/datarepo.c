@@ -109,8 +109,8 @@ __data_repo_entry_used_once(data_repo_t *repo, parsec_key_t key
     e = (data_repo_entry_t*)parsec_hash_table_nolock_find_handle(&repo->table, &kh);
 #if defined(PARSEC_DEBUG_NOISIER)
     if( NULL == e ) {
-        PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %s of hash table %s could not be found at %s:%d",
-                             repo->table.key_functions.key_print(estr, 64, key, repo->table.hash_data), tablename, file, line);
+        //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "entry %s of hash table %s could not be found at %s:%d",
+        //                     repo->table.key_functions.key_print(estr, 64, key, repo->table.hash_data), tablename, file, line);
     }
 #endif
     assert( NULL != e );
@@ -176,10 +176,10 @@ static void print_data_repo_entry(void *item, void *cb_data)
     char estr[64];
     data_repo_t *repo = (data_repo_t*)cb_data;
     data_repo_entry_t *e = (data_repo_entry_t*)item;
-    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
-                         "entry %p/%s of hash table %p has a usage count of %u/%u and is"
-                         " %s retained while the repo is destroyed",
-                         e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), repo, e->usagecnt, e->usagelmt, e->retained ? "still" : "no more");
+    //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+    //                     "entry %p/%s of hash table %p has a usage count of %u/%u and is"
+    //                     " %s retained while the repo is destroyed",
+    //                     e, repo->table.key_functions.key_print(estr, 64, e->ht_item.key, repo->table.hash_data), repo, e->usagecnt, e->usagelmt, e->retained ? "still" : "no more");
 }
 #endif
 
