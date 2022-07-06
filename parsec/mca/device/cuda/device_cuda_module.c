@@ -1385,6 +1385,13 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
             {
                 
                 int possible_device_copy_index = gpu_task->posssible_candidate[flow->flow_index];
+                /**
+                 * A possible candidate is set when we call change_task_features() during migration
+                 * preperation of a task. gpu_task->posssible_candidate[flow->flow_index] is greater
+                 * tha 1, it means that we have already identifies a staged_in data as the possible 
+                 * candidate. So we can directly use that data for D2D ytransfer.
+                 */
+
                 parsec_data_copy_t *candidate = original->device_copies[possible_device_copy_index];
                 parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(possible_device_copy_index);
                 //decrement the reader corresponding to the first stage_in
@@ -1404,6 +1411,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
             if( PARSEC_DEV_CUDA == target->super.super.type && candidate != NULL )
             {
+                /**
+                 * if the data was already staged_in then we would have already incremented
+                 * the reader for it. 
+                 */
                 if(gpu_task->migrate_status == TASK_MIGRATED_BEFORE_STAGE_IN)
                     PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                 undo_readers_inc_if_no_transfer = 1;
@@ -1412,8 +1423,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best possible candidate to to Device to Device copy",
                  gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
-                    
-                //release_after_data_in_is_attached = task_data->data_in;
+
+                /**
+                 * If we change the data_in of a task, we should RELEASE it only after the task
+                 * is complete. Or else it may cause problem for special cases in PTG, when calling
+                 * the data reshape associated with iterate successor (For instance this happens when
+                 * NEW is called for a data created solely in the GPU). To mitigate this problem we
+                 * save the original data_in to be released in the end.
+                 */
                 if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                     gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
                 else
@@ -1456,7 +1473,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                          "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate to to Device to Device copy, increasing its readers to %d",
                                          gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
-                    //parsec_atomic_fetch_inc_int32( &candidate->readers );
                     PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
 
                     undo_readers_inc_if_no_transfer = 1;
@@ -1466,7 +1482,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                      "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate to to Device to Device copy",
                      gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
                     
-                    //release_after_data_in_is_attached = task_data->data_in;
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
                     else
@@ -1474,6 +1489,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                         if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
                             PARSEC_OBJ_RELEASE(task_data->data_in);  
                     }
+
+                    /**
+                     * Why do we need this increment. For some reason, if this increment is not
+                     * done the reader goes to 0, when the number of CUDA device is greater than 2.
+                     */
                     PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     task_data->data_in = candidate;
                     in_elem = candidate;
@@ -1618,14 +1638,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                                    nb_elts);
                 }
                 parsec_atomic_unlock( &original->lock );
-                //if( NULL != release_after_data_in_is_attached )
-                //{
-                //    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p [readers %d, ref_count %d] at %s:%d",
-                //    release_after_data_in_is_attached, release_after_data_in_is_attached->original,
-                //    release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
-                //     __FILE__, __LINE__);
-                //    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
-                //}
                 assert(0);
                 return -1;
             }
@@ -1651,20 +1663,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         }
         gpu_elem->push_task = gpu_task->ec;  /* only the task who does the transfer can modify the data status later. */
         parsec_atomic_unlock( &original->lock );
-        //if( NULL != release_after_data_in_is_attached )
-        //{
-        //    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p at [readers %d, ref_count %d] %s:%d",
-        //            release_after_data_in_is_attached, release_after_data_in_is_attached->original,
-        //            release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
-        //            __FILE__, __LINE__);
-        //    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
-        //}
         return 1;
     }
 
     if( undo_readers_inc_if_no_transfer )
     {
-        //parsec_atomic_fetch_dec_int32( &in_elem->readers );
         PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
     }
     assert( gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER );
@@ -1679,15 +1682,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                          gpu_elem, gpu_elem->super.super.obj_reference_count, original->key, nb_elts,
                          in_elem->version, gpu_elem->version);
     parsec_atomic_unlock( &original->lock );
-    //if( NULL != release_after_data_in_is_attached )
-    //{
-    //    PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Release copy %p attached to original %p [readers %d, ref_count %d] at %s:%d",
-    //                release_after_data_in_is_attached, release_after_data_in_is_attached->original, 
-    //                release_after_data_in_is_attached->readers, release_after_data_in_is_attached->super.super.obj_reference_count,
-    //                __FILE__, __LINE__);
-    //    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
-    //}
-    /* TODO: data keeps the same coherence flags as before */
     return 0;
 }
 
@@ -2018,7 +2012,6 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                     /* Nobody is at the door to handle that event on the source of that data...
                      * we do the command directly */
                     parsec_atomic_lock( &task->data[i].data_in->original->lock );
-                    //task->data[i].data_in->readers--;
                     PARSEC_DATA_COPY_DEC_READERS_ATOMIC(task->data[i].data_in);
                     PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                                          "GPU[%s]:\tExecuting D2D transfer complete for copy %p [ref_count %d] for "
@@ -2089,7 +2082,6 @@ parsec_gpu_callback_complete_push(parsec_device_gpu_module_t   *gpu_device,
                              tmp,
                              gpu_copy->readers, gpu_copy->device_index, gpu_copy->version,
                              gpu_copy->flags, gpu_copy->coherency_state, gpu_copy->data_transfer_status);
-        //gpu_copy->readers--;
         PARSEC_DATA_COPY_DEC_READERS_ATOMIC(gpu_copy);
         if( 0 == gpu_copy->readers ) {
             parsec_list_item_ring_chop((parsec_list_item_t*)gpu_copy);
@@ -2446,7 +2438,6 @@ parsec_cuda_kernel_pop( parsec_device_gpu_module_t   *gpu_device,
         }
         parsec_atomic_lock(&original->lock);
         if( flow->flow_flags & PARSEC_FLOW_ACCESS_READ ) {
-            //gpu_copy->readers--;
             PARSEC_DATA_COPY_DEC_READERS_ATOMIC(gpu_copy);
             if( gpu_copy->readers < 0 ) {
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
