@@ -1419,11 +1419,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 else
                 {
                     if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-                    {
                         PARSEC_OBJ_RELEASE(task_data->data_in);
-                        PARSEC_OBJ_RETAIN(candidate);
-                    }
-
                 }
                 task_data->data_in = candidate;
                 in_elem = candidate;
@@ -1476,11 +1472,9 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     else
                     {
                         if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-                        {
-                            PARSEC_OBJ_RELEASE(task_data->data_in);
-                            PARSEC_OBJ_RETAIN(candidate);
-                        }
+                            PARSEC_OBJ_RELEASE(task_data->data_in);  
                     }
+                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     task_data->data_in = candidate;
                     in_elem = candidate;
                     in_elem_dev = target;
