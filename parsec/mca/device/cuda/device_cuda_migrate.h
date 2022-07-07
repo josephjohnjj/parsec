@@ -41,12 +41,19 @@ typedef struct parsec_device_cuda_info_s
 
 typedef struct migrated_task_s
 {
-    parsec_list_item_t list_item;
-    parsec_gpu_task_t* gpu_task;
+    parsec_list_item_t          list_item;
+    parsec_gpu_task_t*          gpu_task;
     parsec_device_gpu_module_t* dealer_device;
     parsec_device_gpu_module_t* starving_device;
     int stage_in_status;
 } migrated_task_t;
+
+typedef struct task_mapping_item_s
+{
+    parsec_hash_table_item_t    ht_item;
+    int                         device_index;
+} task_mapping_item_t;
+
 
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
@@ -74,6 +81,8 @@ int gurantee_ownership_transfer(parsec_gpu_task_t *gpu_task, parsec_data_t* data
                                 parsec_data_copy_t* src_copy, parsec_data_copy_t* dst_copy,
                                 uint8_t stage_in_device, uint8_t access_mode);
 double current_time();
+int update_task_to_device_mapping(parsec_task_t *task, int device_index);
+int find_task_to_device_mapping(parsec_task_t *task);
 
 
 

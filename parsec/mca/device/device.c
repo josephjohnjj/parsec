@@ -14,6 +14,7 @@
 #include "parsec/execution_stream.h"
 #include "parsec/utils/argv.h"
 #include "parsec/parsec_internal.h"
+#include "parsec/mca/device/cuda/device_cuda_migrate.h"
 
 #include <stdlib.h>
 #if defined(PARSEC_HAVE_ERRNO_H)
@@ -44,6 +45,8 @@ static int num_modules_activated = 0;
 static parsec_device_module_t **modules_activated = NULL;
 
 static mca_base_component_t **device_components = NULL;
+
+extern int parsec_cuda_iterative;
 
 /**
  * Temporary solution: Use the following two arrays to taskpool the weight and
@@ -80,6 +83,15 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
 {
     int i, dev_index = -1, data_index, prefer_index = -1;
     parsec_taskpool_t* tp = this_task->taskpool;
+
+    if(parsec_cuda_iterative)
+    {
+        // if task to device mapping is already available use that
+        dev_index = find_task_to_device_mapping(this_task);
+        if(dev_index != -1)
+            return dev_index;
+    }
+
 
     /* Select the location of the first data that is used in READ/WRITE or pick the
      * location of one of the READ data. For now use the last one.
@@ -185,7 +197,15 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
                           parsec_task_snprintf(task_str, MAX_TASK_STRLEN, this_task), dev_index, i);
          }
      }
-    //dev_index = 2; //CHANGE THIS, only for testing all task mapped to first GPU device
+
+    /**
+     * update task to device mapping. The code control reaches here only if there was no
+     * previous mapping available 
+     */
+    
+    if(parsec_cuda_iterative)
+        update_task_to_device_mapping(this_task, dev_index);
+
     return dev_index;
 }
 

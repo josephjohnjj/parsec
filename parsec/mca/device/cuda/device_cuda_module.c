@@ -49,6 +49,7 @@ static int parsec_cuda_memory_release( parsec_device_cuda_module_t* gpu_device )
 static int parsec_cuda_flush_lru( parsec_device_module_t *device );
 
 extern int parsec_cuda_migrate_tasks;
+extern int parsec_cuda_iterative;
 
 /* look up how many FMA per cycle in single/double, per cuda MP
  * precision.
@@ -2917,6 +2918,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     }
     gpu_task = (parsec_gpu_task_t*)parsec_fifo_try_pop( &(gpu_device->pending) );
     if( NULL != gpu_task ) {
+
+        /**
+         * if the task has been migrated, we have to update the mapping. 
+         */
+        if(parsec_cuda_iterative && (gpu_task->migrate_status > TASK_NOT_MIGRATED))
+            update_task_to_device_mapping(gpu_task->ec, gpu_device->super.device_index);
+
         pop_null = 0;
         gpu_task->last_data_check_epoch = gpu_device->data_avail_epoch - 1;  /* force at least one tour */
         PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tGet from shared queue %s priority %d", gpu_device->super.name,
