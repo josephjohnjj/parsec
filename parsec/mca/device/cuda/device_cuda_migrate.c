@@ -4,11 +4,26 @@ extern int parsec_device_cuda_enabled;
 parsec_device_cuda_info_t* device_info; 
 static parsec_list_t* migrated_task_list;
 static int NDEVICES;
+static parsec_hash_table_t *task_mapping_ht = NULL;
 
 double start = 0;
 double end = 0;
 
 PARSEC_OBJ_CLASS_INSTANCE(migrated_task_t, parsec_list_item_t, NULL, NULL);
+
+static parsec_key_fn_t task_mapping_table_generic_key_fn = {
+        .key_equal = parsec_hash_table_generic_64bits_key_equal,
+        .key_hash  = parsec_hash_table_generic_64bits_key_hash,
+        .key_print = parsec_hash_table_generic_64bits_key_print
+};
+
+static void task_mapping_ht_free_elt(void *_item, void *table)
+{
+    task_mapping_item_t *item = (task_mapping_item_t*)_item;
+    parsec_key_t key = item->ht_item.key;
+    parsec_hash_table_nolock_remove(table, key);
+    free(item);
+}
 
 /**
  * @brief The function initialises the data structures required
@@ -49,6 +64,9 @@ int parsec_cuda_migrate_init(int ndevices)
     nvml_ret = nvmlInit_v2();
     #endif
 
+    task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+    parsec_hash_table_init(task_mapping_ht, offsetof(task_mapping_item_t, ht_item), 16, task_mapping_table_generic_key_fn, NULL);
+
     char hostname[256];
     gethostname(hostname, sizeof(hostname));
     printf("PID %d on %s ready for attach\n", getpid(), hostname);
@@ -70,6 +88,11 @@ int parsec_cuda_migrate_fini()
     #if defined(PARSEC_HAVE_CUDA)
     nvmlShutdown();
     #endif
+
+    parsec_hash_table_for_all(task_mapping_ht, task_mapping_ht_free_elt, task_mapping_ht);
+    parsec_hash_table_fini(task_mapping_ht);
+    PARSEC_OBJ_RELEASE(task_mapping_ht);
+    task_mapping_ht = NULL;
 
     for(i = 0; i < NDEVICES; i++)
     {
@@ -554,6 +577,11 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_atomic_lock( &original->lock );
         
                 task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+                /**
+                 * we set a possible candidate for this flow of the task. This will allow
+                 * us to easily find the stage_in data as the possible candidate in 
+                 * parsec_gpu_data_stage_in() function.
+                 */
                 gpu_task->posssible_candidate[i] = task->data[i].data_out->device_index;
 
                 assert( task->data[i].data_out->device_index == dealer_device->super.device_index );
@@ -601,6 +629,46 @@ int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_mo
 
     return 0;
 }
+
+int update_task_to_device_mapping(parsec_task_t *task, int device_index)
+{
+    parsec_key_t key;
+    task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if( NULL == (item = parsec_hash_table_nolock_find(task_mapping_ht, key)) )
+    {
+
+        item = (task_mapping_item_t *)malloc(sizeof(task_mapping_item_t));
+        item->device_index = device_index;
+        item->ht_item.key = key;
+        parsec_hash_table_lock_bucket(task_mapping_ht, key);
+        parsec_hash_table_nolock_insert(task_mapping_ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(task_mapping_ht, key);
+    }
+    else
+        item->ht_item.key = key; 
+}
+
+int find_task_to_device_mapping(parsec_task_t *task)
+{
+    parsec_key_t key;
+    task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if( NULL == (item = parsec_hash_table_nolock_find(task_mapping_ht, key)) )
+        return -1;
+    
+    return item->device_index; 
+}
+
+
+
+
+    
+
+
+
 
 
 
