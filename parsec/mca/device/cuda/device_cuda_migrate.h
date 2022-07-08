@@ -83,6 +83,9 @@ int gurantee_ownership_transfer(parsec_gpu_task_t *gpu_task, parsec_data_t* data
 double current_time();
 int update_task_to_device_mapping(parsec_task_t *task, int device_index);
 int find_task_to_device_mapping(parsec_task_t *task);
+void clear_task_migrated_per_tp();
+void print_task_migrated_per_tp();
+
 
 
 
