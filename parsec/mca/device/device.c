@@ -203,8 +203,8 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
      * previous mapping available 
      */
     
-    if(parsec_cuda_iterative)
-        update_task_to_device_mapping(this_task, dev_index);
+    //if(parsec_cuda_iterative)
+    //    update_task_to_device_mapping(this_task, dev_index);
 
     return dev_index;
 }

@@ -5,6 +5,9 @@ parsec_device_cuda_info_t* device_info;
 static parsec_list_t* migrated_task_list;
 static int NDEVICES;
 static parsec_hash_table_t *task_mapping_ht = NULL;
+static int task_migrated_per_tp = 0;
+static int tp_count;
+
 
 double start = 0;
 double end = 0;
@@ -428,6 +431,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es,  parsec_device_gpu
             device_info[dealer_device_index].level2++;
         }
         nb_migrated++;
+        parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
 
         /**
          * @brief change migrate_status according to the status of the stage in of the
@@ -660,6 +664,17 @@ int find_task_to_device_mapping(parsec_task_t *task)
         return -1;
     
     return item->device_index; 
+}
+
+void clear_task_migrated_per_tp()
+{
+    task_migrated_per_tp = 0;
+}
+
+void print_task_migrated_per_tp()
+{
+    printf("\n*********** TASKPOOL %d *********** \n", tp_count++);
+    printf("Tasks migrated in this TP : %d \n", task_migrated_per_tp);
 }
 
 

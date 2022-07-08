@@ -692,6 +692,7 @@ int parsec_context_add_taskpool( parsec_context_t* context, parsec_taskpool_t* t
     if( NULL == parsec_current_scheduler) {
         parsec_set_scheduler( context );
     }
+    clear_task_migrated_per_tp();
 
     tp->context = context;  /* save the context */
 
