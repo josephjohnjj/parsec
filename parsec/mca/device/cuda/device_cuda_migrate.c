@@ -231,14 +231,13 @@ int parsec_cuda_tasks_executed(int device)
  */
 int is_starving(int device)
 {
-    return ( parsec_cuda_get_device_task(device, -1) < 1 ) ? 1 : 0;
-
+    return ( parsec_cuda_get_device_task(device, -1) < 5 ) ? 1 : 0;
 }
 
 
 int will_starve(int device)
 {
-    return ( parsec_cuda_get_device_task(device, -1) <  3 ) ? 1 : 0;
+    return ( (parsec_cuda_get_device_task(device, -1) - 1) <  5 ) ? 1 : 0;
 }
 
 /**
@@ -675,6 +674,11 @@ void print_task_migrated_per_tp()
 {
     printf("\n*********** TASKPOOL %d *********** \n", tp_count++);
     printf("Tasks migrated in this TP : %d \n", task_migrated_per_tp);
+}
+
+int get_tp_count()
+{
+    return tp_count;
 }
 
 
