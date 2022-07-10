@@ -1495,7 +1495,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                      * Why do we need this increment. For some reason, if this increment is not
                      * done the reader goes to 0, when the number of CUDA device is greater than 2.
                      */
-                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
+                    if(parsec_cuda_migrate_tasks)
+                        PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     task_data->data_in = candidate;
                     in_elem = candidate;
                     in_elem_dev = target;
@@ -2890,7 +2891,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
  fetch_task_from_shared_queue:
 
-    //printf(" time %lf device %d level0 %d level1 %d level2 %d total %d \n",
+    //printf(" tp %d time %lf device %d level0 %d level1 %d level2 %d total %d \n",
+    //    get_tp_count(),
     //    current_time(),
     //    CUDA_DEVICE_NUM(gpu_device->super.device_index), 
     //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
