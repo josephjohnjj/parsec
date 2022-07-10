@@ -235,7 +235,7 @@ int parsec_data_copy_detach(parsec_data_t* data,
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
                          "DEV[%d]: parsec_data_copy_detach failed to identify new owner (younger version exists in device %d): original %p device_copy %p",
                          device, younger_version, data, copy);
-            assert(0);
+            //assert(0);
         }
         if( new_owner_copy != NULL ) 
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
