@@ -1373,36 +1373,16 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         if( PARSEC_DEV_CUDA == in_elem_dev->super.super.type ) {
             if( gpu_device->peer_access_mask & (1 << in_elem_dev->cuda_index) ) {
                 /* We can directly do D2D, so let's skip the selection */
+                        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                 "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 1) to Device to Device copy",
+                 gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
+                 
+                 PARSEC_DATA_COPY_INC_READERS_ATOMIC(in_elem);
+                 undo_readers_inc_if_no_transfer = 1;
+
                 goto src_selected;
             }
         }
-
-        /* If gpu_elem is not invalid, then it is already there and the right version,
-         * and we're not going to transfer from another source, skip the selection */
-        #if 0
-        if( gpu_elem->coherency_state != PARSEC_DATA_COHERENCY_INVALID )
-        {
-            if( (gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN) 
-                && (gpu_task->posssible_candidate[flow->flow_index] > 1 ) )
-            {
-                
-                int possible_device_copy_index = gpu_task->posssible_candidate[flow->flow_index];
-                /**
-                 * A possible candidate is set when we call change_task_features() during migration
-                 * preperation of a task. gpu_task->posssible_candidate[flow->flow_index] is greater
-                 * tha 1, it means that we have already identifies a staged_in data as the possible 
-                 * candidate. So we can directly use that data for D2D ytransfer.
-                 */
-
-                parsec_data_copy_t *candidate = original->device_copies[possible_device_copy_index];
-                parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(possible_device_copy_index);
-                //decrement the reader corresponding to the first stage_in
-                PARSEC_DATA_COPY_DEC_READERS_ATOMIC(candidate);
-                
-                goto src_selected;
-            }
-        }
-        #endif
 
         // if the task is a migrated task and the possible candidate has already been identified
         if( (gpu_task->migrate_status > TASK_NOT_MIGRATED) 
@@ -1430,7 +1410,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
                 PARSEC_OBJ_RETAIN(candidate);
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                 "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best possible candidate to to Device to Device copy",
+                 "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 2) to Device to Device copy",
                  gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
 
                 /**
@@ -1480,16 +1460,13 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     /* candidate is the best candidate to do D2D. Let's register as a reader for this
                      * data copy, and we can unlock and schedule the D2D. */
                     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                                         "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate to to Device to Device copy, increasing its readers to %d",
+                                         "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate (case 3) to Device to Device copy, increasing its readers to %d",
                                          gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
-                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
 
+                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     undo_readers_inc_if_no_transfer = 1;
                     /* We swap data_in with candidate, so we update the reference counters */
                     PARSEC_OBJ_RETAIN(candidate);
-                    PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                     "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate to to Device to Device copy",
-                     gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
                     
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
@@ -1503,8 +1480,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                      * Why do we need this increment. For some reason, if this increment is not
                      * done the reader goes to 0, when the number of CUDA device is greater than 2.
                      */
-                    if(parsec_cuda_migrate_tasks)
-                        PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
+                    //if(parsec_cuda_migrate_tasks)
+                    //    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     task_data->data_in = candidate;
                     in_elem = candidate;
                     in_elem_dev = target;
