@@ -1379,6 +1379,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
         /* If gpu_elem is not invalid, then it is already there and the right version,
          * and we're not going to transfer from another source, skip the selection */
+        #if 0
         if( gpu_elem->coherency_state != PARSEC_DATA_COHERENCY_INVALID )
         {
             if( (gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN) 
@@ -1401,12 +1402,19 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 goto src_selected;
             }
         }
+        #endif
 
         // if the task is a migrated task and the possible candidate has already been identified
         if( (gpu_task->migrate_status > TASK_NOT_MIGRATED) 
            && (gpu_task->posssible_candidate[flow->flow_index] > 1 ) )
         {
             int possible_device_copy_index = gpu_task->posssible_candidate[flow->flow_index];
+            /**
+             * A possible candidate is set when we call change_task_features() during migration
+             * preperation of a task. gpu_task->posssible_candidate[flow->flow_index] is greater
+             * tha 1, it means that we have already identifies a staged_in data as the possible 
+             * candidate. So we can directly use that data for D2D ytransfer.
+             */
             parsec_data_copy_t *candidate = original->device_copies[possible_device_copy_index];
             parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(possible_device_copy_index);
 
