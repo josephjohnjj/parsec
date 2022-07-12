@@ -50,6 +50,8 @@ static int parsec_cuda_flush_lru( parsec_device_module_t *device );
 
 extern int parsec_cuda_migrate_tasks;
 extern int parsec_cuda_iterative;
+extern int parsec_gpu_task_count_start;
+extern int parsec_gpu_task_count_end;
 
 /* look up how many FMA per cycle in single/double, per cuda MP
  * precision.
@@ -2767,6 +2769,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
+
+    #if defined(PARSEC_PROF_TRACE)
+        parsec_profiling_trace_flags(es->es_profile,
+            parsec_gpu_task_count_start,
+            (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
+            gpu_device->super.device_index, &gpu_device->mutex, 0);
+     #endif
         return PARSEC_HOOK_RETURN_ASYNC;
     }
     PARSEC_DEBUG_VERBOSE(2, parsec_gpu_output_stream,"GPU[%s]: Entering GPU management at %s:%d",
@@ -2777,6 +2786,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         PARSEC_PROFILING_TRACE( es->es_profile, parsec_gpu_own_GPU_key_start,
                                 (unsigned long)es, PROFILE_OBJECT_ID_NULL, NULL );
 #endif  /* defined(PARSEC_PROF_TRACE) */
+
+#if defined(PARSEC_PROF_TRACE)
+    parsec_profiling_trace_flags(es->es_profile,
+        parsec_gpu_task_count_start,
+        (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
+        gpu_device->super.device_index, &gpu_device->mutex, 0);
+#endif
 
     status = cudaSetDevice( cuda_device->cuda_index );
     PARSEC_CUDA_CHECK_ERROR( "(parsec_cuda_kernel_scheduler) cudaSetDevice ", status,
@@ -2956,6 +2972,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
     gpu_device->super.executed_tasks++;
+
+    #if defined(PARSEC_PROF_TRACE)
+        parsec_profiling_trace_flags(es->es_profile,
+            parsec_gpu_task_count_end,
+            (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
+            gpu_device->super.device_index, &gpu_device->mutex, 0);
+    #endif  
 
     /**
      * responsibility of task completion moved from GPU manager thread
