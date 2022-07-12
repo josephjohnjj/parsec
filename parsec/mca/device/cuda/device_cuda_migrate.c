@@ -20,12 +20,25 @@ static parsec_key_fn_t task_mapping_table_generic_key_fn = {
         .key_print = parsec_hash_table_generic_64bits_key_print
 };
 
+int parsec_gpu_task_count_start;
+int parsec_gpu_task_count_end;
+
 static void task_mapping_ht_free_elt(void *_item, void *table)
 {
     task_mapping_item_t *item = (task_mapping_item_t*)_item;
     parsec_key_t key = item->ht_item.key;
     parsec_hash_table_nolock_remove(table, key);
     free(item);
+}
+
+
+static inline void gpu_dev_profiling_init(void)                                                        
+{     
+    static const char *gpu_dev_prof_info_str = "task_count{int32_t}";                                                                          
+    parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
+                sizeof(int32_t),
+                gpu_dev_prof_info_str,
+                &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
 }
 
 /**
@@ -69,6 +82,9 @@ int parsec_cuda_migrate_init(int ndevices)
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
     parsec_hash_table_init(task_mapping_ht, offsetof(task_mapping_item_t, ht_item), 16, task_mapping_table_generic_key_fn, NULL);
+    #if defined(PARSEC_PROF_TRACE)
+        gpu_dev_profiling_init();
+    #endif
 
     char hostname[256];
     gethostname(hostname, sizeof(hostname));

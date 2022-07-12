@@ -54,6 +54,16 @@ typedef struct task_mapping_item_s
     int                         device_index;
 } task_mapping_item_t;
 
+//typedef struct gpu_dev_prof_s
+//{
+//    int32_t device_index;
+//    int32_t task_count;
+//} gpu_dev_prof_t;
+//static const char *gpu_dev_prof_info_str = "int32_t{device_index};int32_t{task_count}";
+
+//static int parsec_gpu_task_count_start;
+//static int parsec_gpu_task_count_end;
+
 
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
@@ -86,11 +96,7 @@ int find_task_to_device_mapping(parsec_task_t *task);
 void clear_task_migrated_per_tp();
 void print_task_migrated_per_tp();
 int get_tp_count();
-
-
-
-
-
+static inline void gpu_dev_profiling_init(void);
 
 
 #endif
