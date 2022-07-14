@@ -1326,7 +1326,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
     int32_t type = flow->flow_flags;
     parsec_data_copy_t* in_elem = task_data->data_in;
-    parsec_data_copy_t* release_after_data_in_is_attached = NULL;
     parsec_data_t* original = in_elem->original;
     parsec_gpu_data_copy_t* gpu_elem = task_data->data_out;
     uint32_t nb_elts = gpu_task->flow_nb_elts[flow->flow_index];
@@ -2771,13 +2770,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
-
-    #if defined(PARSEC_PROF_TRACE)
-        parsec_profiling_trace_flags(es->es_profile,
-            parsec_gpu_task_count_start,
-            (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
-            gpu_device->super.device_index, &gpu_device->mutex, 0);
-     #endif
         return PARSEC_HOOK_RETURN_ASYNC;
     }
     PARSEC_DEBUG_VERBOSE(2, parsec_gpu_output_stream,"GPU[%s]: Entering GPU management at %s:%d",
@@ -2788,13 +2780,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         PARSEC_PROFILING_TRACE( es->es_profile, parsec_gpu_own_GPU_key_start,
                                 (unsigned long)es, PROFILE_OBJECT_ID_NULL, NULL );
 #endif  /* defined(PARSEC_PROF_TRACE) */
-
-#if defined(PARSEC_PROF_TRACE)
-    parsec_profiling_trace_flags(es->es_profile,
-        parsec_gpu_task_count_start,
-        (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
-        gpu_device->super.device_index, &gpu_device->mutex, 0);
-#endif
 
     status = cudaSetDevice( cuda_device->cuda_index );
     PARSEC_CUDA_CHECK_ERROR( "(parsec_cuda_kernel_scheduler) cudaSetDevice ", status,
@@ -2807,6 +2792,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                              gpu_device->super.name,
                              parsec_gpu_describe_gpu_task(tmp, MAX_TASK_STRLEN, gpu_task),
                              gpu_task->ec->priority );
+
+        #if defined(PARSEC_PROF_TRACE)
+            parsec_profiling_trace_flags(es->es_profile,
+            parsec_gpu_task_count_start,
+            (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
+            gpu_task->ec->taskpool->taskpool_id, NULL, 0);
+        #endif
     }
     
     rc = progress_stream( gpu_device,
@@ -2976,10 +2968,13 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     gpu_device->super.executed_tasks++;
 
     #if defined(PARSEC_PROF_TRACE)
+        gpu_dev_prof_t prof_info;
+        prof_info.device_index = gpu_device->super.device_index;
+        prof_info.task_count = gpu_device->mutex;
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,
             (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
-            gpu_device->super.device_index, &gpu_device->mutex, 0);
+            gpu_task->ec->taskpool->taskpool_id, &prof_info, 0);
     #endif  
 
     /**
