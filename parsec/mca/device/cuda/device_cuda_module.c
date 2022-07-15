@@ -2883,30 +2883,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     out_task_pop = progress_task;
 
  fetch_task_from_shared_queue:
-
-    //printf(" tp %d time %lf device %d level0 %d level1 %d level2 %d total %d \n",
-    //    get_tp_count(),
-    //    current_time(),
-    //    CUDA_DEVICE_NUM(gpu_device->super.device_index), 
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1));
-
-    /**
-     * @brief Before a new task is selectd by the device manager for execution,
-     * the manager checks if there are any starving devices and migrate tasks,
-     * to the starving device, if there are available tasks to migrate.
-     * 
-     * rc will return the total number of tasks selected for migration and that 
-     * is deducted from the total number of tasks that will be executed by this
-     * GPU.
-     */
-    if(parsec_cuda_migrate_tasks)
-        nb_migrated = migrate_to_starving_device(es,  gpu_device);
-    if( nb_migrated > 0 )   
-            goto crappy_code;    
-      
+        
     assert( NULL == gpu_task );
     if (1 == parsec_cuda_sort_pending && out_task_submit == NULL && out_task_pop == NULL) {
         parsec_gpu_sort_pending_list(gpu_device);
@@ -2997,7 +2974,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     PARSEC_DEBUG_VERBOSE(3, parsec_gpu_output_stream,"GPU[%s]: gpu_task %p freed at %s:%d", gpu_device->super.name, 
                          gpu_task, __FILE__, __LINE__);
     free( gpu_task );
-crappy_code:
     rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
     if( 1 == rc ) {  /* I was the last one */
 #if defined(PARSEC_PROF_TRACE)
@@ -3011,6 +2987,47 @@ crappy_code:
         return PARSEC_HOOK_RETURN_ASYNC;
     }
     gpu_task = progress_task;
+
+    //printf(" tp %d time %lf device %d level0 %d level1 %d level2 %d total %d \n",
+    //    get_tp_count(),
+    //    current_time(),
+    //    CUDA_DEVICE_NUM(gpu_device->super.device_index), 
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
+    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1));
+
+    /**
+     * @brief Before a new task is selectd by the device manager for execution,
+     * the manager checks if there are any starving devices and migrate tasks,
+     * to the starving device, if there are available tasks to migrate.
+     * 
+     * rc will return the total number of tasks selected for migration and that 
+     * is deducted from the total number of tasks that will be executed by this
+     * GPU.
+     */
+    if(parsec_cuda_migrate_tasks)
+    {
+        nb_migrated = migrate_to_starving_device(es,  gpu_device);
+        if( nb_migrated > 0 )   
+        {
+            rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
+            if( 1 == rc ) 
+            {  /* I was the last one */
+            #if defined(PARSEC_PROF_TRACE)
+                if( parsec_gpu_trackable_events & PARSEC_PROFILE_GPU_TRACK_OWN )
+                    PARSEC_PROFILING_TRACE( es->es_profile, parsec_gpu_own_GPU_key_end,
+                                        (unsigned long)es, PROFILE_OBJECT_ID_NULL, NULL );
+            #endif  /* defined(PARSEC_PROF_TRACE) */
+                PARSEC_DEBUG_VERBOSE(2, parsec_gpu_output_stream,"GPU[%s]: Leaving GPU management at %s:%d", 
+                                 gpu_device->super.name, __FILE__, __LINE__);
+
+                return PARSEC_HOOK_RETURN_ASYNC;
+            }
+
+        } 
+    }
+
     goto fetch_task_from_shared_queue;
 
  disable_gpu:
