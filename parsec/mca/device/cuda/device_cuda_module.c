@@ -1378,8 +1378,11 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 1) to Device to Device copy",
                  gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
                  
-                 PARSEC_DATA_COPY_INC_READERS_ATOMIC(in_elem);
-                 undo_readers_inc_if_no_transfer = 1;
+                 if(gpu_task->migrate_status > TASK_NOT_MIGRATED)
+                 {
+                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(in_elem);
+                    undo_readers_inc_if_no_transfer = 1;
+                 }
 
                 goto src_selected;
             }
