@@ -561,7 +561,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
         else
         {
             assert(task->data[i].data_in != NULL);
-            if ((task->data[i].data_out->original->owner_device == dealer_device->super.device_index) &&
+            
+            if ((task->data[i].data_in->original == task->data[i].data_out->original) &&
+                (task->data[i].data_out->original->owner_device == dealer_device->super.device_index) &&
                 (task->data[i].data_out->version != task->data[i].data_out->original->device_copies[0]->version))
             {
                 parsec_data_t *original = task->data[i].data_out->original;
