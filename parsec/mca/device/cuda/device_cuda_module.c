@@ -1349,7 +1349,9 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     {
         if (gpu_elem->readers > 0 ) 
         {
-            if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) ) {
+            if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) && 
+                /* Anti depdendency like behaviour may happen during task migration */
+                (gpu_task->migrate_status > TASK_NOT_MIGRATED) ) {
                 parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
                                "(possible anti-dependency,\n"
                                "or concurrent accesses), please prevent that with CTL dependencies\n",
