@@ -31,7 +31,7 @@ static void task_mapping_ht_free_elt(void *_item, void *table)
 
 static void gpu_dev_profiling_init()
 {
-    //const char *gpu_dev_prof_info_str = "exec_time{double};device_index{int32_t};task_count{int32_t}";
+    // const char *gpu_dev_prof_info_str = "exec_time{double};device_index{int32_t};task_count{int32_t}";
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
                                             sizeof(gpu_dev_prof_t),
                                             "device_index{int32_t};task_count{int32_t}",
@@ -231,15 +231,24 @@ int parsec_cuda_tasks_executed(int device)
  * @param device index number of the device
  * @return int
  *
- * TODO: needs updation
  */
 int is_starving(int device)
 {
+    /**
+     * @brief The default number of execution stream in PaRSEC is 2. We assume
+     * starvtion if the number of ready tasks available is less than twice the
+     * number of execution stream.
+     */
     return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
 }
 
 int will_starve(int device)
 {
+    /**
+     * @brief The default number of execution stream in PaRSEC is 2. We assume
+     * starvtion if migrating a task will push the number of ready tasks available
+     * to less than twice the number of execution stream.
+     */
     return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
 }
 
@@ -251,7 +260,6 @@ int will_starve(int device)
  * @param ndevice total number of devices
  * @return int
  *
- * TODO: needs updation
  */
 int find_starving_device(int dealer_device)
 {
@@ -337,7 +345,7 @@ int parsec_cuda_mig_task_enqueue(parsec_execution_stream_t *es, migrated_task_t 
 
 /**
  * @brief check if there are any devices starving. If there are any starving device migrate
- * half the task from the dealer device to the starving device.
+ * task from the dealer device to the starving device.
  *
  * @param es
  * @param dealer_gpu_device
@@ -367,7 +375,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
      */
     migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(&(dealer_device->pending)); // level 0
     execution_level = 0;
-    if (migrated_gpu_task == NULL) 
+    if (migrated_gpu_task == NULL)
     {
         migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
         execution_level = 1;
@@ -390,11 +398,10 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
     if (migrated_gpu_task != NULL)
     {
         assert(migrated_gpu_task->ec != NULL);
-        // parsec_list_item_ring_chop( (parsec_list_item_t*)migrated_gpu_task );
         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)migrated_gpu_task);
         /**
          * @brief if the task is a not a computational kerenel or if it is a task that has
-         * already been migrated, we stop the migration.
+         * already been migrated, we stop the migration and push it back to the queue.
          */
         if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
         {
@@ -441,7 +448,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
          * @brief An object of type migrated_task_t is created store the migrated task
          * and other associated details. This object is enqueued to a node level queue.
          * The main objective of this was to make sure that the manager does not have to sepend
-         * time on migration. It can select the task for migration, enqqueue it to the node level
+         * time on migration. It can select the task for migration, enqueue it to the node level
          * queue and then return to its normal working.
          */
         mig_task = (migrated_task_t *)calloc(1, sizeof(migrated_task_t));
@@ -464,7 +471,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
     }
 
     migrated_gpu_task = NULL;
-    ///* update the expected load on the GPU device */
+    /* update the expected load on the GPU device */
     parsec_device_load[dealer_device->super.device_index] -= nb_migrated * parsec_device_sweight[dealer_device->super.device_index];
     return nb_migrated;
 }
@@ -504,8 +511,19 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             parsec_atomic_lock(&original->lock);
 
             task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+            /**
+             * we set a possible candidate for this flow of the task. This will allow
+             * us to easily find the stage_in data as the possible candidate in
+             * parsec_gpu_data_stage_in() function.
+             */
             gpu_task->posssible_candidate[i] = task->data[i].data_out->device_index;
 
+            /**
+             * Even if the task has only read access, the data may have been modified
+             * by another task, and it may be 'dirty'. We check the version of the data
+             * to verify if it is dirty. If it is, then it is pushed to gpu_mem_owned_lru,
+             * if not is is pused to gpu_mem_lru.
+             */
             if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
@@ -519,6 +537,12 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 else
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
+            /**
+             * If the task has only read.wtite access, the data may have been modified
+             * by another task, and it may be 'dirty'. We check the version of the data
+             * to verify if it is dirty. If it is, then it is pushed to gpu_mem_owned_lru,
+             * if not is is pused to gpu_mem_lru.
+             */
             if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
@@ -532,6 +556,11 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 else
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
+            /**
+             * If the task has a write only option, the taks should have written to it. But as we
+             * are migrating the task this write will never happen. So this data can be evicted
+             * immediatly. To ensure this eviction, we push the data to gpu_mem_lru.
+             */
             if (!(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
@@ -558,12 +587,15 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
             parsec_atomic_unlock(&original->lock);
         }
-        else
+        else //TASK_MIGRATED_BEFORE_STAGE_IN
         {
             assert(task->data[i].data_in != NULL);
-            
-            if ((task->data[i].data_in->original == task->data[i].data_out->original) &&
+
+            if (/* This condition is required as task->data[i].data_out may be poitining to a junk value*/
+                (task->data[i].data_in->original == task->data[i].data_out->original) &&
+                /* If its not the owner then the existing stage_in mechanism will take careof the rest*/
                 (task->data[i].data_out->original->owner_device == dealer_device->super.device_index) &&
+                /* If dealer device does not have a new version then then the existing stage_in mechanism will take careof the rest*/
                 (task->data[i].data_out->version != task->data[i].data_out->original->device_copies[0]->version))
             {
                 parsec_data_t *original = task->data[i].data_out->original;
@@ -624,6 +656,13 @@ int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_mo
     return 0;
 }
 
+/**
+ * @brief Associate a task with a particular device_index.
+ * 
+ * @param task 
+ * @param device_index 
+ * @return int 
+ */
 int update_task_to_device_mapping(parsec_task_t *task, int device_index)
 {
     parsec_key_t key;
@@ -644,6 +683,13 @@ int update_task_to_device_mapping(parsec_task_t *task, int device_index)
         item->ht_item.key = key;
 }
 
+/**
+ * @brief Check if the task has any particular task mapping,
+ * if it has return the device_index, or else return -1. 
+ * 
+ * @param task 
+ * @return int 
+ */
 int find_task_to_device_mapping(parsec_task_t *task)
 {
     parsec_key_t key;
