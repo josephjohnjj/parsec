@@ -2124,18 +2124,22 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
      * task first try to see if anything completed. */
     if( NULL != task ) {
         PARSEC_PUSH_TASK(stream->fifo_pending, (parsec_list_item_t*)task);
-        task = NULL;
 
-        if(stream == gpu_device->exec_stream[0])
+        if (task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
         {
-            parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
-            parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 1); 
+            if(stream == gpu_device->exec_stream[0])
+            {
+                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
+                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 1); 
+            }
+            else if(stream != gpu_device->exec_stream[1] && stream != gpu_device->exec_stream[0])
+            {
+                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 1); 
+                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 2); 
+            }
         }
-        else if(stream != gpu_device->exec_stream[1] && stream != gpu_device->exec_stream[0])
-        {
-            parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 1); 
-            parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 2); 
-        }
+
+        task = NULL;
 
     }
     *out_task = NULL;
@@ -2769,7 +2773,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
     }
 
-    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
+    if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+        parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
@@ -2970,8 +2975,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     PARSEC_LIST_ITEM_SINGLETON(gpu_task->ec);
     __parsec_schedule(es, gpu_task->ec, distance);
 
-    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 2); 
-    parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
+    if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+    {
+        parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 2); 
+        parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
+    }
     
  remove_gpu_task:
     // Load problem: was parsec_device_load[gpu_device->super.device_index] -= gpu_task->load;
