@@ -1345,8 +1345,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
      * If the data will be accessed in write mode, remove it from any GPU data management
      * lists until the task is completed.
      */
-    if( PARSEC_FLOW_ACCESS_WRITE & type ) {
-        if (gpu_elem->readers > 0 ) {
+    if(PARSEC_FLOW_ACCESS_WRITE & type) 
+    {
+        if (gpu_elem->readers > 0 ) 
+        {
             if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) ) {
                 parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
                                "(possible anti-dependency,\n"
@@ -1371,19 +1373,18 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         || (gpu_task->migrate_status > TASK_NOT_MIGRATED) /* make sure limitation does not affect migrated tasks */) 
     {
         int potential_alt_src = 0;
-        if( PARSEC_DEV_CUDA == in_elem_dev->super.super.type ) {
-            if( gpu_device->peer_access_mask & (1 << in_elem_dev->cuda_index) ) {
+        if( (PARSEC_DEV_CUDA == in_elem_dev->super.super.type) && 
+            /* if the migrated task is one whose data has already been staged in we will always
+               use the posssible candidate we have identified*/
+            (gpu_task->migrate_status != TASK_MIGRATED_AFTER_STAGE_IN)) 
+        {
+            if( gpu_device->peer_access_mask & (1 << in_elem_dev->cuda_index) ) 
+            {
                 /* We can directly do D2D, so let's skip the selection */
-                        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 1) to Device to Device copy",
                  gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
                  
-                 if(gpu_task->migrate_status > TASK_NOT_MIGRATED)
-                 {
-                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(in_elem);
-                    undo_readers_inc_if_no_transfer = 1;
-                 }
-
                 goto src_selected;
             }
         }
@@ -1480,12 +1481,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                             PARSEC_OBJ_RELEASE(task_data->data_in);  
                     }
 
-                    /**
-                     * Why do we need this increment. For some reason, if this increment is not
-                     * done the reader goes to 0, when the number of CUDA device is greater than 2.
-                     */
-                    //if(parsec_cuda_migrate_tasks)
-                    //    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     task_data->data_in = candidate;
                     in_elem = candidate;
                     in_elem_dev = target;
