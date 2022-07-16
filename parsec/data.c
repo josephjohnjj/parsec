@@ -206,8 +206,6 @@ int parsec_data_copy_detach(parsec_data_t* data,
      */
     if( data->owner_device == device)
     {
-        parsec_atomic_lock( &data->lock );
-
         for( i = 0; i < parsec_nb_devices; i++ ) 
         {
             if( i == device) continue;
@@ -220,29 +218,25 @@ int parsec_data_copy_detach(parsec_data_t* data,
             
             data->owner_device = data->device_copies[i]->device_index;
             new_owner_copy = data->device_copies[i];
+            break;
         }
-
-        parsec_atomic_unlock( &data->lock );
 
         if( (new_owner_copy == NULL) && (younger_version == -1) ) 
         {
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
                          "DEV[%d]: parsec_data_copy_detach failed to identify new owner (last copy): original %p device_copy %p",
                          device, data, copy);
-            data->owner_device = -1;
         }
         if( (new_owner_copy == NULL) && (device > 1) && (younger_version > -1) ) 
         {
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
                          "DEV[%d]: parsec_data_copy_detach failed to identify new owner (younger version exists in device %d): original %p device_copy %p",
                          device, younger_version, data, copy);
-            //assert(0);
         }
         if( new_owner_copy != NULL ) 
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
                          "DEV[%d]: identified new owner for original %p : device_copy %p  on device_index %d (old owner was copy %p on device_index %d)",
                          device, data, new_owner_copy, new_owner_copy->device_index, copy, copy->device_index);
-
     }
 
     parsec_data_copy_t* obj = data->device_copies[device];
