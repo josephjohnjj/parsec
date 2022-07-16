@@ -533,9 +533,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
 
                 if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
-                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-                else
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
+                else
+                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
             /**
              * If the task has only read.wtite access, the data may have been modified
@@ -552,9 +552,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
 
                 if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
-                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-                else
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
+                else
+                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
             /**
              * If the task has a write only option, the taks should have written to it. But as we
