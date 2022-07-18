@@ -36,6 +36,8 @@ typedef struct parsec_device_cuda_info_s
     int level1;
     int level2;
     int received;
+    int last_device;
+    int iam_starving;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
