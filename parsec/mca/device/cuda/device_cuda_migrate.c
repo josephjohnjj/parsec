@@ -266,7 +266,7 @@ int find_starving_device(int dealer_device)
 {
     int i = 0;
     int starving_device = 0;
-    int next_device = ( (device_info[dealer_device].last_device) + 1) / NDEVICES;
+    int next_device = ( (device_info[dealer_device].last_device) + 1) % NDEVICES;
     int final_device = next_device + NDEVICES;
 
     // use a round robin method to find starving device
@@ -278,7 +278,7 @@ int find_starving_device(int dealer_device)
             continue;
 
         if (is_starving(starving_device))
-            return i;
+            return starving_device;
     }
 
     return -1;
