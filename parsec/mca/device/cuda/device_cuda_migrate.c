@@ -72,6 +72,8 @@ int parsec_cuda_migrate_init(int ndevices)
         device_info[i].level2 = 0;
         device_info[i].total_tasks_executed = 0;
         device_info[i].received = 0;
+        device_info[i].last_device = i;
+        device_info[i].iam_starving = 1;
     }
 
 #if defined(PARSEC_HAVE_CUDA)
@@ -177,7 +179,6 @@ int parsec_cuda_get_device_load(int device)
 int parsec_cuda_set_device_load(int device, int load)
 {
     int rc = parsec_atomic_fetch_add_int32(&(device_info[device].load), load);
-    return rc + load;
 }
 
 /**
@@ -263,14 +264,20 @@ int will_starve(int device)
  */
 int find_starving_device(int dealer_device)
 {
-    int i;
+    int i = 0;
+    int starving_device = 0;
+    int next_device = ( (device_info[dealer_device].last_device) + 1) / NDEVICES;
+    int final_device = next_device + NDEVICES;
 
-    for (i = 0; i < NDEVICES; i++)
+    // use a round robin method to find starving device
+    for(i = next_device; i <  final_device; i++)
     {
-        if (i == dealer_device)
+        starving_device = i % NDEVICES;
+
+        if (starving_device == dealer_device)
             continue;
 
-        if (is_starving(i))
+        if (is_starving(starving_device))
             return i;
     }
 
@@ -463,6 +470,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
 
         parsec_cuda_mig_task_enqueue(es, mig_task);
+        device_info[dealer_device_index].last_device = starving_device_index;
 
         char tmp[MAX_TASK_STRLEN];
         PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d: nb_migrated %d",
