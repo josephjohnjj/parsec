@@ -508,7 +508,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
         if (stage_in_status == TASK_MIGRATED_AFTER_STAGE_IN)
         {
             parsec_data_t *original = task->data[i].data_out->original;
-            parsec_atomic_lock(&original->lock);
 
             task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
             /**
@@ -584,8 +583,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
             assert(task->data[i].data_out->device_private != NULL);
             assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
-
-            parsec_atomic_unlock(&original->lock);
         }
         else //TASK_MIGRATED_BEFORE_STAGE_IN
         {
@@ -603,8 +600,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 assert(original->device_copies[0] != NULL);
                 assert(original->device_copies[original->owner_device] != NULL);
 
-                parsec_atomic_lock(&original->lock);
-
                 task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
                 /**
                  * we set a possible candidate for this flow of the task. This will allow
@@ -621,7 +616,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                                      task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
                                      starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
 
-                parsec_atomic_unlock(&original->lock);
             }
         }
     }
