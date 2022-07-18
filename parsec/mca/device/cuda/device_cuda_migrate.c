@@ -579,7 +579,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
 
-            PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
+            PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
                                  task->data[i].data_out, original, task->data[i].data_out->readers,
                                  task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
@@ -618,7 +618,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
                 assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
 
-                PARSEC_DEBUG_VERBOSE(10, parsec_debug_output,
+                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                      "Migrate: data %p attached to original %p [readers %d, ref_count %d] possiible candidate from device %d to %d (stage_in: %d)",
                                      task->data[i].data_out, original, task->data[i].data_out->readers,
                                      task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
