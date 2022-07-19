@@ -847,7 +847,7 @@ parsec_cuda_flush_lru( parsec_device_module_t *device )
     if( (in_use = zone_in_use(gpu_device->memory)) != 0 ) {
         parsec_warning("GPU[%s] memory leak detected: %lu bytes still allocated on GPU",
                        device->name, in_use);
-        assert(0);
+        //assert(0);
     }
 #endif
     return PARSEC_SUCCESS;
@@ -1352,7 +1352,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         {
             if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) && 
                 /* Anti depdendency like behaviour may happen during task migration */
-                (gpu_task->migrate_status > TASK_NOT_MIGRATED) ) {
+                (gpu_task->migrate_status > TASK_NOT_MIGRATED) ) 
+            {
                 parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
                                "(possible anti-dependency,\n"
                                "or concurrent accesses), please prevent that with CTL dependencies\n",
@@ -1636,8 +1637,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 gpu_device->super.nb_data_faults += nb_elts;
 
             ///* update the data version in GPU immediately, and mark the data under transfer */
-            assert((gpu_elem->version != in_elem->version) || (gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_NOT_TRANSFER)
-			     || (gpu_task->migrate_status > TASK_NOT_MIGRATED));
+            //assert((gpu_elem->version != in_elem->version) || (gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_NOT_TRANSFER)
+			//     || (gpu_task->migrate_status > TASK_NOT_MIGRATED));
             gpu_elem->version = in_elem->version;
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "GPU[%s]: GPU copy %p [ref_count %d] gets the same version %d as copy %p [ref_count %d] at %s:%d",
