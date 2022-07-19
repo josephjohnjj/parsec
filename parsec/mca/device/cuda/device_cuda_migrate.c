@@ -1,6 +1,8 @@
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
 
 extern int parsec_device_cuda_enabled;
+extern int parsec_cuda_migrate_chunk_size;
+
 parsec_device_cuda_info_t *device_info;
 static parsec_list_t *migrated_task_list;
 static int NDEVICES;
@@ -362,7 +364,7 @@ int parsec_cuda_mig_task_enqueue(parsec_execution_stream_t *es, migrated_task_t 
 int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device)
 {
     int starving_device_index = -1, dealer_device_index = 0;
-    int nb_migrated = 0, execution_level = 0, stream_index = 0, j = 0, k = 0;
+    int nb_migrated = 0, execution_level = 0, stream_index = 0, i = 0, j = 0, k = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
     parsec_device_gpu_module_t *starving_device = NULL;
     migrated_task_t *mig_task = NULL;
@@ -376,107 +378,120 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
         return 0;
     starving_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
 
-    /**
-     * @brief Tasks are searched in different levels one by one. At this point we assume
-     * that the cost of migration increases, as the level increase.
-     */
-    migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(&(dealer_device->pending)); // level 0
-    execution_level = 0;
-    if (migrated_gpu_task == NULL)
+    for (i = 0; i < parsec_cuda_migrate_chunk_size; i++)
     {
-        migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
-        execution_level = 1;
-
+        /**
+         * @brief Tasks are searched in different levels one by one. At this point we assume
+         * that the cost of migration increases, as the level increase.
+         */
+        migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(&(dealer_device->pending)); // level 0
+        execution_level = 0;
         if (migrated_gpu_task == NULL)
         {
-            for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+            migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
+            execution_level = 1;
+
+            if (migrated_gpu_task == NULL)
             {
-                migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
-                if (migrated_gpu_task != NULL)
+                for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
                 {
-                    execution_level = 2;
-                    stream_index = 2 + j;
-                    break;
+                    migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
+                    if (migrated_gpu_task != NULL)
+                    {
+                        execution_level = 2;
+                        stream_index = 2 + j;
+                        break;
+                    }
                 }
             }
         }
-    }
 
-    if (migrated_gpu_task != NULL)
-    {
-        assert(migrated_gpu_task->ec != NULL);
-        PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)migrated_gpu_task);
-        /**
-         * @brief if the task is a not a computational kerenel or if it is a task that has
-         * already been migrated, we stop the migration and push it back to the queue.
-         */
-        if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
+        if (migrated_gpu_task != NULL)
         {
-            if (execution_level == 0)
-                parsec_list_push_back(&(dealer_device->pending), (parsec_list_item_t *)migrated_gpu_task);
-            if (execution_level == 1)
-                parsec_list_push_back(dealer_device->exec_stream[0]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
-            if (execution_level == 2)
-                parsec_list_push_back(dealer_device->exec_stream[stream_index]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
+            assert(migrated_gpu_task->ec != NULL);
+            PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)migrated_gpu_task);
+            /**
+             * @brief if the task is a not a computational kerenel or if it is a task that has
+             * already been migrated, we stop the migration and push it back to the queue.
+             */
+            if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
+            {
+                if (execution_level == 0)
+                {
+                    parsec_list_push_back(&(dealer_device->pending), (parsec_list_item_t *)migrated_gpu_task);
+                    migrated_gpu_task = NULL;
+                }
+                else if (execution_level == 1)
+                {
+                    parsec_list_push_back(dealer_device->exec_stream[0]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
+                    migrated_gpu_task = NULL;
+                }
+                else if (execution_level == 2)
+                {
+                    parsec_list_push_back(dealer_device->exec_stream[stream_index]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
+                    migrated_gpu_task = NULL;
+                }
+            }
 
-            return nb_migrated;
+            if( migrated_gpu_task != NULL ) //make sure the task was not returned to the queue
+            {
+
+                if (execution_level == 0)
+                {
+                    parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
+                    device_info[dealer_device_index].level0++;
+                }
+                if (execution_level == 1)
+                {
+                    parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
+                    device_info[dealer_device_index].level1++;
+                }
+                if (execution_level == 2)
+                {
+                    parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
+                    device_info[dealer_device_index].level2++;
+                }
+                nb_migrated++;
+                parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
+
+                /**
+                 * @brief change migrate_status according to the status of the stage in of the
+                 * stage_in data.
+                 */
+                if (execution_level == 2)
+                    migrated_gpu_task->migrate_status = TASK_MIGRATED_AFTER_STAGE_IN;
+                else
+                    migrated_gpu_task->migrate_status = TASK_MIGRATED_BEFORE_STAGE_IN;
+
+                /**
+                 * @brief An object of type migrated_task_t is created store the migrated task
+                 * and other associated details. This object is enqueued to a node level queue.
+                 * The main objective of this was to make sure that the manager does not have to sepend
+                 * time on migration. It can select the task for migration, enqueue it to the node level
+                 * queue and then return to its normal working.
+                 */
+                mig_task = (migrated_task_t *)calloc(1, sizeof(migrated_task_t));
+                PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
+                mig_task->gpu_task = migrated_gpu_task;
+                for (k = 0; k < MAX_PARAM_COUNT; k++) migrated_gpu_task->posssible_candidate[k] = -1;
+                mig_task->dealer_device = dealer_device;
+                mig_task->starving_device = starving_device;
+                mig_task->stage_in_status = (execution_level == 2) ? TASK_MIGRATED_AFTER_STAGE_IN : TASK_MIGRATED_BEFORE_STAGE_IN;
+                PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
+
+                parsec_cuda_mig_task_enqueue(es, mig_task);
+                device_info[dealer_device_index].last_device = starving_device_index;
+
+                char tmp[MAX_TASK_STRLEN];
+                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d: nb_migrated %d",
+                                     parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)migrated_gpu_task)->ec),
+                                     execution_level, mig_task->stage_in_status, dealer_device_index, starving_device_index, nb_migrated);
+            }
         }
 
-        assert((migrated_gpu_task != NULL) && (migrated_gpu_task->ec != NULL));
-
-        if (execution_level == 0)
-        {
-            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
-            device_info[dealer_device_index].level0++;
-        }
-        if (execution_level == 1)
-        {
-            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
-            device_info[dealer_device_index].level1++;
-        }
-        if (execution_level == 2)
-        {
-            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
-            device_info[dealer_device_index].level2++;
-        }
-        nb_migrated++;
-        parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
-
-        /**
-         * @brief change migrate_status according to the status of the stage in of the
-         * stage_in data.
-         */
-        if (execution_level == 2)
-            migrated_gpu_task->migrate_status = TASK_MIGRATED_AFTER_STAGE_IN;
-        else
-            migrated_gpu_task->migrate_status = TASK_MIGRATED_BEFORE_STAGE_IN;
-
-        /**
-         * @brief An object of type migrated_task_t is created store the migrated task
-         * and other associated details. This object is enqueued to a node level queue.
-         * The main objective of this was to make sure that the manager does not have to sepend
-         * time on migration. It can select the task for migration, enqueue it to the node level
-         * queue and then return to its normal working.
-         */
-        mig_task = (migrated_task_t *)calloc(1, sizeof(migrated_task_t));
-        PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
-        mig_task->gpu_task = migrated_gpu_task;
-        // memset(migrated_gpu_task->posssible_candidate, -1, sizeof(int32_t));
-        for (k = 0; k < MAX_PARAM_COUNT; k++)
-            migrated_gpu_task->posssible_candidate[k] = -1;
-        mig_task->dealer_device = dealer_device;
-        mig_task->starving_device = starving_device;
-        mig_task->stage_in_status = (execution_level == 2) ? TASK_MIGRATED_AFTER_STAGE_IN : TASK_MIGRATED_BEFORE_STAGE_IN;
-        PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
-
-        parsec_cuda_mig_task_enqueue(es, mig_task);
-        device_info[dealer_device_index].last_device = starving_device_index;
-
-        char tmp[MAX_TASK_STRLEN];
-        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d: nb_migrated %d",
-                             parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)migrated_gpu_task)->ec),
-                             execution_level, mig_task->stage_in_status, dealer_device_index, starving_device_index, nb_migrated);
-    }
+        if (will_starve(dealer_device_index))
+            break;
+    } //end for
 
     migrated_gpu_task = NULL;
     /* update the expected load on the GPU device */
