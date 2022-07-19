@@ -50,6 +50,7 @@ static int parsec_cuda_flush_lru( parsec_device_module_t *device );
 
 extern int parsec_cuda_migrate_tasks;
 extern int parsec_cuda_iterative;
+extern int parsec_cuda_migrate_chunk_size;
 extern int parsec_gpu_task_count_start;
 extern int parsec_gpu_task_count_end;
 
@@ -3019,8 +3020,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         nb_migrated = migrate_to_starving_device(es,  gpu_device);
         if( nb_migrated > 0 )   
         {
-            rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
-            if( 1 == rc ) 
+            rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * nb_migrated);
+            if( 0 == gpu_device->mutex ) 
             {  /* I was the last one */
             #if defined(PARSEC_PROF_TRACE)
                 if( parsec_gpu_trackable_events & PARSEC_PROFILE_GPU_TRACK_OWN )

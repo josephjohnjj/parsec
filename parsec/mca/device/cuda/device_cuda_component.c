@@ -42,6 +42,7 @@ int parsec_cuda_memory_block_size, parsec_cuda_memory_percentage, parsec_cuda_me
 char* parsec_cuda_lib_path = NULL;
 int parsec_cuda_migrate_tasks = 0;
 int parsec_cuda_iterative = 0;
+int parsec_cuda_migrate_chunk_size = 0;
 
 static int cuda_mask, cuda_nvlink_mask;
 
@@ -205,6 +206,9 @@ static int device_cuda_component_register(void)
     (void)parsec_mca_param_reg_int_name("device_cuda", "iterative",
                                         "Boolean to let the GPU know the workload is iterative",
                                         false, false, 0, &parsec_cuda_iterative);
+    (void)parsec_mca_param_reg_int_name("device_cuda", "migrate_chunk_size",
+                                        "Integer to let the GPU know the number of tasks to be migrated in a single go",
+                                        false, false, 5, &parsec_cuda_migrate_chunk_size);
 
 #if defined(PARSEC_PROF_TRACE)
     (void)parsec_mca_param_reg_int_name("device_cuda", "one_profiling_stream_per_cuda_stream",
