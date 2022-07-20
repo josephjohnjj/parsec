@@ -1388,6 +1388,18 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 1) to Device to Device copy",
                  gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
+
+                /**
+                 * @brief For tasks migrated after stage_ in, during the first stage_in 
+                 * we would have increased the refcount of the data_in. If the task was not 
+                 * migrated, then the generated code would have decremented this refcount after 
+                 * the task was executed. But now as we have migrated the task, this decrement 
+                 * will not happen. So we remeber the the first data_in and the remembered
+                 * data_in will me RELEASED after task completion. 
+                 */
+                    
+                if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
+                    gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
                  
                 goto src_selected;
             }
@@ -1423,19 +1435,14 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                  gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
 
                 /**
-                 * If we change the data_in of a task, we should RELEASE it only after the task
-                 * is complete. Or else it may cause problem for special cases in PTG, when calling
-                 * the data reshape associated with iterate successor (For instance this happens when
-                 * NEW is called for a data created solely in the GPU). To mitigate this problem we
-                 * save the original data_in to be released in the end.
+                 * @brief We have remembered the data_in of the first stage_in. If the current
+                 * data_in is not same as the first stage_in RELEASE it, as we will not be using
+                 * it.
                  */
-                if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
-                    gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
-                else
-                {
-                    if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-                        PARSEC_OBJ_RELEASE(task_data->data_in);
-                }
+                if( (gpu_task->original_data_in[ flow->flow_index ] != NULL)
+                    && (gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in) )
+                    PARSEC_OBJ_RELEASE(task_data->data_in); 
+
                 task_data->data_in = candidate;
                 in_elem = candidate;
                 in_elem_dev = target;
@@ -1476,14 +1483,18 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     undo_readers_inc_if_no_transfer = 1;
                     /* We swap data_in with candidate, so we update the reference counters */
                     PARSEC_OBJ_RETAIN(candidate);
+
+                    /**
+                     * @brief For tasks migrated after stage_ in, during the first stage_in 
+                     * we would have increased the refcount of the data_in. If the task was not 
+                     * migrated, then the generated code would have decremented this refcount after 
+                     * the task was executed. But now as we have migrated the task, this decrement 
+                     * will not happen. So we remeber the the first data_in and the remembered
+                     * data_in will me RELEASED after task completion.
+                     */
                     
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
-                    else
-                    {
-                        if( gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-                            PARSEC_OBJ_RELEASE(task_data->data_in);  
-                    }
 
                     task_data->data_in = candidate;
                     in_elem = candidate;
@@ -1533,9 +1544,17 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     }
 
     /* Do not need to be tranferred */
-    if( -1 == transfer_from ) {
+    if( -1 == transfer_from ) 
+    {
         gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
-    } else {
+
+        if( undo_readers_inc_if_no_transfer )
+        {
+            PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
+        }
+    } 
+    else 
+    {
         /* Update the transferred required_data_in size */
         gpu_device->super.required_data_in += original->nb_elts;
 
@@ -1655,12 +1674,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         parsec_atomic_unlock( &original->lock );
         return 1;
     }
-
-    if( undo_readers_inc_if_no_transfer )
-    {
-        PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
-    }
-    assert( gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER );
+    assert( transfer_from == -1 || gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER );
 
     parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
 
@@ -2940,6 +2954,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->ec = NULL;
         goto remove_gpu_task;
     }
+
+    /**
+     * @brief For tasks migrated after stage_ in, during the first stage_in 
+     * we would have increased the refcount of the data_in. If the task was not 
+     * migrated, then the generated code would have decremented this refcount after 
+     * the task was executed. But now as we have migrated the task, this decrement 
+     * will not happen. Here we RELEASE the remembered data_in of the task.
+     */
 
     int f = 0;
     for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
