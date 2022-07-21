@@ -1390,7 +1390,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                  gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
 
                 /**
-                 * @brief For tasks migrated after stage_ in, during the first stage_in 
+                 * @brief For tasks migrated after stage_in, during the first stage_in 
                  * we would have increased the refcount of the data_in. If the task was not 
                  * migrated, then the generated code would have decremented this refcount after 
                  * the task was executed. But now as we have migrated the task, this decrement 
@@ -1400,6 +1400,15 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     
                 if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                     gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
+                else
+                {
+                    /**
+                     * @brief gpu_task->original_data_in[ flow->flow_index ] should not be
+                     *  NULL only for tasks of type TASK_MIGRATED_AFTER_STAGE_IN
+                     */
+                    
+                    assert(0);
+                }
                  
                 goto src_selected;
             }
@@ -1492,6 +1501,15 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
+                    else
+                    {
+                        /**
+                         * @brief gpu_task->original_data_in[ flow->flow_index ] should not be
+                         *  NULL only for tasks of type TASK_MIGRATED_AFTER_STAGE_IN. For the first
+                         * stage_in it should never be anything other than NULL.
+                         */
+                        assert(0);
+                    }
 
                     PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     undo_readers_inc_if_no_transfer = 1;
