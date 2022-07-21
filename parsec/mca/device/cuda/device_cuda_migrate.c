@@ -581,7 +581,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
             /**
-             * If the task has only read.wtite access, the data may have been modified
+             * If the task has only read-write access, the data may have been modified
              * by another task, and it may be 'dirty'. We check the version of the data
              * to verify if it is dirty. If it is, then it is pushed to gpu_mem_owned_lru,
              * if not is is pused to gpu_mem_lru.
@@ -600,19 +600,20 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
             /**
-             * If the task has a write only option, the taks should have written to it. But as we
-             * are migrating the task this write will never happen. So this data can be evicted
-             * immediatly. To ensure this eviction, we push the data to gpu_mem_lru.
+             * If the task has a write only option, so the readers will be be 0. If we push it to
+             * gpu_mem_lru it may get evicted before we can usee it as a possible candidate for the
+             * next stage_in. So we push it to gpu_mem_owned_lru.
              */
             if (!(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
                 assert(task->data[i].data_out->readers == 0);
+                assert(task->data[i].data_out->super.super.obj_reference_count == 1);
 
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-                assert(task->data[i].data_out->super.super.obj_reference_count == 1);
-                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
+                
+                parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
 
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
