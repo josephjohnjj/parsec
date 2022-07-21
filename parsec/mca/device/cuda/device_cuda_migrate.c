@@ -549,6 +549,10 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
         {
             parsec_data_t *original = task->data[i].data_out->original;
 
+            assert(original->device_copies[dealer_device->super.device_index] != NULL);
+            assert(original->device_copies[dealer_device->super.device_index] == task->data[i].data_out);
+            assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
+
             task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
             /**
              * we set a possible candidate for this flow of the task. This will allow
@@ -616,13 +620,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                                  task->data[i].data_out, original, task->data[i].data_out->readers,
                                  task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
                                  starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
-
-            assert(task->data[i].data_out != NULL);
-            assert(original->device_copies[dealer_device->super.device_index] != NULL);
-            assert(original->device_copies[dealer_device->super.device_index] == task->data[i].data_out);
-            assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
-            assert(task->data[i].data_out->device_private != NULL);
-            assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
         }
         else // TASK_MIGRATED_BEFORE_STAGE_IN
         {

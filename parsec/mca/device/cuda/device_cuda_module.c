@@ -1421,6 +1421,21 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
             if( PARSEC_DEV_CUDA == target->super.super.type && candidate != NULL )
             {
+                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                 "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 2) to Device to Device copy",
+                 gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
+
+                /**
+                 * @brief We have remembered the data_in of the first stage_in. If the current
+                 * data_in is not (will not) be the same as the first stage_in, so RELEASE it, 
+                 * as we will not be using it.
+                 */
+                if( (gpu_task->original_data_in[ flow->flow_index ] != NULL)  )
+                {
+                    if(gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
+                        PARSEC_OBJ_RELEASE(task_data->data_in); 
+                }
+
                 /**
                  * if the data was already staged_in then we would have already incremented
                  * the reader for it. 
@@ -1428,21 +1443,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 if(gpu_task->migrate_status == TASK_MIGRATED_BEFORE_STAGE_IN)
                     PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                 undo_readers_inc_if_no_transfer = 1;
-
+                /* We swap data_in with candidate, so we update the reference counters */
                 PARSEC_OBJ_RETAIN(candidate);
-                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                 "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 2) to Device to Device copy",
-                 gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
-
-                /**
-                 * @brief We have remembered the data_in of the first stage_in. If the current
-                 * data_in is not same as the first stage_in RELEASE it, as we will not be using
-                 * it.
-                 */
-                if( (gpu_task->original_data_in[ flow->flow_index ] != NULL)
-                    && (gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in) )
-                    PARSEC_OBJ_RELEASE(task_data->data_in); 
-
                 task_data->data_in = candidate;
                 in_elem = candidate;
                 in_elem_dev = target;
@@ -1479,11 +1481,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                                          "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate (case 3) to Device to Device copy, increasing its readers to %d",
                                          gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
 
-                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
-                    undo_readers_inc_if_no_transfer = 1;
-                    /* We swap data_in with candidate, so we update the reference counters */
-                    PARSEC_OBJ_RETAIN(candidate);
-
                     /**
                      * @brief For tasks migrated after stage_ in, during the first stage_in 
                      * we would have increased the refcount of the data_in. If the task was not 
@@ -1496,6 +1493,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
 
+                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
+                    undo_readers_inc_if_no_transfer = 1;
+                    /* We swap data_in with candidate, so we update the reference counters */
+                    PARSEC_OBJ_RETAIN(candidate);
                     task_data->data_in = candidate;
                     in_elem = candidate;
                     in_elem_dev = target;
