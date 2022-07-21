@@ -37,7 +37,6 @@ typedef struct parsec_device_cuda_info_s
     int level2;
     int received;
     int last_device;
-    int iam_starving;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
@@ -63,8 +62,6 @@ typedef struct gpu_dev_prof_s
 
 int parsec_cuda_migrate_init(int ndevices);
 int parsec_cuda_migrate_fini();
-int parsec_cuda_get_device_load(int device);
-int parsec_cuda_set_device_load(int device, int load);
 int parsec_cuda_get_device_task(int device, int level);
 int parsec_cuda_set_device_task(int device, int task_count, int level);
 int parsec_cuda_tasks_executed(int device);

@@ -1,12 +1,12 @@
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
 
 extern int parsec_device_cuda_enabled;
-extern int parsec_cuda_migrate_chunk_size;
+extern int parsec_cuda_migrate_chunk_size; // chunks of task migrated to a device (default=5)
 
 parsec_device_cuda_info_t *device_info;
-static parsec_list_t *migrated_task_list;
-static int NDEVICES;
-static parsec_hash_table_t *task_mapping_ht = NULL;
+static parsec_list_t *migrated_task_list;           // list of all migrated task
+static int NDEVICES;                                // total number of GPUs
+static parsec_hash_table_t *task_mapping_ht = NULL; // hashtable for storing task mapping
 static int task_migrated_per_tp = 0;
 static int tp_count;
 
@@ -33,7 +33,6 @@ static void task_mapping_ht_free_elt(void *_item, void *table)
 
 static void gpu_dev_profiling_init()
 {
-    // const char *gpu_dev_prof_info_str = "exec_time{double};device_index{int32_t};task_count{int32_t}";
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
                                             sizeof(gpu_dev_prof_t),
                                             "device_index{int32_t};task_count{int32_t}",
@@ -75,15 +74,11 @@ int parsec_cuda_migrate_init(int ndevices)
         device_info[i].total_tasks_executed = 0;
         device_info[i].received = 0;
         device_info[i].last_device = i;
-        device_info[i].iam_starving = 1;
     }
-
-#if defined(PARSEC_HAVE_CUDA)
-    nvml_ret = nvmlInit_v2();
-#endif
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
     parsec_hash_table_init(task_mapping_ht, offsetof(task_mapping_item_t, ht_item), 16, task_mapping_table_generic_key_fn, NULL);
+
 #if defined(PARSEC_PROF_TRACE)
     gpu_dev_profiling_init();
 #endif
@@ -142,48 +137,6 @@ double current_time()
 }
 
 /**
- * @brief returns the load of a particular device
- *
- * nvml_utilization has two fields - gpu and memory
- * gpu - Percent of time over the past sample period during which one or more kernels was executing on the GPU.
- * memory - Percent of time over the past sample period during which global (device) memory was being read or written
- *
- * @param device index of the device
- * @return int
- */
-
-int parsec_cuda_get_device_load(int device)
-{
-#if defined(PARSEC_HAVE_CUDA)
-    nvmlDevice_t nvml_device;
-    nvmlUtilization_t nvml_utilization;
-    nvmlReturn_t nvml_ret;
-
-    nvmlDeviceGetHandleByIndex_v2(device, &nvml_device);
-    nvml_ret = nvmlDeviceGetUtilizationRates(nvml_device, &nvml_utilization);
-    device_info[device].load = nvml_utilization.gpu;
-
-// printf("NVML Device Load GPU %d Memory %d \n", nvml_utilization.gpu, nvml_utilization.memory);
-#else
-    device_info[device].load = device_info[device].task_count;
-#endif /* PARSEC_HAVE_CUDA */
-
-    return device_info[device].load;
-}
-
-/**
- * @brief sets the load of a particular device
- *
- * @param device index of the device
- * @return int
- */
-
-int parsec_cuda_set_device_load(int device, int load)
-{
-    int rc = parsec_atomic_fetch_add_int32(&(device_info[device].load), load);
-}
-
-/**
  * @brief returns the number of tasks in a particular device
  *
  * @param device index of the device
@@ -216,7 +169,7 @@ int parsec_cuda_set_device_task(int device, int task_count, int level)
 }
 
 /**
- * @brief sets the load of a particular device
+ * @brief Incerement the total task executed by a device
  *
  * @param device index of the device
  * @return int
@@ -375,19 +328,13 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
         return 0;
 
     // parse all available device looking for starving devices.
-    int d_first = (device_info[dealer_device_index].last_device + 1 ) % NDEVICES;
+    int d_first = (device_info[dealer_device_index].last_device + 1) % NDEVICES;
     for (d = d_first; d < (d_first + NDEVICES); d++)
     {
-
-        //starving_device_index = find_starving_device(dealer_device_index);
-        //if (starving_device_index == -1)
-        //    return 0;
-        //starving_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
-
         starving_device_index = d % NDEVICES;
-        if (d == dealer_device_index || !(is_starving(starving_device_index)) )
+        if (d == dealer_device_index || !(is_starving(starving_device_index)))
             continue;
-        
+
         starving_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
 
         for (i = 0; i < parsec_cuda_migrate_chunk_size; i++)
@@ -396,10 +343,13 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
              * @brief Tasks are searched in different levels one by one. At this point we assume
              * that the cost of migration increases, as the level increase.
              */
+
+            // level 0 - task is just pushed to the device queue
             migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(&(dealer_device->pending)); // level 0
             execution_level = 0;
             if (migrated_gpu_task == NULL)
             {
+                // level1 - task is aavailble in the stage_in queue. Stage_in not started.
                 migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
                 execution_level = 1;
 
@@ -407,6 +357,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                 {
                     for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
                     {
+                        // level2 - task is available in one of the execution queue stage_in is complete
                         migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
                         if (migrated_gpu_task != NULL)
                         {
@@ -484,15 +435,17 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                      */
                     mig_task = (migrated_task_t *)calloc(1, sizeof(migrated_task_t));
                     PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
+
                     mig_task->gpu_task = migrated_gpu_task;
                     for (k = 0; k < MAX_PARAM_COUNT; k++)
                         migrated_gpu_task->posssible_candidate[k] = -1;
                     mig_task->dealer_device = dealer_device;
                     mig_task->starving_device = starving_device;
                     mig_task->stage_in_status = (execution_level == 2) ? TASK_MIGRATED_AFTER_STAGE_IN : TASK_MIGRATED_BEFORE_STAGE_IN;
-                    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
 
+                    PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
                     parsec_cuda_mig_task_enqueue(es, mig_task);
+
                     device_info[dealer_device_index].last_device = starving_device_index;
 
                     char tmp[MAX_TASK_STRLEN];
@@ -507,8 +460,8 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
         } // end for i
 
         if (will_starve(dealer_device_index))
-                break;
-    }     // end for d
+            break;
+    } // end for d
 
     migrated_gpu_task = NULL;
     /* update the expected load on the GPU device */
@@ -612,7 +565,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-                
+
                 parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
 
@@ -700,6 +653,11 @@ int update_task_to_device_mapping(parsec_task_t *task, int device_index)
     task_mapping_item_t *item;
 
     key = task->task_class->make_key(task->taskpool, task->locals);
+
+    /**
+     * @brief Entry NULL imples that this task has never been migrated
+     * till now in any of the iteration. So we start a new entry.
+     */
     if (NULL == (item = parsec_hash_table_nolock_find(task_mapping_ht, key)))
     {
 
