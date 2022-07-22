@@ -1506,15 +1506,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
-                    else
-                    {
-                        /**
-                         * @brief gpu_task->original_data_in[ flow->flow_index ] should not be
-                         *  NULL only for tasks of type TASK_MIGRATED_AFTER_STAGE_IN. For the first
-                         * stage_in it should never be anything other than NULL.
-                         */
-                        assert(0);
-                    }
 
                     PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
                     undo_readers_inc_if_no_transfer = 1;
