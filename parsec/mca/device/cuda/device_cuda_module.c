@@ -2864,6 +2864,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
         /* If we can extract data go for it, otherwise try to drain the pending tasks */
         gpu_task = parsec_gpu_create_w2r_task(gpu_device, es);
+        
+        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Creating parsec_gpu_create_w2r_task on GPU[%s] dev_index %d",
+         gpu_device->super.name, gpu_device->super.device_index);
+
         if( NULL != gpu_task )
             goto get_data_out_of_device;
     }
