@@ -532,6 +532,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
                 else
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
+
+                //why not just?
+                //parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
             /**
              * If the task has only read-write access, the data may have been modified
@@ -551,6 +554,9 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
                 else
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
+
+                //why not just?
+                //parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
             }
             /**
              * If the task has a write only option, so the readers will be be 0. If we push it to
