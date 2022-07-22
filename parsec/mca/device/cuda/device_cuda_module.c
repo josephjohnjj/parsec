@@ -816,7 +816,7 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
         int i, ref_count;
         if( gpu_copy != NULL)
         {
-            parsec_warning("parsec_cuda_memory_release_list: Release copy %p original %d readers %d ref_count %d. The copy should have been NULL by this point!! (%s:%d)", 
+            parsec_warning("parsec_cuda_memory_release_list: Release copy %p original %p readers %d ref_count %d. The copy should have been NULL by this point!! (%s:%d)", 
             gpu_copy, gpu_copy->original, gpu_copy->readers, gpu_copy->super.super.obj_reference_count, __FILE__, __LINE__);
 
             //ref_count = gpu_copy->super.super.obj_reference_count;
@@ -971,7 +971,6 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
         gpu_elem->device_private = zone_malloc(gpu_device->memory, gpu_task->flow_nb_elts[i]);
         if( NULL == gpu_elem->device_private ) {
 #endif
-
           find_another_data:
             /* Look for a data_copy to free */
             lru_gpu_elem = (parsec_gpu_data_copy_t*)parsec_list_pop_front(&gpu_device->gpu_mem_lru);
@@ -1020,6 +1019,12 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
              * always remove the data from the LRU.
              */
             if( 0 != lru_gpu_elem->readers ) {
+
+                parsec_warning("GPU[%s]:%s: Drop LRU-retrieved CUDA copy: data_copy %p [ original %p readers %d refcount %d ]",
+                    gpu_device->super.name, task_name,
+                    lru_gpu_elem, lru_gpu_elem->original, lru_gpu_elem->readers, 
+                    lru_gpu_elem->super.super.obj_reference_count);
+
                 PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                                      "GPU[%s]:%s: Drop LRU-retrieved CUDA copy %p [readers %d, ref_count %d] original %p",
                                      gpu_device->super.name, task_name,
