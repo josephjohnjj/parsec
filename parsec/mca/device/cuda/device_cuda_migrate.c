@@ -548,6 +548,8 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
                 assert(task->data[i].data_out->readers > 0);
+                assert(original->device_copies[0] != NULL);
+                assert(task->data[i].data_in == original->device_copies[0]);
 
                 /**
                  * we set a possible candidate for this flow of the task. This will allow
@@ -596,8 +598,17 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                                  task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
                                  starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
         }
+       
         else // TASK_MIGRATED_BEFORE_STAGE_IN
         {
+            /**
+             * @brief If the data of the task has not been staged in we can revert to 
+             * the existing stage in mechanism, as all the data it needs is pointed
+             * by data_in and data_out has not been allocated in any of the GPU as we have
+             * not started the stage_in process yet.
+             */
+
+             #if 0
             assert(task->data[i].data_in != NULL);
 
             if (/* This condition is required as task->data[i].data_out may be poitining to a junk value*/
@@ -628,6 +639,8 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                                      task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
                                      starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
             }
+
+            #endif
         }
     }
 
