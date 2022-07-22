@@ -185,6 +185,10 @@ size_t zone_in_use(zone_malloc_t *gdata)
         current_tid += current_segment->nb_units) {
         if( current_segment->status == SEGMENT_FULL ) {
             ret += gdata->unit_size * current_segment->nb_units;
+
+            PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, 
+                "Zone in use for device memory %p segment %p unit_size %d nb_units %d",
+                gdata, gdata->segments[current_tid], gdata->unit_size, current_segment->nb_units);
         }
     }
     return ret;
