@@ -1334,10 +1334,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     parsec_data_copy_t* in_elem = task_data->data_in;
     parsec_data_t* original = in_elem->original;
     parsec_gpu_data_copy_t* gpu_elem = task_data->data_out;
+    parsec_device_cuda_module_t *in_elem_dev = NULL;
     uint32_t nb_elts = gpu_task->flow_nb_elts[flow->flow_index];
     int transfer_from = -1;
     int undo_readers_inc_if_no_transfer = 0;
-    char tmp[128];
 
     if( gpu_task->task_type == PARSEC_GPU_TASK_TYPE_PREFETCH ) {
         PARSEC_DEBUG_VERBOSE(3, parsec_gpu_output_stream,
@@ -1355,9 +1355,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     {
         if (gpu_elem->readers > 0 ) 
         {
-            if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) && 
-                /* Anti depdendency like behaviour may happen during task migration */
-                (gpu_task->migrate_status > TASK_NOT_MIGRATED) ) 
+            if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) ) 
             {
                 parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
                                "(possible anti-dependency,\n"
@@ -1375,17 +1373,62 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         PARSEC_LIST_ITEM_SINGLETON(gpu_elem);
     }
 
+    /**
+     * @brief Detect if this was a migrated task and if we have already identified
+     * a possible candidate as the source of stage_in
+     */
+    if( (gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN) 
+        && (gpu_task->posssible_candidate[flow->flow_index] > 1 ) )
+    {
+        int possible_device_copy_index = gpu_task->posssible_candidate[flow->flow_index];
+        /**
+         * A possible candidate is set when we call change_task_features() during migration
+         * preparation of a task. gpu_task->posssible_candidate[flow->flow_index] is greater
+         * than 1, it means that we have already identifies a staged_in data as the possible 
+         * candidate. So we can directly use that data for D2D transfer.
+         */
+        parsec_data_copy_t *candidate = original->device_copies[possible_device_copy_index];
+        parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(possible_device_copy_index);
+        
+        assert(PARSEC_DEV_CUDA == target->super.super.type && candidate != NULL );
+        PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+            "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 2) to Device to Device copy",
+            gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
+
+        /**
+         * @brief We have remembered the original data_in of the first stage_in. But
+         * instead of the original data_in the first stage_in could have used another
+         * candidate as the source stage_in. So we decrement the refcount of the 
+         * first stage_in candidate.
+         */
+        if( (gpu_task->original_data_in[ flow->flow_index ] != NULL)  )
+        {
+            if(gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
+                PARSEC_OBJ_RELEASE(task_data->data_in); 
+        }
+
+        /**
+         * if the data was already staged_in then we would have already incremented
+         * the reader for it. 
+         */
+        undo_readers_inc_if_no_transfer = 1;
+        /* We swap data_in with candidate, so we update the reference counters */
+        PARSEC_OBJ_RETAIN(candidate);
+        task_data->data_in = candidate;
+        in_elem = candidate;
+        in_elem_dev = target;
+
+        goto src_selected;
+
+    }
+
     /* Detect if we can do a device to device copy.
      * Current limitations: only for read-only data used read-only on the hosting GPU. */
-    parsec_device_cuda_module_t *in_elem_dev = (parsec_device_cuda_module_t*)parsec_mca_device_get( in_elem->device_index );
-    if( ((PARSEC_FLOW_ACCESS_READ & type) && !(PARSEC_FLOW_ACCESS_WRITE & type))
-        || (gpu_task->migrate_status > TASK_NOT_MIGRATED) /* make sure limitation does not affect migrated tasks */) 
+    in_elem_dev = (parsec_device_cuda_module_t*)parsec_mca_device_get( in_elem->device_index );
+    if( ((PARSEC_FLOW_ACCESS_READ & type) && !(PARSEC_FLOW_ACCESS_WRITE & type))) 
     {
         int potential_alt_src = 0;
-        if( (PARSEC_DEV_CUDA == in_elem_dev->super.super.type) && 
-            /* if the migrated task is one whose data has already been staged in we will always
-               use the posssible candidate we have identified*/
-            (gpu_task->migrate_status != TASK_MIGRATED_AFTER_STAGE_IN)) 
+        if(PARSEC_DEV_CUDA == in_elem_dev->super.super.type) 
         {
             if( gpu_device->peer_access_mask & (1 << in_elem_dev->cuda_index) ) 
             {
@@ -1393,78 +1436,12 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 1) to Device to Device copy",
                  gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
-
-                /**
-                 * @brief For tasks migrated after stage_in, during the first stage_in 
-                 * we would have increased the refcount of the data_in. If the task was not 
-                 * migrated, then the generated code would have decremented this refcount after 
-                 * the task was executed. But now as we have migrated the task, this decrement 
-                 * will not happen. So we remeber the the first data_in and the remembered
-                 * data_in will me RELEASED after task completion. 
-                 */
-                    
+                
+                // Remember the original data_in. 
                 if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                     gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
-                else
-                {
-                    /**
-                     * @brief gpu_task->original_data_in[ flow->flow_index ] should not be
-                     *  NULL only for tasks of type TASK_MIGRATED_AFTER_STAGE_IN
-                     */
-                    
-                    assert(0);
-                }
                  
                 goto src_selected;
-            }
-        }
-
-        // if the task is a migrated task and the possible candidate has already been identified
-        if( (gpu_task->migrate_status > TASK_NOT_MIGRATED) 
-           && (gpu_task->posssible_candidate[flow->flow_index] > 1 ) )
-        {
-            int possible_device_copy_index = gpu_task->posssible_candidate[flow->flow_index];
-            /**
-             * A possible candidate is set when we call change_task_features() during migration
-             * preperation of a task. gpu_task->posssible_candidate[flow->flow_index] is greater
-             * tha 1, it means that we have already identifies a staged_in data as the possible 
-             * candidate. So we can directly use that data for D2D ytransfer.
-             */
-            parsec_data_copy_t *candidate = original->device_copies[possible_device_copy_index];
-            parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(possible_device_copy_index);
-
-            if( PARSEC_DEV_CUDA == target->super.super.type && candidate != NULL )
-            {
-                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                 "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 2) to Device to Device copy",
-                 gpu_device->super.name, candidate, candidate->readers, candidate->super.super.obj_reference_count, target->cuda_index);
-
-                /**
-                 * @brief We have remembered the data_in of the first stage_in. If the current
-                 * data_in is not (will not) be the same as the first stage_in, so RELEASE it, 
-                 * as we will not be using it.
-                 */
-                if( (gpu_task->original_data_in[ flow->flow_index ] != NULL)  )
-                {
-                    if(gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-                        PARSEC_OBJ_RELEASE(task_data->data_in); 
-                }
-
-                /**
-                 * if the data was already staged_in then we would have already incremented
-                 * the reader for it. 
-                 */
-                if(gpu_task->migrate_status == TASK_MIGRATED_BEFORE_STAGE_IN)
-                    PARSEC_DATA_COPY_INC_READERS_ATOMIC(candidate);
-                undo_readers_inc_if_no_transfer = 1;
-                /* We swap data_in with candidate, so we update the reference counters */
-                PARSEC_OBJ_RETAIN(candidate);
-                task_data->data_in = candidate;
-                in_elem = candidate;
-                in_elem_dev = target;
-
-                goto src_selected;
-
             }
         }
 
@@ -1495,15 +1472,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                                          "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate (case 3) to Device to Device copy, increasing its readers to %d",
                                          gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
 
-                    /**
-                     * @brief For tasks migrated after stage_ in, during the first stage_in 
-                     * we would have increased the refcount of the data_in. If the task was not 
-                     * migrated, then the generated code would have decremented this refcount after 
-                     * the task was executed. But now as we have migrated the task, this decrement 
-                     * will not happen. So we remeber the the first data_in and the remembered
-                     * data_in will me RELEASED after task completion.
-                     */
-                    
+                    // Remember the original data_in.
                     if( gpu_task->original_data_in[ flow->flow_index ] == NULL)
                         gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
 
