@@ -507,8 +507,6 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             assert(original->device_copies[dealer_device->super.device_index] == task->data[i].data_out);
             assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
 
-            task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-
             /**
              * Even if the task has only read access, the data may have been modified
              * by another task, and it may be 'dirty'. We check the version of the data
@@ -530,9 +528,15 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
 
                 if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
+                {
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
+                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
+                }
                 else
+                {
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
+                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+                }
             }
             /**
              * If the task has only read-write access, the data may have been modified
@@ -557,9 +561,15 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
 
                 if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
+                {
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
+                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
+                }
                 else
+                {
                     parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
+                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+                }
             }
             /**
              * If the flow is write only, we free the data immediatly as this data should never
