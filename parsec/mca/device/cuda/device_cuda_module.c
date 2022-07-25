@@ -1378,17 +1378,16 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
      * a possible candidate as the source of stage_in
      */
     if( (gpu_task->migrate_status == TASK_MIGRATED_AFTER_STAGE_IN) 
-        && (gpu_task->posssible_candidate[flow->flow_index] > 1 ) )
+        && (gpu_task->candidate[flow->flow_index] != NULL ) )
     {
-        int possible_device_copy_index = gpu_task->posssible_candidate[flow->flow_index];
         /**
          * A possible candidate is set when we call change_task_features() during migration
-         * preparation of a task. gpu_task->posssible_candidate[flow->flow_index] is greater
-         * than 1, it means that we have already identifies a staged_in data as the possible 
+         * preparation of a task. If gpu_task->candidate[flow->flow_index] is not NULL,
+         * it means that we have already identifies a staged_in data as the possible 
          * candidate. So we can directly use that data for D2D transfer.
          */
-        parsec_data_copy_t *candidate = original->device_copies[possible_device_copy_index];
-        parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(possible_device_copy_index);
+        parsec_data_copy_t *candidate = gpu_task->candidate[flow->flow_index];
+        parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(candidate->device_index);
         
         assert(PARSEC_DEV_CUDA == target->super.super.type && candidate != NULL );
         PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
@@ -1401,12 +1400,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
          * candidate as the source stage_in. So we decrement the refcount of the 
          * first stage_in candidate.
          */
-        if( (gpu_task->original_data_in[ flow->flow_index ] != NULL)  )
-        {
-            if(gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-                PARSEC_OBJ_RELEASE(task_data->data_in); 
-        }
-
+        
+        if(gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
+            PARSEC_OBJ_RELEASE(task_data->data_in); 
+        
         /**
          * if the data was already staged_in then we would have already incremented
          * the reader for it. 

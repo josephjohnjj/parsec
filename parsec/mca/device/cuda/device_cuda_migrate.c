@@ -437,8 +437,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                     PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
 
                     mig_task->gpu_task = migrated_gpu_task;
-                    for (k = 0; k < MAX_PARAM_COUNT; k++)
-                        migrated_gpu_task->posssible_candidate[k] = -1;
+                    for (k = 0; k < MAX_PARAM_COUNT; k++) migrated_gpu_task->candidate[i] = NULL;
                     mig_task->dealer_device = dealer_device;
                     mig_task->starving_device = starving_device;
                     mig_task->stage_in_status = (execution_level == 2) ? TASK_MIGRATED_AFTER_STAGE_IN : TASK_MIGRATED_BEFORE_STAGE_IN;
@@ -525,7 +524,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                  * us to easily find the stage_in data as the possible candidate in
                  * parsec_gpu_data_stage_in() function.
                  */
-                gpu_task->posssible_candidate[i] = task->data[i].data_out->device_index;
+                gpu_task->candidate[i] = task->data[i].data_out;
 
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
@@ -552,7 +551,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                  * us to easily find the stage_in data as the possible candidate in
                  * parsec_gpu_data_stage_in() function.
                  */
-                gpu_task->posssible_candidate[i] = task->data[i].data_out->device_index;
+                gpu_task->candidate[i] = task->data[i].data_out;
 
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);

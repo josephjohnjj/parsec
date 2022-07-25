@@ -86,6 +86,7 @@ struct parsec_gpu_task_s {
     parsec_stage_out_function_t     *stage_out;
     int                             migrate_status;
     int32_t                         posssible_candidate[MAX_PARAM_COUNT];
+    parsec_data_copy_t*             candidate[MAX_PARAM_COUNT]; 
     parsec_data_copy_t*             original_data_in[MAX_PARAM_COUNT]; 
     int32_t                         data_retained;
 #if defined(PARSEC_PROF_TRACE)
