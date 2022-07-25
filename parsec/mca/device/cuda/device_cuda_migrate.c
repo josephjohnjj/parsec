@@ -34,9 +34,9 @@ static void task_mapping_ht_free_elt(void *_item, void *table)
 static void gpu_dev_profiling_init()
 {
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
-                                            sizeof(gpu_dev_prof_t),
-                                            "device_index{int32_t};task_count{int32_t}",
-                                            &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
+        sizeof(gpu_dev_prof_t),
+        "device_index{int32_t};task_count{int32_t};first{double};f_padding{int32_t};select{double};s_padding{int32_t};second{double};sec_padding{int32_t};exec_time{double};nb_tasks{int32_t};nb_padding{int32_t}",
+        &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
 }
 
 /**
@@ -442,6 +442,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                     mig_task->starving_device = starving_device;
                     mig_task->stage_in_status = (execution_level == 2) ? TASK_MIGRATED_AFTER_STAGE_IN : TASK_MIGRATED_BEFORE_STAGE_IN;
 
+                    migrated_gpu_task->select = MPI_Wtime();
                     PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
                     parsec_cuda_mig_task_enqueue(es, mig_task);
 

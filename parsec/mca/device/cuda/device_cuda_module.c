@@ -2763,6 +2763,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
         parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
 
+    if(gpu_task->migrate_status == TASK_NOT_MIGRATED)
+        gpu_task->first = MPI_Wtime();
+    else
+    {
+        gpu_task->second = MPI_Wtime();
+        gpu_task->nb_tasks = parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1);
+    }
+
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
         return PARSEC_HOOK_RETURN_ASYNC;
@@ -2829,6 +2837,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tExecute %s priority %d", gpu_device->super.name,
                              parsec_task_snprintf(tmp, MAX_TASK_STRLEN, gpu_task->ec),
                              gpu_task->ec->priority );
+        
+        if(gpu_task->migrate_status != TASK_NOT_MIGRATED)
+        {
+            gpu_task->exec_time = MPI_Wtime();
+            //printf("first %lf select %lf second %lf exec %lf nb_tasks %d type %d\n", 
+            // gpu_task->first, gpu_task->select, gpu_task->second, gpu_task->exec_time, gpu_task->nb_tasks, 
+            // gpu_task->migrate_status);
+        }
     }
 
     rc = progress_stream( gpu_device,
@@ -2955,6 +2971,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_dev_prof_t prof_info;
         prof_info.device_index = gpu_device->super.device_index;
         prof_info.task_count = gpu_device->mutex;
+        prof_info.first = gpu_task->first;
+        prof_info.select = gpu_task->select;
+        prof_info.second = gpu_task->second;
+        prof_info.exec_time = gpu_task->exec_time;
+        prof_info.nb_tasks = gpu_task->nb_tasks;
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,
             (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),

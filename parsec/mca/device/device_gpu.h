@@ -85,6 +85,11 @@ struct parsec_gpu_task_s {
     parsec_stage_in_function_t      *stage_in;
     parsec_stage_out_function_t     *stage_out;
     int                             migrate_status;
+    double                          first;
+    double                          select;
+    double                          second;
+    double                          exec_time;
+    int32_t                         nb_tasks;
     int32_t                         posssible_candidate[MAX_PARAM_COUNT];
     parsec_data_copy_t*             candidate[MAX_PARAM_COUNT]; 
     parsec_data_copy_t*             original_data_in[MAX_PARAM_COUNT]; 
