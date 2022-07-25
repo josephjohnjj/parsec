@@ -1020,11 +1020,6 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
              */
             if( 0 != lru_gpu_elem->readers ) {
 
-                parsec_warning("GPU[%s]:%s: Drop LRU-retrieved CUDA copy: data_copy %p [ original %p readers %d refcount %d ]",
-                    gpu_device->super.name, task_name,
-                    lru_gpu_elem, lru_gpu_elem->original, lru_gpu_elem->readers, 
-                    lru_gpu_elem->super.super.obj_reference_count);
-
                 PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
                                      "GPU[%s]:%s: Drop LRU-retrieved CUDA copy %p [readers %d, ref_count %d] original %p",
                                      gpu_device->super.name, task_name,
