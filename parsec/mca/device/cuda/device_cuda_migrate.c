@@ -35,7 +35,7 @@ static void gpu_dev_profiling_init()
 {
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
         sizeof(gpu_dev_prof_t),
-        "device_index{int32_t};task_count{int32_t};first{double};f_padding{int32_t};select{double};s_padding{int32_t};second{double};sec_padding{int32_t};exec_time{double};nb_tasks{int32_t};nb_padding{int32_t}",
+        "first{double};select{double};second{double};exec_time{double};stage{double};device_index{int32_t};task_count{int32_t};nb_tasks{int32_t};type{int32_t}",
         &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
 }
 
