@@ -2804,6 +2804,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         #endif
     }
     
+    if(NULL != progress_task && gpu_task->migrate_status != TASK_NOT_MIGRATED)
+        gpu_task->stage = MPI_Wtime();
+
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[0],
                           parsec_cuda_kernel_push,
@@ -2837,15 +2840,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tExecute %s priority %d", gpu_device->super.name,
                              parsec_task_snprintf(tmp, MAX_TASK_STRLEN, gpu_task->ec),
                              gpu_task->ec->priority );
-        
-        if(gpu_task->migrate_status != TASK_NOT_MIGRATED)
-        {
-            gpu_task->exec_time = MPI_Wtime();
-            //printf("first %lf select %lf second %lf exec %lf nb_tasks %d type %d\n", 
-            // gpu_task->first, gpu_task->select, gpu_task->second, gpu_task->exec_time, gpu_task->nb_tasks, 
-            // gpu_task->migrate_status);
-        }
     }
+
+    if(NULL != progress_task && progress_task->migrate_status != TASK_NOT_MIGRATED)
+        progress_task->exec_time = MPI_Wtime();
 
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[2+exec_stream],
@@ -2976,6 +2974,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.second = gpu_task->second;
         prof_info.exec_time = gpu_task->exec_time;
         prof_info.nb_tasks = gpu_task->nb_tasks;
+        prof_info.type = gpu_task->migrate_status;
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,
             (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),

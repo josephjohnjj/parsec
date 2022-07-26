@@ -88,6 +88,7 @@ struct parsec_gpu_task_s {
     double                          first;
     double                          select;
     double                          second;
+    double                          stage;
     double                          exec_time;
     int32_t                         nb_tasks;
     int32_t                         posssible_candidate[MAX_PARAM_COUNT];
