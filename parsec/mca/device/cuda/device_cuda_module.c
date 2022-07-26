@@ -2180,7 +2180,7 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
      {
         if( gpu_device->exec_stream[0] == stream ) //stage_in queue
             task->stage = MPI_Wtime();
-        else if( gpu_device->exec_stream[1] == stream) //execution queue
+        else if( gpu_device->exec_stream[1] != stream) //execution queue
             task->exec_time = MPI_Wtime();
      }
     /**
