@@ -2177,6 +2177,14 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t*)task);
 
     assert( NULL == stream->tasks[stream->start] );
+
+     if(NULL != task && task->migrate_status != TASK_NOT_MIGRATED)
+     {
+        if( gpu_device->exec_stream[0] == stream ) //stage_in queue
+            task->stage = MPI_Wtime();
+        else if( gpu_device->exec_stream[1] == stream) //execution queue
+            task->exec_time = MPI_Wtime();
+     }
     /**
      * In case the task is succesfully progressed, the corresponding profiling
      * event is triggered.
@@ -2805,9 +2813,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
             gpu_task->ec->taskpool->taskpool_id, NULL, 0);
         #endif
     }
-    
-    if(NULL != progress_task && gpu_task->migrate_status != TASK_NOT_MIGRATED)
-        gpu_task->stage = MPI_Wtime();
 
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[0],
@@ -2843,9 +2848,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                              parsec_task_snprintf(tmp, MAX_TASK_STRLEN, gpu_task->ec),
                              gpu_task->ec->priority );
     }
-
-    if(NULL != progress_task && progress_task->migrate_status != TASK_NOT_MIGRATED)
-        progress_task->exec_time = MPI_Wtime();
 
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[2+exec_stream],
