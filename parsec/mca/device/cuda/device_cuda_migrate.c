@@ -529,13 +529,13 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
                 if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
                 {
-                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
                     task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
+                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
                 }
                 else
                 {
-                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
                     task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
                 }
             }
             /**
@@ -562,13 +562,13 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
                 if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
                 {
-                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
                     task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
+                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
                 }
                 else
                 {
-                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
                     task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
+                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
                 }
             }
             /**
