@@ -2951,6 +2951,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         goto remove_gpu_task;
     }
 
+    parsec_cuda_kernel_epilog( gpu_device, gpu_task );
+    gpu_device->super.executed_tasks++;
+    __parsec_complete_execution( es, gpu_task->ec );
+
     /**
      * @brief For tasks migrated after stage_ in, during the first stage_in 
      * we would have increased the refcount of the data_in. If the task was not 
@@ -2965,9 +2969,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         if( gpu_task->original_data_in[f] != NULL )
             PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
     }
-
-    parsec_cuda_kernel_epilog( gpu_device, gpu_task );
-    gpu_device->super.executed_tasks++;
 
     #if defined(PARSEC_PROF_TRACE)
         gpu_dev_prof_t prof_info;
@@ -2985,19 +2986,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
             (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
             gpu_task->ec->taskpool->taskpool_id, &prof_info, 0);
     #endif  
-
-    /**
-     * responsibility of task completion moved from GPU manager thread
-     * to the CPU threads. A special case is added to __parsec_task_progress()
-     * to deal with task completion of the GPU tasks. As the gpu_task->ec->status
-     * is updated, the spaecial case will make sure that the the tasks will not be 
-     * executed again.
-     */
-     
-    gpu_task->ec->status = PARSEC_TASK_STATUS_COMPLETE;
-    int distance = 0;
-    PARSEC_LIST_ITEM_SINGLETON(gpu_task->ec);
-    __parsec_schedule(es, gpu_task->ec, distance);
 
     if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
     {
