@@ -2975,6 +2975,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.select = gpu_task->select;
         prof_info.second = gpu_task->second;
         prof_info.exec_time = gpu_task->exec_time;
+        prof_info.stage = gpu_task->stage;
         prof_info.nb_tasks = gpu_task->nb_tasks;
         prof_info.type = gpu_task->migrate_status;
         parsec_profiling_trace_flags(es->es_profile,
