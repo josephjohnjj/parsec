@@ -1396,7 +1396,9 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
          * first stage_in candidate.
          */
         
-        if(gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
+        if( /* Check for NULL is important. Otherwise, in cases where the flow is a NEW on GPU it will cause problems */
+            gpu_task->original_data_in[ flow->flow_index ] != NULL &&
+            gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
             PARSEC_OBJ_RELEASE(task_data->data_in); 
         
         /**
