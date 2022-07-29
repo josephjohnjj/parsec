@@ -56,14 +56,14 @@ typedef struct task_mapping_item_s
 
 typedef struct gpu_dev_prof_s
 {
-    double  first;
-    double  select;
-    double  second;
+    double  first_queue_time;
+    double  select_time;
+    double  second_queue_time;
     double  exec_time;
-    double  stage;
+    double  stage_in_time;
     int32_t device_index;
     int32_t task_count;
-    int32_t nb_tasks;
+    int32_t waiting_tasks;
     int32_t type;
 } gpu_dev_prof_t;
 

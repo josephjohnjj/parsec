@@ -84,21 +84,22 @@ struct parsec_gpu_task_s {
     parsec_complete_stage_function_t complete_stage;
     parsec_stage_in_function_t      *stage_in;
     parsec_stage_out_function_t     *stage_out;
-    int                             migrate_status;
-    double                          first;
-    double                          select;
-    double                          second;
-    double                          stage;
-    double                          exec_time;
-    int32_t                         nb_tasks;
-    int32_t                         posssible_candidate[MAX_PARAM_COUNT];
-    parsec_data_copy_t*             candidate[MAX_PARAM_COUNT]; 
-    parsec_data_copy_t*             original_data_in[MAX_PARAM_COUNT]; 
-    int32_t                         data_retained;
+    int                              migrate_status;
+    int32_t                          posssible_candidate[MAX_PARAM_COUNT];
+    parsec_data_copy_t*              candidate[MAX_PARAM_COUNT]; 
+    parsec_data_copy_t*              original_data_in[MAX_PARAM_COUNT]; 
+    int32_t                          data_retained;
 #if defined(PARSEC_PROF_TRACE)
     int                              prof_key_end;
     uint64_t                         prof_event_id;
     uint32_t                         prof_tp_id;
+
+    double                           first_queue_time;
+    double                           select_time;
+    double                           second_queue_time;
+    double                           stage_in_time;
+    double                           exec_time;
+    int32_t                          waiting_tasks;
 #endif
     union {
         struct {
