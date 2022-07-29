@@ -51,11 +51,6 @@ static void gpu_dev_profiling_init()
 int parsec_cuda_migrate_init(int ndevices)
 {
     int i, j;
-
-#if defined(PARSEC_HAVE_CUDA)
-    nvmlReturn_t nvml_ret;
-#endif
-
     start = MPI_Wtime();
 
     NDEVICES = ndevices;
@@ -64,10 +59,8 @@ int parsec_cuda_migrate_init(int ndevices)
 
     for (i = 0; i < NDEVICES; i++)
     {
-        for (j = 0; j < EXECUTION_LEVEL; j++)
-            device_info[i].task_count[j] = 0;
+        for (j = 0; j < EXECUTION_LEVEL; j++) device_info[i].task_count[j] = 0;
         device_info[i].load = 0;
-
         device_info[i].level0 = 0;
         device_info[i].level1 = 0;
         device_info[i].level2 = 0;
