@@ -53,6 +53,8 @@ extern int parsec_cuda_iterative;
 extern int parsec_cuda_migrate_chunk_size;
 extern int parsec_gpu_task_count_start;
 extern int parsec_gpu_task_count_end;
+extern int parsec_cuda_migrate_tasks;
+extern int parsec_migrate_statistics;
 
 /* look up how many FMA per cycle in single/double, per cuda MP
  * precision.
@@ -2114,17 +2116,20 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     if( NULL != task ) {
         PARSEC_PUSH_TASK(stream->fifo_pending, (parsec_list_item_t*)task);
 
-        if (task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+        if(parsec_migrate_statistics)
         {
-            if(stream == gpu_device->exec_stream[0])
+            if (task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
             {
-                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
-                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 1); 
-            }
-            else if(stream != gpu_device->exec_stream[1] && stream != gpu_device->exec_stream[0])
-            {
-                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 1); 
-                parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 2); 
+                if(stream == gpu_device->exec_stream[0])
+                {
+                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
+                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 1); 
+                }
+                else if(stream != gpu_device->exec_stream[1] && stream != gpu_device->exec_stream[0])
+                {
+                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 1); 
+                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 2); 
+                }
             }
         }
 
@@ -2772,7 +2777,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
     }
 
-    if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+    if (parsec_migrate_statistics && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL))
         parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
 
 #if defined(PARSEC_PROF_TRACE)    
@@ -2781,7 +2786,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     else
     {
         gpu_task->second_queue_time = MPI_Wtime();
-        gpu_task->waiting_tasks = parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1);
+        gpu_task->waiting_tasks = gpu_device->mutex - 1;
     }
 #endif
 
@@ -2991,7 +2996,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
             gpu_task->ec->taskpool->taskpool_id, &prof_info, 0);
     #endif  
 
-    if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+    if ((gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) && parsec_migrate_statistics)
     {
         parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 2); 
         parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
@@ -3016,15 +3021,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         return PARSEC_HOOK_RETURN_ASYNC;
     }
     gpu_task = progress_task;
-
-    //printf(" tp %d time %lf device %d level0 %d level1 %d level2 %d total %d \n",
-    //    get_tp_count(),
-    //    current_time(),
-    //    CUDA_DEVICE_NUM(gpu_device->super.device_index), 
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 0),
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 1), 
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), 2),
-    //    parsec_cuda_get_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), -1));
 
     /**
      * @brief Before a new task is selectd by the device manager for execution,

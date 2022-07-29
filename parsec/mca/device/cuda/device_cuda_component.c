@@ -41,6 +41,7 @@ int parsec_cuda_sort_pending = 0, parsec_cuda_max_streams = PARSEC_GPU_MAX_STREA
 int parsec_cuda_memory_block_size, parsec_cuda_memory_percentage, parsec_cuda_memory_number_of_blocks;
 char* parsec_cuda_lib_path = NULL;
 int parsec_cuda_migrate_tasks = 0;
+int parsec_migrate_statistics = 0;
 int parsec_cuda_iterative = 0;
 int parsec_cuda_migrate_chunk_size = 0;
 
@@ -203,6 +204,9 @@ static int device_cuda_component_register(void)
     (void)parsec_mca_param_reg_int_name("device_cuda", "migrate_tasks",
                                         "Boolean to let the GPU engine migrate tasks",
                                         false, false, 0, &parsec_cuda_migrate_tasks);
+    (void)parsec_mca_param_reg_int_name("device_cuda", "migrate_statistics",
+                                        "Boolean to print migrate statistics",
+                                        false, false, 0, &parsec_migrate_statistics);
     (void)parsec_mca_param_reg_int_name("device_cuda", "iterative",
                                         "Boolean to let the GPU know the workload is iterative",
                                         false, false, 0, &parsec_cuda_iterative);
