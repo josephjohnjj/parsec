@@ -74,22 +74,12 @@ int parsec_cuda_set_device_task(int device, int task_count, int level);
 int parsec_cuda_tasks_executed(int device);
 int is_starving(int device);
 int find_starving_device(int dealer_device);
-parsec_device_gpu_module_t *parsec_cuda_change_device(int dealer_device_index);
 int parsec_cuda_mig_task_enqueue(parsec_execution_stream_t *es, migrated_task_t *mig_task);
 int parsec_cuda_mig_task_dequeue(parsec_execution_stream_t *es);
-int migrate_immediate(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
-                      parsec_gpu_task_t *migrated_gpu_task);
 int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device);
-int parsec_gpu_data_reserve_device_space_for_flow(parsec_device_gpu_module_t *gpu_device,
-                                                  parsec_gpu_task_t *gpu_task, const parsec_flow_t *flow);
-int migrate_data_d2d(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *src_dev,
-                     parsec_device_gpu_module_t *dest_dev);
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *dealer_device,
                          parsec_device_gpu_module_t *starving_device, int stage_in_status);
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *gpu_device);
-int gurantee_ownership_transfer(parsec_gpu_task_t *gpu_task, parsec_data_t *data, int flow_index,
-                                parsec_data_copy_t *src_copy, parsec_data_copy_t *dst_copy,
-                                uint8_t stage_in_device, uint8_t access_mode);
 double current_time();
 int update_task_to_device_mapping(parsec_task_t *task, int device_index);
 int find_task_to_device_mapping(parsec_task_t *task);
