@@ -2,6 +2,7 @@
 
 extern int parsec_device_cuda_enabled;
 extern int parsec_cuda_migrate_chunk_size; // chunks of task migrated to a device (default=5)
+extern int parsec_migrate_statistics; 
 
 parsec_device_cuda_info_t *device_info;
 static parsec_list_t *migrated_task_list;           // list of all migrated task
@@ -60,7 +61,6 @@ int parsec_cuda_migrate_init(int ndevices)
     NDEVICES = ndevices;
     device_info = (parsec_device_cuda_info_t *)calloc(ndevices, sizeof(parsec_device_cuda_info_t));
     migrated_task_list = PARSEC_OBJ_NEW(parsec_list_t);
-    ;
 
     for (i = 0; i < NDEVICES; i++)
     {
@@ -83,13 +83,6 @@ int parsec_cuda_migrate_init(int ndevices)
     gpu_dev_profiling_init();
 #endif
 
-    char hostname[256];
-    gethostname(hostname, sizeof(hostname));
-    printf("PID %d on %s ready for attach\n", getpid(), hostname);
-    // sleep(60);
-
-    printf("Migration module initialised for %d devices \n", NDEVICES);
-
     return 0;
 }
 
@@ -108,25 +101,26 @@ int parsec_cuda_migrate_fini()
     PARSEC_OBJ_RELEASE(task_mapping_ht);
     task_mapping_ht = NULL;
 
-    for (i = 0; i < NDEVICES; i++)
+    if(parsec_migrate_statistics)
     {
-        printf("\n*********** DEVICE %d *********** \n", i);
-        printf("Total tasks executed: %d \n", device_info[i].total_tasks_executed);
-        printf("Tasks migrated      : level0 %d, level1 %d, level2 %d (Total %d)\n",
-               device_info[i].level0, device_info[i].level1, device_info[i].level2,
-               device_info[i].level0 + device_info[i].level1 + device_info[i].level2);
-        printf("Task check          : level0 %d level1 %d level2 %d total %d \n",
-               parsec_cuda_get_device_task(i, 0),
-               parsec_cuda_get_device_task(i, 1),
-               parsec_cuda_get_device_task(i, 2),
-               parsec_cuda_get_device_task(i, -1));
-        printf("Task received       : %d \n", device_info[i].received);
+        for (i = 0; i < NDEVICES; i++)
+        {
+            printf("\n*********** DEVICE %d *********** \n", i);
+            printf("Total tasks executed: %d \n", device_info[i].total_tasks_executed);
+            printf("Tasks migrated      : level0 %d, level1 %d, level2 %d (Total %d)\n",
+                   device_info[i].level0, device_info[i].level1, device_info[i].level2,
+                   device_info[i].level0 + device_info[i].level1 + device_info[i].level2);
+            printf("Task check          : level0 %d level1 %d level2 %d total %d \n",
+                   parsec_cuda_get_device_task(i, 0),
+                   parsec_cuda_get_device_task(i, 1),
+                   parsec_cuda_get_device_task(i, 2),
+                   parsec_cuda_get_device_task(i, -1));
+            printf("Task received       : %d \n", device_info[i].received);
+        }
     }
     printf("\n---------Execution time = %lf ------------ \n", end - start);
     PARSEC_OBJ_RELEASE(migrated_task_list);
     free(device_info);
-
-    printf("Migration module shut down \n");
 
     return 0;
 }
@@ -195,7 +189,9 @@ int is_starving(int device)
      * starvtion if the number of ready tasks available is less than twice the
      * number of execution stream.
      */
-    return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
+    parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
+    //return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
+    return (d->mutex < 5) ? 1 : 0;
 }
 
 int will_starve(int device)
@@ -205,7 +201,10 @@ int will_starve(int device)
      * starvtion if migrating a task will push the number of ready tasks available
      * to less than twice the number of execution stream.
      */
-    return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
+    parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
+    //return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
+    return (d->mutex < 5) ? 1 : 0;
+
 }
 
 /**
@@ -398,21 +397,23 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 
                 if (migrated_gpu_task != NULL) // make sure the task was not returned to the queue
                 {
-
-                    if (execution_level == 0)
+                    if(parsec_migrate_statistics)
                     {
-                        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
-                        device_info[dealer_device_index].level0++;
-                    }
-                    if (execution_level == 1)
-                    {
-                        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
-                        device_info[dealer_device_index].level1++;
-                    }
-                    if (execution_level == 2)
-                    {
-                        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
-                        device_info[dealer_device_index].level2++;
+                        if (execution_level == 0)
+                        {
+                            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
+                            device_info[dealer_device_index].level0++;
+                        }
+                        if (execution_level == 1)
+                        {
+                            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
+                            device_info[dealer_device_index].level1++;
+                        }
+                        if (execution_level == 2)
+                        {
+                            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
+                            device_info[dealer_device_index].level2++;
+                        }
                     }
                     nb_migrated++;
                     parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
@@ -694,11 +695,9 @@ void clear_task_migrated_per_tp()
 
 void print_task_migrated_per_tp()
 {
-    printf("\n*********** TASKPOOL %d *********** \n", tp_count++);
-    printf("Tasks migrated in this TP : %d \n", task_migrated_per_tp);
-}
-
-int get_tp_count()
-{
-    return tp_count;
+    if(parsec_migrate_statistics)
+    {
+        printf("\n*********** TASKPOOL %d *********** \n", tp_count++);
+        printf("Tasks migrated in this TP : %d \n", task_migrated_per_tp);
+    }
 }
