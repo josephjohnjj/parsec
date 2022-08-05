@@ -61,6 +61,14 @@ float *parsec_device_dweight = NULL;
 float *parsec_device_tweight = NULL;
 
 /**
+ * Load balance skew we are willing to accept to favor RO data reuse
+ * on GPU: a value of 20% means that we will schedule tasks on the preferred
+ * GPU except if it is loaded 1.2 times as much as the best load balance option
+ */
+static int parsec_device_load_balance_skew = 20;
+static float load_balance_skew;
+
+/**
  * Try to find the best device to execute the kernel based on the compute
  * capability of the device.
  *
@@ -71,13 +79,17 @@ float *parsec_device_tweight = NULL;
  * -1      - if the kernel is scheduled to be executed on a GPU.
  */
 
-static int parsec_device_load_balance_skew = 20;
-static float load_balance_skew;
-
 int parsec_get_best_device( parsec_task_t* this_task, double ratio )
 {
     int i, dev_index = -1, data_index, prefer_index = -1;
     parsec_taskpool_t* tp = this_task->taskpool;
+
+    if(parsec_cuda_iterative)
+    {
+        // if task to device mapping is already available use that
+        dev_index = find_task_to_device_mapping(this_task);
+        if(dev_index != -1) return dev_index;
+    }
 
     /* Select the location of the first data that is used in READ/WRITE or pick the
      * location of one of the READ data. For now use the last one.
@@ -183,7 +195,6 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
                           parsec_task_snprintf(task_str, MAX_TASK_STRLEN, this_task), dev_index, i);
          }
      }
-
     return dev_index;
 }
 
@@ -208,6 +219,13 @@ int parsec_mca_device_init(void)
     (void)parsec_mca_param_reg_int_name("device", "show_statistics",
                                         "Show the detailed devices statistics upon exit",
                                         false, false, 0, NULL);
+    (void)parsec_mca_param_reg_int_name("device", "load_balance_skew",
+                                        "Allow load balancing to skew by x%% to favor data reuse",
+                                        false, false, 0, NULL);
+    if( 0 < (rc = parsec_mca_param_find("device", NULL, "load_balance_skew")) ) {
+        parsec_mca_param_lookup_int(rc, &parsec_device_load_balance_skew);
+    }
+    load_balance_skew = 1.f/(parsec_device_load_balance_skew/100.f+1.f);
     if( 0 < (rc = parsec_mca_param_find("device", NULL, "verbose")) ) {
         parsec_mca_param_lookup_int(rc, &parsec_device_verbose);
     }

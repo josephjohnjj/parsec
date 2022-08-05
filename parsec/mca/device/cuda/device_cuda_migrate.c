@@ -335,8 +335,9 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
              * @brief Tasks are searched in different levels one by one. At this point we assume
              * that the cost of migration increases, as the level increase.
              */
-
-            // level 0 - task is just pushed to the device queue
+            
+            //#if 0
+            //level 0 - task is just pushed to the device queue
             migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(&(dealer_device->pending)); // level 0
             execution_level = 0;
             if (migrated_gpu_task == NULL)
@@ -360,6 +361,36 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                     }
                 }
             }
+            //#endif
+            
+            #if 0
+            if (migrated_gpu_task == NULL)
+            {
+                for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+                {
+                    // level2 - task is available in one of the execution queue stage_in is complete
+                    migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
+                    if (migrated_gpu_task != NULL)
+                    {
+                        execution_level = 2;
+                        stream_index = 2 + j;
+                        break;
+                    }
+                }
+
+                if (migrated_gpu_task == NULL)
+                {
+                    migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(&(dealer_device->pending)); // level 0
+                    execution_level = 0;
+
+                    if (migrated_gpu_task == NULL)
+                    {
+                        migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_try_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
+                        execution_level = 1;
+                    }
+                }
+            }
+            #endif
 
             if (migrated_gpu_task != NULL)
             {
