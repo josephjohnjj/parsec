@@ -79,11 +79,17 @@ static float load_balance_skew;
  * -1      - if the kernel is scheduled to be executed on a GPU.
  */
 
-
 int parsec_get_best_device( parsec_task_t* this_task, double ratio )
 {
     int i, dev_index = -1, data_index, prefer_index = -1;
     parsec_taskpool_t* tp = this_task->taskpool;
+
+    if(parsec_cuda_iterative)
+    {
+        // if task to device mapping is already available use that
+        dev_index = find_task_to_device_mapping(this_task);
+        if(dev_index != -1) return dev_index;
+    }
 
     /* Select the location of the first data that is used in READ/WRITE or pick the
      * location of one of the READ data. For now use the last one.
@@ -189,7 +195,6 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
                           parsec_task_snprintf(task_str, MAX_TASK_STRLEN, this_task), dev_index, i);
          }
      }
-
     return dev_index;
 }
 
