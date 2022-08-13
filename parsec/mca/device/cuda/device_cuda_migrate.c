@@ -68,6 +68,7 @@ int parsec_cuda_migrate_init(int ndevices)
         device_info[i].received = 0;
         device_info[i].last_device = i;
         device_info[i].deal_count = 0;
+        device_info[i].success_count = 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -84,7 +85,7 @@ int parsec_cuda_migrate_fini()
 {
     int i = 0;
     int tot_task_migrated = 0;
-    float avg_task_migrated = 0;
+    float avg_task_migrated = 0, deal_success_perc = 0, avg_task_migrated_per_sucess;
 
     end = MPI_Wtime();
 
@@ -103,16 +104,21 @@ int parsec_cuda_migrate_fini()
         {
             tot_task_migrated = device_info[i].level0 + device_info[i].level1 + device_info[i].level2;
             avg_task_migrated = ((float)tot_task_migrated) / ((float)device_info[i].deal_count);
+            deal_success_perc = (((float)device_info[i].success_count) / ((float)device_info[i].deal_count)) * 100;
+            avg_task_migrated_per_sucess = ((float)tot_task_migrated) / ((float)device_info[i].success_count);
 
             printf("\n*********** DEVICE %d *********** \n", i);
-            printf("Total tasks executed       : %d \n", device_info[i].total_tasks_executed);
-            printf("Tasks migrated             : level0 %d, level1 %d, level2 %d (Total %d)\n",
+            printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
+            printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
                    device_info[i].level0, device_info[i].level1, device_info[i].level2,
                    tot_task_migrated);
-            printf("Task received              : %d \n", device_info[i].received);
-            printf("Deal Count                 : %d \n", device_info[i].deal_count);
-            printf("Chunk Size                 : %d \n", parsec_cuda_migrate_chunk_size);
-            printf("Avg task migrated per deal : %lf \n", avg_task_migrated);
+            printf("Task received                          : %d \n", device_info[i].received);
+            printf("Chunk Size                             : %d \n", parsec_cuda_migrate_chunk_size);
+            printf("Total deals                            : %d \n", device_info[i].deal_count);
+            printf("Successful deals                       : %d \n", device_info[i].success_count);
+            printf("Avg task migrated per deal             : %lf \n", avg_task_migrated);
+            printf("Perc of successfull deals              : %lf \n", deal_success_perc);
+            printf("Avg task migrated per successfull deal : %lf \n", avg_task_migrated_per_sucess);
         }
     }
     printf("\n---------Execution time = %lf ------------ \n", end - start);
@@ -314,6 +320,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 {
     int starving_device_index = -1, dealer_device_index = 0;
     int nb_migrated = 0, execution_level = 0, stream_index = 0;
+    int deal_success  = 0;
     int i = 0, j = 0, k = 0, d = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
     parsec_device_gpu_module_t *starving_device = NULL;
@@ -333,7 +340,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 
         starving_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
         device_info[dealer_device_index].deal_count++;
-
+        deal_success = 0;
 
         for (i = 0; i < parsec_cuda_migrate_chunk_size; i++)
         {
@@ -446,6 +453,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                         }
                     }
                     nb_migrated++;
+                    deal_success++;
                     parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
 
                     /**
@@ -491,6 +499,9 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
             if (will_starve(dealer_device_index))
                 break;
         } // end for i
+
+        if(deal_success > 0)
+            device_info[dealer_device_index].success_count++;
 
         if (will_starve(dealer_device_index))
             break;
