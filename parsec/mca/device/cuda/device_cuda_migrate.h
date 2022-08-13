@@ -38,6 +38,7 @@ typedef struct parsec_device_cuda_info_s
     int received;
     int last_device;
     int deal_count;
+    int success_count;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
