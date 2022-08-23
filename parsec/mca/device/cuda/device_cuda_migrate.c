@@ -229,6 +229,8 @@ int is_starving(int device)
     parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
     //return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
     return (d->mutex < 5) ? 1 : 0;
+
+    //return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
 }
 
 int will_starve(int device)
@@ -241,6 +243,8 @@ int will_starve(int device)
     parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
     //return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
     return (d->mutex < 5) ? 1 : 0;
+
+    //return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
 
 }
 
@@ -775,3 +779,9 @@ int inc_compute_tasks_executed(int device_index)
     parsec_atomic_fetch_inc_int32(&device_info[device_index].total_compute_tasks);
     return device_info[device_index].total_compute_tasks;
 }
+
+int get_compute_tasks_executed(int device_index)
+{
+    return device_info[device_index].total_compute_tasks;
+}
+
