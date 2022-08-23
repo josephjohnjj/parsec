@@ -227,9 +227,9 @@ int is_starving(int device)
      * number of execution stream.
      */
     parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
-    //return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
     return (d->mutex < 5) ? 1 : 0;
 
+    //return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
     //return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
 }
 
@@ -240,11 +240,11 @@ int will_starve(int device)
      * starvtion if migrating a task will push the number of ready tasks available
      * to less than twice the number of execution stream.
      */
-    parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
-    //return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
-    return (d->mutex < 5) ? 1 : 0;
+    //parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
+    //return (d->mutex < 5) ? 1 : 0;
 
-    //return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
+    //return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
+    return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
 
 }
 
