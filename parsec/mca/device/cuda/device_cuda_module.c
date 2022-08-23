@@ -2780,6 +2780,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     if (parsec_migrate_statistics && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL))
         parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
 
+    // keep track of compute task count. Increment compute task count.
+    if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+        inc_compute_task_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
+
 #if defined(PARSEC_PROF_TRACE)    
     if(gpu_task->migrate_status == TASK_NOT_MIGRATED)
         gpu_task->first_queue_time = MPI_Wtime();
@@ -2943,6 +2947,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     goto check_in_deps;
 
  complete_task:
+
+    if (parsec_migrate_statistics)
+        parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
+
     assert( NULL != gpu_task );
     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,  "GPU[%s]:\tComplete %s",
                          gpu_device->super.name,
@@ -2996,11 +3004,17 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
             gpu_task->ec->taskpool->taskpool_id, &prof_info, 0);
     #endif  
 
-    if ((gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) && parsec_migrate_statistics)
+    if (parsec_migrate_statistics)
     {
         parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 2); 
-        parsec_cuda_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
+        
+        if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+            inc_compute_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
     }
+
+    //keep track of compute task count. Decrement compute task count.
+    if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+        dec_compute_task_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
     
  remove_gpu_task:
     // Load problem: was parsec_device_load[gpu_device->super.device_index] -= gpu_task->load;

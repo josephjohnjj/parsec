@@ -39,6 +39,8 @@ typedef struct parsec_device_cuda_info_s
     int last_device;
     int deal_count;
     int success_count;
+    int ready_compute_tasks;
+    int total_compute_tasks;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
@@ -87,5 +89,8 @@ int update_task_to_device_mapping(parsec_task_t *task, int device_index);
 int find_task_to_device_mapping(parsec_task_t *task);
 void clear_task_migrated_per_tp();
 void print_task_migrated_per_tp();
+int dec_compute_task_count(int device_index);
+int inc_compute_task_count(int device_index);
+int inc_compute_tasks_executed(int device_index);
 
 #endif

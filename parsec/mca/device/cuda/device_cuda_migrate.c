@@ -60,15 +60,16 @@ int parsec_cuda_migrate_init(int ndevices)
     for (i = 0; i < NDEVICES; i++)
     {
         for (j = 0; j < EXECUTION_LEVEL; j++) device_info[i].task_count[j] = 0;
-        device_info[i].load = 0;
-        device_info[i].level0 = 0;
-        device_info[i].level1 = 0;
-        device_info[i].level2 = 0;
+        device_info[i].load                 = 0;
+        device_info[i].level0               = 0;
+        device_info[i].level1               = 0;
+        device_info[i].level2               = 0;
         device_info[i].total_tasks_executed = 0;
-        device_info[i].received = 0;
-        device_info[i].last_device = i;
-        device_info[i].deal_count = 0;
-        device_info[i].success_count = 0;
+        device_info[i].received             = 0;
+        device_info[i].last_device          = i;
+        device_info[i].deal_count           = 0;
+        device_info[i].success_count        = 0;
+        device_info[i].ready_compute_tasks  = 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -86,6 +87,11 @@ int parsec_cuda_migrate_fini()
     int i = 0;
     int tot_task_migrated = 0;
     float avg_task_migrated = 0, deal_success_perc = 0, avg_task_migrated_per_sucess;
+    int summary_total_tasks_executed = 0, summary_total_compute_tasks_executed = 0;
+    int summary_total_tasks_migrated = 0, summary_total_l0_tasks_migrated = 0, summary_total_l1_tasks_migrated = 0, summary_total_l2_tasks_migrated = 0;
+    int summary_deals = 0, summary_successful_deals = 0;
+    float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
+
 
     end = MPI_Wtime();
 
@@ -103,23 +109,51 @@ int parsec_cuda_migrate_fini()
         for (i = 0; i < NDEVICES; i++)
         {
             tot_task_migrated = device_info[i].level0 + device_info[i].level1 + device_info[i].level2;
+            summary_total_tasks_migrated += tot_task_migrated;
+            summary_total_l0_tasks_migrated += device_info[i].level0;
+            summary_total_l1_tasks_migrated += device_info[i].level1;
+            summary_total_l2_tasks_migrated += device_info[i].level2;
             avg_task_migrated = ((float)tot_task_migrated) / ((float)device_info[i].deal_count);
             deal_success_perc = (((float)device_info[i].success_count) / ((float)device_info[i].deal_count)) * 100;
             avg_task_migrated_per_sucess = ((float)tot_task_migrated) / ((float)device_info[i].success_count);
 
-            printf("\n*********** DEVICE %d *********** \n", i);
+            printf("\n       *********** DEVICE %d *********** \n", i);
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
+            summary_total_tasks_executed += device_info[i].total_tasks_executed;
+            printf("Total compute tasks executed           : %d \n", device_info[i].total_compute_tasks);
+            summary_total_compute_tasks_executed += device_info[i].total_compute_tasks;
             printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
                    device_info[i].level0, device_info[i].level1, device_info[i].level2,
                    tot_task_migrated);
             printf("Task received                          : %d \n", device_info[i].received);
             printf("Chunk Size                             : %d \n", parsec_cuda_migrate_chunk_size);
             printf("Total deals                            : %d \n", device_info[i].deal_count);
+            summary_deals += device_info[i].deal_count;
             printf("Successful deals                       : %d \n", device_info[i].success_count);
+            summary_successful_deals += device_info[i].success_count;
             printf("Avg task migrated per deal             : %lf \n", avg_task_migrated);
-            printf("Perc of successfull deals              : %lf \n", deal_success_perc);
             printf("Avg task migrated per successfull deal : %lf \n", avg_task_migrated_per_sucess);
+            printf("perc of successfull deals              : %lf \n", deal_success_perc);
+            printf("Ready compute task count               : %d \n", device_info[i].ready_compute_tasks);
         }
+
+        printf("\n      *********** SUMMARY *********** \n");
+        printf("Total tasks executed                   : %d \n", summary_total_tasks_executed);
+        printf("Total compute tasks executed           : %d \n", summary_total_compute_tasks_executed);
+        printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
+                   summary_total_l0_tasks_migrated, summary_total_l1_tasks_migrated, summary_total_l2_tasks_migrated,
+                   summary_total_tasks_migrated);
+        printf("Total deals                            : %d \n", summary_deals);
+        printf("Successful deals                       : %d \n", summary_successful_deals);
+
+        summary_avg_task_migrated = ((float)summary_total_tasks_migrated) / ((float)summary_deals);
+        summary_avg_task_migrated_per_sucess = ((float)summary_total_tasks_migrated) / ((float)summary_successful_deals);
+        summary_deal_success_perc = (((float)summary_successful_deals) / ((float)summary_deals)) * 100;
+
+        printf("Avg task migrated per deal             : %lf \n", summary_avg_task_migrated);
+        printf("Avg task migrated per successfull deal : %lf \n", summary_avg_task_migrated_per_sucess);
+        printf("perc of successfull deals              : %lf \n", summary_deal_success_perc);
+
     }
     printf("\n---------Execution time = %lf ------------ \n", end - start);
     PARSEC_OBJ_RELEASE(migrated_task_list);
@@ -407,7 +441,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                             break;
                         }
                     }
-                }
+                } //end of j
             }
             
 
@@ -415,6 +449,9 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
             {
                 assert(migrated_gpu_task->ec != NULL);
                 PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)migrated_gpu_task);
+
+                // keep track of compute task count. Decrement compute task count.
+                dec_compute_task_count( dealer_device_index );
 
                 if(parsec_migrate_statistics)
                 {
@@ -719,4 +756,22 @@ void print_task_migrated_per_tp()
         printf("\n*********** TASKPOOL %d *********** \n", tp_count++);
         printf("Tasks migrated in this TP : %d \n", task_migrated_per_tp);
     }
+}
+
+int inc_compute_task_count(int device_index)
+{
+    parsec_atomic_fetch_inc_int32(&device_info[device_index].ready_compute_tasks);
+    return device_info[device_index].ready_compute_tasks;
+}
+
+int dec_compute_task_count(int device_index)
+{
+    parsec_atomic_fetch_dec_int32(&device_info[device_index].ready_compute_tasks);
+    return device_info[device_index].ready_compute_tasks;
+}
+
+int inc_compute_tasks_executed(int device_index)
+{
+    parsec_atomic_fetch_inc_int32(&device_info[device_index].total_compute_tasks);
+    return device_info[device_index].total_compute_tasks;
 }
