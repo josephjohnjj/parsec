@@ -401,7 +401,9 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                  * @brief if the task is a not a computational kerenel or if it is a task that has
                  * already been migrated, we stop the migration and push it back to the queue.
                  */
-                if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
+                // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
+
+                if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */)
                 {
                     parsec_list_push_back(&(dealer_device->pending), (parsec_list_item_t *)migrated_gpu_task);
                     migrated_gpu_task = NULL;
@@ -417,7 +419,9 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 
                 if ( migrated_gpu_task != NULL)
                 {
-                    if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
+                    // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
+
+                    if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */ )
                     {
                         parsec_list_push_back(dealer_device->exec_stream[0]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
                         migrated_gpu_task = NULL;
@@ -435,7 +439,9 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 
                         if ( migrated_gpu_task != NULL)
                         {
-                            if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED)
+                            // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+
+                            if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */ )
                             {
                                 parsec_list_push_back(dealer_device->exec_stream[(2 + j)]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
                                 migrated_gpu_task = NULL;
