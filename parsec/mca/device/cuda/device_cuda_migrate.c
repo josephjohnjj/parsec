@@ -70,6 +70,7 @@ int parsec_cuda_migrate_init(int ndevices)
         device_info[i].deal_count           = 0;
         device_info[i].success_count        = 0;
         device_info[i].ready_compute_tasks  = 0;
+        device_info[i].affinity_count       = 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -89,7 +90,7 @@ int parsec_cuda_migrate_fini()
     float avg_task_migrated = 0, deal_success_perc = 0, avg_task_migrated_per_sucess;
     int summary_total_tasks_executed = 0, summary_total_compute_tasks_executed = 0;
     int summary_total_tasks_migrated = 0, summary_total_l0_tasks_migrated = 0, summary_total_l1_tasks_migrated = 0, summary_total_l2_tasks_migrated = 0;
-    int summary_deals = 0, summary_successful_deals = 0;
+    int summary_deals = 0, summary_successful_deals = 0, summary_affinity = 0;
     float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
 
 
@@ -125,6 +126,9 @@ int parsec_cuda_migrate_fini()
             printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
                    device_info[i].level0, device_info[i].level1, device_info[i].level2,
                    tot_task_migrated);
+            printf("Tasks with affinity migrated           : %d \n", device_info[i].affinity_count);
+            printf("Perc of affinity tasks                 : %lf \n", ( (float) device_info[i].affinity_count/ tot_task_migrated) * 100);
+            summary_affinity += device_info[i].affinity_count;
             printf("Task received                          : %d \n", device_info[i].received);
             printf("Chunk Size                             : %d \n", parsec_cuda_migrate_chunk_size);
             printf("Total deals                            : %d \n", device_info[i].deal_count);
@@ -133,8 +137,7 @@ int parsec_cuda_migrate_fini()
             summary_successful_deals += device_info[i].success_count;
             printf("Avg task migrated per deal             : %lf \n", avg_task_migrated);
             printf("Avg task migrated per successfull deal : %lf \n", avg_task_migrated_per_sucess);
-            printf("perc of successfull deals              : %lf \n", deal_success_perc);
-            printf("Ready compute task count               : %d \n", device_info[i].ready_compute_tasks);
+            printf("Perc of successfull deals              : %lf \n", deal_success_perc);
         }
 
         printf("\n      *********** SUMMARY *********** \n");
@@ -143,6 +146,8 @@ int parsec_cuda_migrate_fini()
         printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
                    summary_total_l0_tasks_migrated, summary_total_l1_tasks_migrated, summary_total_l2_tasks_migrated,
                    summary_total_tasks_migrated);
+        printf("Tasks with affinity migrated           : %d \n", summary_affinity); 
+        printf("Perc of affinity tasks                 : %lf \n", ( (float) summary_affinity / summary_total_tasks_migrated) * 100);
         printf("Total deals                            : %d \n", summary_deals);
         printf("Successful deals                       : %d \n", summary_successful_deals);
 
@@ -358,7 +363,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 {
     int starving_device_index = -1, dealer_device_index = 0;
     int nb_migrated = 0, execution_level = 0, stream_index = 0;
-    int deal_success  = 0;
+    int deal_success  = 0, device_affinity = 0;
     int i = 0, j = 0, k = 0, d = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
     parsec_device_gpu_module_t *starving_device = NULL;
@@ -478,6 +483,17 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
                 nb_migrated++;
                 deal_success++;
                 parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
+
+                if(parsec_migrate_statistics)
+                {
+                    if (execution_level == 2)
+                        device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+                    else
+                        device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);   
+
+                    if (device_affinity)
+                        device_info[dealer_device_index].affinity_count++;
+                }
 
                 /**
                  * @brief change migrate_status according to the status of the stage in of the
@@ -783,5 +799,45 @@ int inc_compute_tasks_executed(int device_index)
 int get_compute_tasks_executed(int device_index)
 {
     return device_info[device_index].total_compute_tasks;
+}
+
+
+int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status)
+{
+    int i, data_index;
+    parsec_data_t *original = NULL;
+    parsec_data_copy_t *data_copy = NULL;
+    parsec_task_t* this_task = gpu_task->ec;
+
+    for( i = 0; i < this_task->task_class->nb_flows; i++ ) 
+    {
+        if( NULL == this_task->data[i].data_in ) continue;
+        if( NULL == this_task->data[i].source_repo_entry ) continue;
+
+        if (status == TASK_MIGRATED_BEFORE_STAGE_IN) //data will be trasfered from data_in
+        {
+            original = this_task->data[i].data_in->original;
+            data_copy = this_task->data[i].data_in;
+        }
+        else //data will be trasfered from data_out
+        {
+            original = this_task->data[i].data_out->original;
+            data_copy = this_task->data[i].data_out;
+        }
+
+        if (original->device_copies[device_index] != NULL &&
+            data_copy->version == original->device_copies[device_index]->version)
+        
+        {
+            /**
+             * If both the both the data copy has the same version, there is no need
+             * for a data transfer.
+             */
+            return 1;
+        }
+    }
+
+    return 0;
+
 }
 

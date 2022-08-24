@@ -41,6 +41,7 @@ typedef struct parsec_device_cuda_info_s
     int success_count;
     int ready_compute_tasks;
     int total_compute_tasks;
+    int affinity_count;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
@@ -92,5 +93,5 @@ void print_task_migrated_per_tp();
 int dec_compute_task_count(int device_index);
 int inc_compute_task_count(int device_index);
 int inc_compute_tasks_executed(int device_index);
-
+int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status);
 #endif
