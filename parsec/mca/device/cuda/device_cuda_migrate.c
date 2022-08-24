@@ -122,6 +122,7 @@ int parsec_cuda_migrate_fini()
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
             summary_total_tasks_executed += device_info[i].total_tasks_executed;
             printf("Total compute tasks executed           : %d \n", device_info[i].total_compute_tasks);
+            printf("Perc of compute tasks                  : %lf \n", ((float)device_info[i].total_compute_tasks / device_info[i].total_tasks_executed) * 100);
             summary_total_compute_tasks_executed += device_info[i].total_compute_tasks;
             printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
                    device_info[i].level0, device_info[i].level1, device_info[i].level2,
@@ -143,6 +144,7 @@ int parsec_cuda_migrate_fini()
         printf("\n      *********** SUMMARY *********** \n");
         printf("Total tasks executed                   : %d \n", summary_total_tasks_executed);
         printf("Total compute tasks executed           : %d \n", summary_total_compute_tasks_executed);
+        printf("Perc of compute tasks                  : %lf \n", ((float)summary_total_compute_tasks_executed / summary_total_tasks_executed) * 100);
         printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
                    summary_total_l0_tasks_migrated, summary_total_l1_tasks_migrated, summary_total_l2_tasks_migrated,
                    summary_total_tasks_migrated);
