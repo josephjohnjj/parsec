@@ -61,15 +61,25 @@ typedef struct task_mapping_item_s
 
 typedef struct gpu_dev_prof_s
 {
-    double  first_queue_time;
-    double  select_time;
-    double  second_queue_time;
-    double  exec_time;
-    double  stage_in_time;
-    int32_t device_index;
-    int32_t task_count;
-    int32_t waiting_tasks;
-    int32_t type;
+    double first_queue_time;
+    double select_time;
+    double second_queue_time;
+    double exec_time_start;
+    double exec_time_end;
+    double first_stage_in_time_start;
+    double sec_stage_in_time_start;
+    double first_stage_in_time_end;
+    double sec_stage_in_time_end;
+    double stage_out_time_start;
+    double stage_out_time_end;
+    double complete_time;
+    double device_index;
+    double task_count;
+    double waiting_tasks;
+    double mig_status;
+    double nb_first_stage_in;
+    double nb_sec_stage_in;
+    double task_type;
 } gpu_dev_prof_t;
 
 int parsec_cuda_migrate_init(int ndevices);

@@ -97,9 +97,18 @@ struct parsec_gpu_task_s {
     double                           first_queue_time;
     double                           select_time;
     double                           second_queue_time;
-    double                           stage_in_time;
-    double                           exec_time;
+    double                           first_stage_in_time_start;
+    double                           sec_stage_in_time_start;
+    double                           first_stage_in_time_end;
+    double                           sec_stage_in_time_end;
+    double                           exec_time_start;
+    double                           exec_time_end;
+    double                           stage_out_time_start;
+    double                           stage_out_time_end;
+    double                           complete_time;
     int32_t                          waiting_tasks;
+    int32_t                          nb_first_stage_in;
+    int32_t                          nb_sec_stage_in;
 #endif
     union {
         struct {
