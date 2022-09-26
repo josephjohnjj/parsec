@@ -2,7 +2,7 @@
 
 extern int parsec_device_cuda_enabled;
 extern int parsec_cuda_migrate_chunk_size; // chunks of task migrated to a device (default=5)
-extern int parsec_migrate_statistics; 
+extern int parsec_migrate_statistics;
 
 parsec_device_cuda_info_t *device_info;
 static parsec_list_t *migrated_task_list;           // list of all migrated task
@@ -35,9 +35,9 @@ static void task_mapping_ht_free_elt(void *_item, void *table)
 static void gpu_dev_profiling_init()
 {
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
-        sizeof(gpu_dev_prof_t),
-        "first_queue_time{double};select_time{double};second_queue_time{double};exec_time_start{double};exec_time_end{double};first_stage_in_time_start{double};sec_stage_in_time_start{double};first_stage_in_time_end{double};sec_stage_in_time_end{double};stage_out_time_start{double};stage_out_time_end{double};complete_time{double};device_index{double};task_count{double};waiting_tasks{double};mig_status{double};nb_first_stage_in{double};nb_sec_stage_in{double};task_type{double}",
-        &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
+                                            sizeof(gpu_dev_prof_t),
+                                            "first_queue_time{double};select_time{double};second_queue_time{double};exec_time_start{double};exec_time_end{double};first_stage_in_time_start{double};sec_stage_in_time_start{double};first_stage_in_time_end{double};sec_stage_in_time_end{double};stage_out_time_start{double};stage_out_time_end{double};complete_time{double};device_index{double};task_count{double};waiting_tasks{double};mig_status{double};nb_first_stage_in{double};nb_sec_stage_in{double};task_type{double}",
+                                            &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
 }
 
 /**
@@ -59,18 +59,19 @@ int parsec_cuda_migrate_init(int ndevices)
 
     for (i = 0; i < NDEVICES; i++)
     {
-        for (j = 0; j < EXECUTION_LEVEL; j++) device_info[i].task_count[j] = 0;
-        device_info[i].load                 = 0;
-        device_info[i].level0               = 0;
-        device_info[i].level1               = 0;
-        device_info[i].level2               = 0;
+        for (j = 0; j < EXECUTION_LEVEL; j++)
+            device_info[i].task_count[j] = 0;
+        device_info[i].load = 0;
+        device_info[i].level0 = 0;
+        device_info[i].level1 = 0;
+        device_info[i].level2 = 0;
         device_info[i].total_tasks_executed = 0;
-        device_info[i].received             = 0;
-        device_info[i].last_device          = i;
-        device_info[i].deal_count           = 0;
-        device_info[i].success_count        = 0;
-        device_info[i].ready_compute_tasks  = 0;
-        device_info[i].affinity_count       = 0;
+        device_info[i].received = 0;
+        device_info[i].last_device = i;
+        device_info[i].deal_count = 0;
+        device_info[i].success_count = 0;
+        device_info[i].ready_compute_tasks = 0;
+        device_info[i].affinity_count = 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -93,7 +94,6 @@ int parsec_cuda_migrate_fini()
     int summary_deals = 0, summary_successful_deals = 0, summary_affinity = 0;
     float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
 
-
     end = MPI_Wtime();
 
 #if defined(PARSEC_HAVE_CUDA)
@@ -105,7 +105,7 @@ int parsec_cuda_migrate_fini()
     PARSEC_OBJ_RELEASE(task_mapping_ht);
     task_mapping_ht = NULL;
 
-    if(parsec_migrate_statistics)
+    if (parsec_migrate_statistics)
     {
         for (i = 0; i < NDEVICES; i++)
         {
@@ -128,7 +128,7 @@ int parsec_cuda_migrate_fini()
                    device_info[i].level0, device_info[i].level1, device_info[i].level2,
                    tot_task_migrated);
             printf("Tasks with affinity migrated           : %d \n", device_info[i].affinity_count);
-            printf("Perc of affinity tasks                 : %lf \n", ( (float) device_info[i].affinity_count/ tot_task_migrated) * 100);
+            printf("Perc of affinity tasks                 : %lf \n", ((float)device_info[i].affinity_count / tot_task_migrated) * 100);
             summary_affinity += device_info[i].affinity_count;
             printf("Task received                          : %d \n", device_info[i].received);
             printf("Chunk Size                             : %d \n", parsec_cuda_migrate_chunk_size);
@@ -146,10 +146,10 @@ int parsec_cuda_migrate_fini()
         printf("Total compute tasks executed           : %d \n", summary_total_compute_tasks_executed);
         printf("Perc of compute tasks                  : %lf \n", ((float)summary_total_compute_tasks_executed / summary_total_tasks_executed) * 100);
         printf("Tasks migrated                         : level0 %d, level1 %d, level2 %d (Total %d)\n",
-                   summary_total_l0_tasks_migrated, summary_total_l1_tasks_migrated, summary_total_l2_tasks_migrated,
-                   summary_total_tasks_migrated);
-        printf("Tasks with affinity migrated           : %d \n", summary_affinity); 
-        printf("Perc of affinity tasks                 : %lf \n", ( (float) summary_affinity / summary_total_tasks_migrated) * 100);
+               summary_total_l0_tasks_migrated, summary_total_l1_tasks_migrated, summary_total_l2_tasks_migrated,
+               summary_total_tasks_migrated);
+        printf("Tasks with affinity migrated           : %d \n", summary_affinity);
+        printf("Perc of affinity tasks                 : %lf \n", ((float)summary_affinity / summary_total_tasks_migrated) * 100);
         printf("Total deals                            : %d \n", summary_deals);
         printf("Successful deals                       : %d \n", summary_successful_deals);
 
@@ -160,7 +160,6 @@ int parsec_cuda_migrate_fini()
         printf("Avg task migrated per deal             : %lf \n", summary_avg_task_migrated);
         printf("Avg task migrated per successfull deal : %lf \n", summary_avg_task_migrated_per_sucess);
         printf("perc of successfull deals              : %lf \n", summary_deal_success_perc);
-
     }
     printf("\n---------Execution time = %lf ------------ \n", end - start);
     PARSEC_OBJ_RELEASE(migrated_task_list);
@@ -233,11 +232,11 @@ int is_starving(int device)
      * starvtion if the number of ready tasks available is less than twice the
      * number of execution stream.
      */
-    parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
+    parsec_device_gpu_module_t *d = parsec_mca_device_get(DEVICE_NUM(device));
     return (d->mutex < 5) ? 1 : 0;
 
-    //return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
-    //return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
+    // return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
+    // return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
 }
 
 int will_starve(int device)
@@ -247,12 +246,11 @@ int will_starve(int device)
      * starvtion if migrating a task will push the number of ready tasks available
      * to less than twice the number of execution stream.
      */
-    //parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
-    //return (d->mutex < 5) ? 1 : 0;
+    // parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
+    // return (d->mutex < 5) ? 1 : 0;
 
-    //return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
+    // return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
     return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
-
 }
 
 /**
@@ -352,6 +350,150 @@ int parsec_cuda_mig_task_enqueue(parsec_execution_stream_t *es, migrated_task_t 
     return 0;
 }
 
+int single_pass_selection(parsec_execution_stream_t *es, parsec_list_t *ring, parsec_device_gpu_module_t *dealer_device,
+                          parsec_device_gpu_module_t *starving_device)
+{
+    int starving_device_index = -1, dealer_device_index = 0;
+    int nb_migrated = 0, execution_level = 0;
+    int deal_success = 0, device_affinity = 0;
+    int i = 0, j = 0, k = 0, d = 0;
+    parsec_gpu_task_t *migrated_gpu_task = NULL;
+    migrated_task_t *mig_task = NULL;
+
+    dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);
+    starving_device_index = CUDA_DEVICE_NUM(starving_device->super.device_index);
+
+    for (i = 0; i < parsec_cuda_migrate_chunk_size; i++)
+    {
+        migrated_gpu_task = NULL;
+        execution_level = select_task_from_device_queues(es, dealer_device, &migrated_gpu_task);
+
+        if (migrated_gpu_task != NULL)
+        {
+            assert(migrated_gpu_task->ec != NULL);
+            PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)migrated_gpu_task);
+
+            // keep track of compute task count. Decrement compute task count.
+            dec_compute_task_count(dealer_device_index);
+
+            if (parsec_migrate_statistics)
+            {
+                if (execution_level == 0)
+                {
+                    parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
+                    device_info[dealer_device_index].level0++;
+                }
+                if (execution_level == 1)
+                {
+                    parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
+                    device_info[dealer_device_index].level1++;
+                }
+                if (execution_level == 2)
+                {
+                    parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
+                    device_info[dealer_device_index].level2++;
+                }
+            }
+
+            deal_success++;
+            parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
+
+            if (parsec_migrate_statistics)
+            {
+                if (execution_level == 2)
+                    device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+                else
+                    device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
+
+                if (device_affinity)
+                    device_info[dealer_device_index].affinity_count++;
+            }
+
+            /**
+             * @brief change migrate_status according to the status of the stage in of the
+             * stage_in data.
+             */
+            if (execution_level == 2)
+                migrated_gpu_task->migrate_status = TASK_MIGRATED_AFTER_STAGE_IN;
+            else
+                migrated_gpu_task->migrate_status = TASK_MIGRATED_BEFORE_STAGE_IN;
+
+            parsec_list_push_front(ring, migrated_gpu_task);
+        }
+    } // end for i
+
+    return deal_success;
+}
+
+int select_task_from_device_queues(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device, parsec_gpu_task_t **migrated_gpu_task)
+{
+    int j = 0;
+    int execution_level = 0;
+    *migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(&(dealer_device->pending)); // level 0
+
+    if (*migrated_gpu_task != NULL)
+    {
+        /**
+         * @brief if the task is a not a computational kerenel or if it is a task that has
+         * already been migrated, we stop the migration and push it back to the queue.
+         */
+        // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN)
+        if ((*migrated_gpu_task)->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || (*migrated_gpu_task)->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */)
+        {
+            parsec_list_push_back(&(dealer_device->pending), *migrated_gpu_task);
+            *migrated_gpu_task = NULL;
+        }
+
+        execution_level = 0;
+    }
+
+    if (*migrated_gpu_task == NULL)
+    {
+        // level1 - task is aavailble in the stage_in queue. Stage_in not started.
+        *migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
+
+        if (*migrated_gpu_task != NULL)
+        {
+            // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
+
+            if ((*migrated_gpu_task)->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || (*migrated_gpu_task)->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */)
+            {
+                parsec_list_push_back(dealer_device->exec_stream[0]->fifo_pending, *migrated_gpu_task);
+                *migrated_gpu_task = NULL;
+            }
+        }
+        execution_level = 1;
+
+        if (*migrated_gpu_task == NULL)
+        {
+            for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+            {
+                // level2 - task is available in one of the execution queue stage_in is complete
+                *migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
+
+                if (*migrated_gpu_task != NULL)
+                {
+                    // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+
+                    if ((*migrated_gpu_task)->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || (*migrated_gpu_task)->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */)
+                    {
+                        parsec_list_push_back(dealer_device->exec_stream[(2 + j)]->fifo_pending, *migrated_gpu_task);
+                        *migrated_gpu_task = NULL;
+                    }
+                }
+
+                if (*migrated_gpu_task != NULL)
+                {
+                    execution_level = 2;
+                    break;
+                }
+            }
+        } // end of j
+    }
+
+    return execution_level;
+}
+
 /**
  * @brief check if there are any devices starving. If there are any starving device migrate
  * task from the dealer device to the starving device.
@@ -364,8 +506,8 @@ int parsec_cuda_mig_task_enqueue(parsec_execution_stream_t *es, migrated_task_t 
 int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device)
 {
     int starving_device_index = -1, dealer_device_index = 0;
-    int nb_migrated = 0, execution_level = 0, stream_index = 0;
-    int deal_success  = 0, device_affinity = 0;
+    int nb_migrated = 0, execution_level = 0;
+    int deal_success = 0, device_affinity = 0;
     int i = 0, j = 0, k = 0, d = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
     parsec_device_gpu_module_t *starving_device = NULL;
@@ -387,163 +529,49 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
         device_info[dealer_device_index].deal_count++;
         deal_success = 0;
 
-        for (i = 0; i < parsec_cuda_migrate_chunk_size; i++)
+        parsec_list_t *ring = PARSEC_OBJ_NEW(parsec_list_t);
+        PARSEC_OBJ_RETAIN(ring);
+
+        deal_success = single_pass_selection(es, ring, dealer_device, starving_device);
+
+        nb_migrated += deal_success;
+
+        while (!parsec_list_nolock_is_empty(ring))
         {
+            migrated_gpu_task = parsec_list_pop_front(ring);
+            assert(migrated_gpu_task != NULL);
+
             /**
-             * @brief Tasks are searched in different levels one by one. At this point we assume
-             * that the cost of migration increases, as the level increase.
+             * @brief An object of type migrated_task_t is created store the migrated task
+             * and other associated details. This object is enqueued to a node level queue.
+             * The main objective of this was to make sure that the manager does not have to sepend
+             * time on migration. It can select the task for migration, enqueue it to the node level
+             * queue and then return to its normal working.
              */
-            
-            //level 0 - task is just pushed to the device queue
-            migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(&(dealer_device->pending)); // level 0
+            mig_task = (migrated_task_t *)calloc(1, sizeof(migrated_task_t));
+            PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
 
-            if ( migrated_gpu_task != NULL)
-            {
-                /**
-                 * @brief if the task is a not a computational kerenel or if it is a task that has
-                 * already been migrated, we stop the migration and push it back to the queue.
-                 */
-                // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
+            mig_task->gpu_task = migrated_gpu_task;
+            for (k = 0; k < MAX_PARAM_COUNT; k++)
+                migrated_gpu_task->candidate[i] = NULL;
+            mig_task->dealer_device = dealer_device;
+            mig_task->starving_device = starving_device;
+            mig_task->stage_in_status = migrated_gpu_task->migrate_status;
+#if defined(PARSEC_PROF_TRACE)
+            migrated_gpu_task->select_time = MPI_Wtime();
+#endif
 
-                if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */)
-                {
-                    parsec_list_push_back(&(dealer_device->pending), (parsec_list_item_t *)migrated_gpu_task);
-                    migrated_gpu_task = NULL;
-                }
+            PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
+            parsec_cuda_mig_task_enqueue(es, mig_task);
 
-            }
-            execution_level = 0;
+            device_info[dealer_device_index].last_device = starving_device_index;
+            char tmp[MAX_TASK_STRLEN];
+            PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d",
+                                 parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)migrated_gpu_task)->ec),
+                                 execution_level, mig_task->stage_in_status, dealer_device_index, starving_device_index);
+        } // end while
 
-            if (migrated_gpu_task == NULL)
-            {
-                // level1 - task is aavailble in the stage_in queue. Stage_in not started.
-                migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(dealer_device->exec_stream[0]->fifo_pending); // level 1
-
-                if ( migrated_gpu_task != NULL)
-                {
-                    // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);
-
-                    if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */ )
-                    {
-                        parsec_list_push_back(dealer_device->exec_stream[0]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
-                        migrated_gpu_task = NULL;
-                    }
-
-                }
-                execution_level = 1;
-
-                if (migrated_gpu_task == NULL)
-                {
-                    for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
-                    {
-                        // level2 - task is available in one of the execution queue stage_in is complete
-                        migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
-
-                        if ( migrated_gpu_task != NULL)
-                        {
-                            // device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
-
-                            if (migrated_gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL || migrated_gpu_task->migrate_status > TASK_NOT_MIGRATED /* || !(device_affinity) */ )
-                            {
-                                parsec_list_push_back(dealer_device->exec_stream[(2 + j)]->fifo_pending, (parsec_list_item_t *)migrated_gpu_task);
-                                migrated_gpu_task = NULL;
-                            }
-
-                        }
-
-                        if (migrated_gpu_task != NULL)
-                        {
-                            execution_level = 2;
-                            stream_index = 2 + j;
-                            break;
-                        }
-                    }
-                } //end of j
-            }
-            
-
-            if (migrated_gpu_task != NULL)
-            {
-                assert(migrated_gpu_task->ec != NULL);
-                PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)migrated_gpu_task);
-
-                // keep track of compute task count. Decrement compute task count.
-                dec_compute_task_count( dealer_device_index );
-
-                if(parsec_migrate_statistics)
-                {
-                    if (execution_level == 0)
-                    {
-                        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
-                        device_info[dealer_device_index].level0++;
-                    }
-                    if (execution_level == 1)
-                    {
-                        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
-                        device_info[dealer_device_index].level1++;
-                    }
-                    if (execution_level == 2)
-                    {
-                        parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
-                        device_info[dealer_device_index].level2++;
-                    }
-                }
-                nb_migrated++;
-                deal_success++;
-                parsec_atomic_fetch_inc_int32(&task_migrated_per_tp);
-
-                if(parsec_migrate_statistics)
-                {
-                    if (execution_level == 2)
-                        device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
-                    else
-                        device_affinity = find_task_affinity(migrated_gpu_task, starving_device->super.device_index, TASK_MIGRATED_BEFORE_STAGE_IN);   
-
-                    if (device_affinity)
-                        device_info[dealer_device_index].affinity_count++;
-                }
-
-                /**
-                 * @brief change migrate_status according to the status of the stage in of the
-                 * stage_in data.
-                 */
-                if (execution_level == 2)
-                    migrated_gpu_task->migrate_status = TASK_MIGRATED_AFTER_STAGE_IN;
-                else
-                    migrated_gpu_task->migrate_status = TASK_MIGRATED_BEFORE_STAGE_IN;
-                /**
-                 * @brief An object of type migrated_task_t is created store the migrated task
-                 * and other associated details. This object is enqueued to a node level queue.
-                 * The main objective of this was to make sure that the manager does not have to sepend
-                 * time on migration. It can select the task for migration, enqueue it to the node level
-                 * queue and then return to its normal working.
-                 */
-                mig_task = (migrated_task_t *)calloc(1, sizeof(migrated_task_t));
-                PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
-
-                mig_task->gpu_task = migrated_gpu_task;
-                for (k = 0; k < MAX_PARAM_COUNT; k++) migrated_gpu_task->candidate[i] = NULL;
-                mig_task->dealer_device = dealer_device;
-                mig_task->starving_device = starving_device;
-                mig_task->stage_in_status = (execution_level == 2) ? TASK_MIGRATED_AFTER_STAGE_IN : TASK_MIGRATED_BEFORE_STAGE_IN;
-
-            #if defined(PARSEC_PROF_TRACE)
-                migrated_gpu_task->select_time = MPI_Wtime();
-            #endif
-                PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
-                parsec_cuda_mig_task_enqueue(es, mig_task);
-                device_info[dealer_device_index].last_device = starving_device_index;
-                char tmp[MAX_TASK_STRLEN];
-                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d: nb_migrated %d",
-                                     parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)migrated_gpu_task)->ec),
-                                     execution_level, mig_task->stage_in_status, dealer_device_index, starving_device_index, nb_migrated);
-            }
-
-            if (will_starve(dealer_device_index))
-                break;
-        } // end for i
-
-        if(deal_success > 0)
+        if (deal_success > 0)
             device_info[dealer_device_index].success_count++;
 
         if (will_starve(dealer_device_index))
@@ -674,7 +702,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-                
+
                 parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(task->data[i].data_out->device_index);
                 parsec_data_copy_detach(original, task->data[i].data_out, gpu_device->super.device_index);
                 PARSEC_OBJ_RELEASE(task->data[i].data_out);
@@ -682,7 +710,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             }
 
             parsec_atomic_unlock(&original->lock);
-            
+
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
                                  task->data[i].data_out, original, task->data[i].data_out->readers,
@@ -779,7 +807,7 @@ void clear_task_migrated_per_tp()
 
 void print_task_migrated_per_tp()
 {
-    if(parsec_migrate_statistics)
+    if (parsec_migrate_statistics)
     {
         printf("\n*********** TASKPOOL %d *********** \n", tp_count++);
         printf("Tasks migrated in this TP : %d \n", task_migrated_per_tp);
@@ -809,25 +837,26 @@ int get_compute_tasks_executed(int device_index)
     return device_info[device_index].total_compute_tasks;
 }
 
-
 int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status)
 {
     int i, data_index;
     parsec_data_t *original = NULL;
     parsec_data_copy_t *data_copy = NULL;
-    parsec_task_t* this_task = gpu_task->ec;
+    parsec_task_t *this_task = gpu_task->ec;
 
-    for( i = 0; i < this_task->task_class->nb_flows; i++ ) 
+    for (i = 0; i < this_task->task_class->nb_flows; i++)
     {
-        if( NULL == this_task->data[i].data_in ) continue;
-        if( NULL == this_task->data[i].source_repo_entry ) continue;
+        if (NULL == this_task->data[i].data_in)
+            continue;
+        if (NULL == this_task->data[i].source_repo_entry)
+            continue;
 
-        if (status == TASK_MIGRATED_BEFORE_STAGE_IN) //data will be trasfered from data_in
+        if (status == TASK_MIGRATED_BEFORE_STAGE_IN) // data will be trasfered from data_in
         {
             original = this_task->data[i].data_in->original;
             data_copy = this_task->data[i].data_in;
         }
-        else //data will be trasfered from data_out
+        else // data will be trasfered from data_out
         {
             original = this_task->data[i].data_out->original;
             data_copy = this_task->data[i].data_out;
@@ -835,7 +864,7 @@ int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status
 
         if (original->device_copies[device_index] != NULL &&
             data_copy->version == original->device_copies[device_index]->version)
-        
+
         {
             /**
              * If both the both the data copy has the same version, there is no need
@@ -846,6 +875,4 @@ int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status
     }
 
     return 0;
-
 }
-
