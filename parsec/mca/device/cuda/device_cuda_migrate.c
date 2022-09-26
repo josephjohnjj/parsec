@@ -350,15 +350,26 @@ int parsec_cuda_mig_task_enqueue(parsec_execution_stream_t *es, migrated_task_t 
     return 0;
 }
 
-int single_pass_selection(parsec_execution_stream_t *es, parsec_list_t *ring, parsec_device_gpu_module_t *dealer_device,
-                          parsec_device_gpu_module_t *starving_device)
+/**
+ * @brief Select the victim task for migration.
+ * 
+ * @param es 
+ * @param ring 
+ * @param dealer_device 
+ * @param starving_device 
+ * @return int 
+ */
+
+int select_tasks(parsec_execution_stream_t *es, parsec_list_t *ring, 
+                 parsec_device_gpu_module_t *dealer_device,
+                 parsec_device_gpu_module_t *starving_device)
 {
     int starving_device_index = -1, dealer_device_index = 0;
-    int nb_migrated = 0, execution_level = 0;
+    int execution_level = 0;
     int deal_success = 0, device_affinity = 0;
-    int i = 0, j = 0, k = 0, d = 0;
+    int i = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
-    migrated_task_t *mig_task = NULL;
+  
 
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);
     starving_device_index = CUDA_DEVICE_NUM(starving_device->super.device_index);
@@ -366,7 +377,7 @@ int single_pass_selection(parsec_execution_stream_t *es, parsec_list_t *ring, pa
     for (i = 0; i < parsec_cuda_migrate_chunk_size; i++)
     {
         migrated_gpu_task = NULL;
-        execution_level = select_task_from_device_queues(es, dealer_device, &migrated_gpu_task);
+        execution_level = single_pass_selection(es, dealer_device, &migrated_gpu_task);
 
         if (migrated_gpu_task != NULL)
         {
@@ -425,7 +436,20 @@ int single_pass_selection(parsec_execution_stream_t *es, parsec_list_t *ring, pa
     return deal_success;
 }
 
-int select_task_from_device_queues(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device, parsec_gpu_task_t **migrated_gpu_task)
+/**
+ * @brief Select task  from the different device queues using a single pass through the 
+ * device queues. We first select the tasks thet were not staged in. If that is not available, 
+ * we select a task that was staged in. The function that does not select a bookkeeping tasks
+ *  and tasks that were already migrated. 
+ * 
+ * @param es 
+ * @param dealer_device 
+ * @param migrated_gpu_task 
+ * @return int 
+ */
+
+int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device, 
+                          parsec_gpu_task_t **migrated_gpu_task)
 {
     int j = 0;
     int execution_level = 0;
@@ -507,7 +531,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 {
     int starving_device_index = -1, dealer_device_index = 0;
     int nb_migrated = 0, execution_level = 0;
-    int deal_success = 0, device_affinity = 0;
+    int deal_success = 0;
     int i = 0, j = 0, k = 0, d = 0;
     parsec_gpu_task_t *migrated_gpu_task = NULL;
     parsec_device_gpu_module_t *starving_device = NULL;
@@ -527,13 +551,10 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 
         starving_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(starving_device_index));
         device_info[dealer_device_index].deal_count++;
-        deal_success = 0;
 
         parsec_list_t *ring = PARSEC_OBJ_NEW(parsec_list_t);
         PARSEC_OBJ_RETAIN(ring);
-
-        deal_success = single_pass_selection(es, ring, dealer_device, starving_device);
-
+        deal_success = select_tasks(es, ring, dealer_device, starving_device);
         nb_migrated += deal_success;
 
         while (!parsec_list_nolock_is_empty(ring))
@@ -552,8 +573,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
             PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
 
             mig_task->gpu_task = migrated_gpu_task;
-            for (k = 0; k < MAX_PARAM_COUNT; k++)
-                migrated_gpu_task->candidate[i] = NULL;
+            for (k = 0; k < MAX_PARAM_COUNT; k++) migrated_gpu_task->candidate[i] = NULL;
             mig_task->dealer_device = dealer_device;
             mig_task->starving_device = starving_device;
             mig_task->stage_in_status = migrated_gpu_task->migrate_status;
@@ -578,7 +598,6 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
             break;
     } // end for d
 
-    migrated_gpu_task = NULL;
     /* update the expected load on the GPU device */
     parsec_device_load[dealer_device->super.device_index] -= nb_migrated * parsec_device_sweight[dealer_device->super.device_index];
     return nb_migrated;
