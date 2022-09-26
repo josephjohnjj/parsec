@@ -104,4 +104,11 @@ int dec_compute_task_count(int device_index);
 int inc_compute_task_count(int device_index);
 int inc_compute_tasks_executed(int device_index);
 int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status);
+int select_tasks(parsec_execution_stream_t *es, parsec_list_t *ring, 
+                 parsec_device_gpu_module_t *dealer_device,
+                 parsec_device_gpu_module_t *starving_device);
+int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device, 
+                          parsec_gpu_task_t **migrated_gpu_task);
+
+
 #endif
