@@ -17,8 +17,12 @@
 #define TASK_MIGRATED_BEFORE_STAGE_IN 1
 #define TASK_MIGRATED_AFTER_STAGE_IN  2
 
+#define SINGLE_TRY_SELECTION  0
+#define SINGLE_PASS_SELECTION 1
+#define TWO_PASS_SELECTION    2
+
 #define FIRST_PASS  1
-#define SECOND_PASS 1
+#define SECOND_PASS 2
 
 /**
  * @brief
@@ -78,7 +82,8 @@ typedef struct gpu_dev_prof_s
     double complete_time;
     double device_index;
     double task_count;
-    double waiting_tasks;
+    double first_waiting_tasks;
+    double sec_waiting_tasks;
     double mig_status;
     double nb_first_stage_in;
     double nb_sec_stage_in;
@@ -107,4 +112,13 @@ int dec_compute_task_count(int device_index);
 int inc_compute_task_count(int device_index);
 int inc_compute_tasks_executed(int device_index);
 int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status);
+int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
+                          parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task);
+int two_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
+                       parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task);
+int single_try_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
+                         parsec_gpu_task_t **migrated_gpu_task);
+parsec_list_item_t* find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *starving_device, int stage_in_status, 
+                                       int pass_count, int selection_type);
+
 #endif
