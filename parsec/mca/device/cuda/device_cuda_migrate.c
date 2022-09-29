@@ -38,7 +38,7 @@ static void gpu_dev_profiling_init()
 {
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
                                             sizeof(gpu_dev_prof_t),
-                                            "first_queue_time{double};select_time{double};second_queue_time{double};exec_time_start{double};exec_time_end{double};first_stage_in_time_start{double};sec_stage_in_time_start{double};first_stage_in_time_end{double};sec_stage_in_time_end{double};stage_out_time_start{double};stage_out_time_end{double};complete_time{double};device_index{double};task_count{double};waiting_tasks{double};mig_status{double};nb_first_stage_in{double};nb_sec_stage_in{double};task_type{double}",
+                                            "first_queue_time{double};select_time{double};second_queue_time{double};exec_time_start{double};exec_time_end{double};first_stage_in_time_start{double};sec_stage_in_time_start{double};first_stage_in_time_end{double};sec_stage_in_time_end{double};stage_out_time_start{double};stage_out_time_end{double};complete_time{double};device_index{double};task_count{double};first_waiting_tasks{double};sec_waiting_tasks{double};mig_status{double};nb_first_stage_in{double};nb_sec_stage_in{double};task_type{double}",
                                             &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
 }
 
@@ -502,7 +502,7 @@ int single_try_selection(parsec_execution_stream_t *es, parsec_device_gpu_module
 
         if (*migrated_gpu_task == NULL)
         {
-            for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+            for (j = 0; j < (dealer_device->num_exec_streams - 2); j++)
             {
                 // level2 - task is available in one of the execution queue stage_in is complete
                 *migrated_gpu_task = (parsec_gpu_task_t *)parsec_list_pop_back(dealer_device->exec_stream[(2 + j)]->fifo_pending); // level2
@@ -528,48 +528,8 @@ int single_try_selection(parsec_execution_stream_t *es, parsec_device_gpu_module
     return execution_level;
 }
 
-/**
- * @brief Find and extract compute tasks for one pass selection.
- * 
- * @param list 
- * @return parsec_list_item_t* 
- */
-
-parsec_list_item_t* find_compute_tasks_one_pass(parsec_list_t *list)
-{
-    parsec_list_item_t *item = NULL;
-    parsec_gpu_task_t *task = NULL;
-
-    assert(list != NULL);
-
-    for (item = PARSEC_LIST_ITERATOR_FIRST(list); PARSEC_LIST_ITERATOR_END(list) != item; item = PARSEC_LIST_ITERATOR_NEXT(item))
-    {
-        task = (parsec_gpu_task_t *)item;
-
-        if ((task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) && (task->migrate_status == TASK_NOT_MIGRATED))
-            break;
-    }
-
-    if ((item != NULL) && (PARSEC_LIST_ITERATOR_END(list) != item))
-    {
-        parsec_list_nolock_remove(list, item);
-        return item;
-    }
-
-    return NULL;
-}
-
-/**
- * @brief Find and extract compute tasks for two pass selection.
- * 
- * @param list 
- * @param starving_device 
- * @param stage_in_status 
- * @param pass_count 
- * @return parsec_list_item_t* 
- */
-
-parsec_list_item_t* find_compute_tasks_two_pass(parsec_list_t *list, parsec_device_gpu_module_t *starving_device, int stage_in_status, int pass_count)
+parsec_list_item_t* find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *starving_device, int stage_in_status, 
+                                       int pass_count, int selection_type)
 {
     parsec_list_item_t *item = NULL;
     parsec_gpu_task_t *task = NULL;
@@ -577,7 +537,9 @@ parsec_list_item_t* find_compute_tasks_two_pass(parsec_list_t *list, parsec_devi
 
     assert(list != NULL);
 
-    if (pass_count == SECOND_PASS)
+    parsec_list_lock(list);
+
+    if ( (pass_count == SECOND_PASS) || (selection_type == SINGLE_PASS_SELECTION) )
     {
         for (item = PARSEC_LIST_ITERATOR_FIRST(list); PARSEC_LIST_ITERATOR_END(list) != item; item = PARSEC_LIST_ITERATOR_NEXT(item))
         {
@@ -587,7 +549,7 @@ parsec_list_item_t* find_compute_tasks_two_pass(parsec_list_t *list, parsec_devi
                 break;
         }
     }
-    else if (pass_count == FIRST_PASS)
+    else if ( (pass_count == FIRST_PASS))
     {
         for (item = PARSEC_LIST_ITERATOR_FIRST(list); PARSEC_LIST_ITERATOR_END(list) != item; item = PARSEC_LIST_ITERATOR_NEXT(item))
         {
@@ -598,6 +560,8 @@ parsec_list_item_t* find_compute_tasks_two_pass(parsec_list_t *list, parsec_devi
                 break;
         }
     }
+
+    parsec_list_unlock(list);
 
     if ((item != NULL) && (PARSEC_LIST_ITERATOR_END(list) != item))
     {
@@ -623,21 +587,24 @@ int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_modul
     int j = 0;
     int execution_level = 0;
 
-    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_one_pass(&(dealer_device->pending));
+    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(&(dealer_device->pending), starving_device, 
+                                            TASK_MIGRATED_BEFORE_STAGE_IN, -1, SINGLE_PASS_SELECTION);
     execution_level = 0;
 
     if (*migrated_gpu_task == NULL)
     {
         // level1 - task is availble in the stage_in queue. Stage_in not started.
-        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_one_pass(dealer_device->exec_stream[0]->fifo_pending);
+        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[0]->fifo_pending, starving_device, 
+                                            TASK_MIGRATED_BEFORE_STAGE_IN, -1, SINGLE_PASS_SELECTION);
         execution_level = 1;
 
         if (*migrated_gpu_task == NULL)
         {
-            for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+            for (j = 0; j < (dealer_device->num_exec_streams - 2); j++)
             {
                 // level2 - task is available in one of the execution queue stage_in is complete
-                *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_one_pass(dealer_device->exec_stream[(2 + j)]->fifo_pending);
+                *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[(2 + j)]->fifo_pending, starving_device, 
+                                            TASK_MIGRATED_AFTER_STAGE_IN, -1, SINGLE_PASS_SELECTION);
 
                 if (*migrated_gpu_task != NULL)
                 {
@@ -670,21 +637,24 @@ int two_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t
 
     // FIRST PASS
 
-    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_two_pass(&(dealer_device->pending), starving_device, TASK_MIGRATED_BEFORE_STAGE_IN, FIRST_PASS);
+    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(&(dealer_device->pending), starving_device, 
+                                TASK_MIGRATED_BEFORE_STAGE_IN, FIRST_PASS, TWO_PASS_SELECTION);
     execution_level = 0;
 
     if (*migrated_gpu_task == NULL)
     {
         // level1 - task is availble in the stage_in queue. Stage_in not started.
-        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_two_pass(dealer_device->exec_stream[0]->fifo_pending, starving_device, TASK_MIGRATED_BEFORE_STAGE_IN, FIRST_PASS);
+        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[0]->fifo_pending, starving_device, 
+                                TASK_MIGRATED_BEFORE_STAGE_IN, FIRST_PASS, TWO_PASS_SELECTION);
         execution_level = 1;
 
         if (*migrated_gpu_task == NULL)
         {
-            for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+            for (j = 0; j < (dealer_device->num_exec_streams - 2); j++)
             {
                 // level2 - task is available in one of the execution queue stage_in is complete
-                *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_two_pass(dealer_device->exec_stream[(2 + j)]->fifo_pending, starving_device, TASK_MIGRATED_AFTER_STAGE_IN, FIRST_PASS);
+                *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[(2 + j)]->fifo_pending, starving_device, 
+                                TASK_MIGRATED_AFTER_STAGE_IN, FIRST_PASS, TWO_PASS_SELECTION);
 
                 if (*migrated_gpu_task != NULL)
                 {
@@ -699,21 +669,24 @@ int two_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t
 
     if (*migrated_gpu_task == NULL)
     {
-        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_two_pass(&(dealer_device->pending), starving_device, TASK_MIGRATED_BEFORE_STAGE_IN, SECOND_PASS);
+        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(&(dealer_device->pending), starving_device, 
+                                TASK_MIGRATED_BEFORE_STAGE_IN, SECOND_PASS, TWO_PASS_SELECTION);
         execution_level = 0;
 
         if (*migrated_gpu_task == NULL)
         {
             // level1 - task is availble in the stage_in queue. Stage_in not started.
-            *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_two_pass(dealer_device->exec_stream[0]->fifo_pending, starving_device, TASK_MIGRATED_BEFORE_STAGE_IN, SECOND_PASS);
+            *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[0]->fifo_pending, starving_device, 
+                                    TASK_MIGRATED_BEFORE_STAGE_IN, SECOND_PASS, TWO_PASS_SELECTION);
             execution_level = 1;
 
             if (*migrated_gpu_task == NULL)
             {
-                for (j = 0; j < (dealer_device->max_exec_streams - 2); j++)
+                for (j = 0; j < (dealer_device->num_exec_streams - 2); j++)
                 {
                     // level2 - task is available in one of the execution queue stage_in is complete
-                    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks_two_pass(dealer_device->exec_stream[(2 + j)]->fifo_pending, starving_device, TASK_MIGRATED_AFTER_STAGE_IN, SECOND_PASS);
+                    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[(2 + j)]->fifo_pending, starving_device, 
+                                            TASK_MIGRATED_AFTER_STAGE_IN, SECOND_PASS, TWO_PASS_SELECTION);
 
                     if (*migrated_gpu_task != NULL)
                     {
