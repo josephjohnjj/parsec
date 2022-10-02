@@ -843,15 +843,10 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
                     gpu_copy, gpu_copy->device_private, gpu_copy->readers, gpu_copy->super.super.obj_reference_count, gpu_copy->original, gpu_copy->device_index, __FILE__, __LINE__);
         PARSEC_OBJ_RELEASE(gpu_copy); 
 
-        int i, ref_count;
         if( gpu_copy != NULL)
         {
             parsec_warning("parsec_cuda_memory_release_list: Release copy %p original %p readers %d ref_count %d. The copy should have been NULL by this point!! (%s:%d)", 
             gpu_copy, gpu_copy->original, gpu_copy->readers, gpu_copy->super.super.obj_reference_count, __FILE__, __LINE__);
-
-            //ref_count = gpu_copy->super.super.obj_reference_count;
-            //for( i = 0; i < ref_count; i++)
-            //    PARSEC_OBJ_RELEASE(gpu_copy);
 
             PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "parsec_cuda_memory_release_list: key_base %d key %d", 
             gpu_copy->original->dc->key_base, gpu_copy->original->key);
@@ -930,7 +925,6 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
 {
     parsec_task_t *this_task = gpu_task->ec;
     parsec_gpu_data_copy_t* temp_loc[MAX_PARAM_COUNT], *gpu_elem, *lru_gpu_elem;
-    parsec_gpu_data_copy_t* old_data;
     parsec_data_t* master, *oldmaster;
     const parsec_flow_t *flow;
     int i, j, data_avail_epoch = 0;
@@ -964,7 +958,6 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
         master   = this_task->data[i].data_in->original;
         parsec_atomic_lock(&master->lock);
         gpu_elem = PARSEC_DATA_GET_COPY(master, gpu_device->super.device_index);
-        old_data = this_task->data[i].data_out;
         this_task->data[i].data_out = gpu_elem;
 
         /* There is already a copy on the device */
@@ -1275,8 +1268,6 @@ parsec_default_cuda_stage_in(parsec_gpu_task_t        *gtask,
     size_t count;
     parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu_stream;
     int i;
-    char tmp[128];
-
 
     for(i = 0; i < task->task_class->nb_flows; i++){
         if(flow_mask & (1U << i)){
@@ -2297,6 +2288,7 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     rc = cudaEventRecord( cuda_stream->begin_events[stream->start], cuda_stream->cuda_stream );
     assert(cudaSuccess == rc);
 #endif
+
     rc = progress_fct( gpu_device, task, stream );
 
     if( 0 > rc ) {
@@ -2331,7 +2323,6 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     stream->tasks[stream->start] = task;
 
 #if defined(PARSEC_PROF_TRACE)
-    // record the start of the events
     assert( task != NULL);
     
     if(stream == gpu_device->exec_stream[0]) //stage_in stream
