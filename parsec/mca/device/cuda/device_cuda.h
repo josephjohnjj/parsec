@@ -57,7 +57,10 @@ struct parsec_cuda_exec_stream_s {
      * remains in the system the function is supposed to update it.
      */
     cudaEvent_t               *events;
-    cudaStream_t               cuda_stream;
+    cudaStream_t              cuda_stream;
+#if defined(PARSEC_PROF_TRACE)
+    cudaEvent_t               *begin_events;
+#endif
 };
 
 /**
