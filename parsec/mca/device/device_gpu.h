@@ -110,6 +110,10 @@ struct parsec_gpu_task_s {
     int32_t                          sec_waiting_tasks;
     int32_t                          nb_first_stage_in;
     int32_t                          nb_sec_stage_in;
+    int32_t                          nb_first_stage_in_d2d;
+    int32_t                          nb_first_stage_in_h2d;
+    int32_t                          nb_sec_stage_in_d2d;
+    int32_t                          nb_sec_stage_in_h2d;
 #endif
     union {
         struct {

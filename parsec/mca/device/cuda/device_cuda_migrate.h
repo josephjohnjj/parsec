@@ -87,6 +87,10 @@ typedef struct gpu_dev_prof_s
     double mig_status;
     double nb_first_stage_in;
     double nb_sec_stage_in;
+    double nb_first_stage_in_d2d;
+    double nb_first_stage_in_h2d;
+    double nb_sec_stage_in_d2d;
+    double nb_sec_stage_in_h2d;
     double task_type;
 } gpu_dev_prof_t;
 

@@ -1559,9 +1559,21 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
 
     #if defined(PARSEC_PROF_TRACE)
         if (gpu_task->migrate_status < TASK_MIGRATED_AFTER_STAGE_IN)
+        {
             gpu_task->nb_first_stage_in++;
+            if(in_elem_dev->super.super.type == PARSEC_DEV_CUDA)
+                gpu_task->nb_first_stage_in_d2d++;
+            else
+                gpu_task->nb_first_stage_in_h2d++;
+        }
         else
+        {
             gpu_task->nb_sec_stage_in++;
+            if(in_elem_dev->super.super.type == PARSEC_DEV_CUDA)
+                gpu_task->nb_sec_stage_in_d2d++;
+            else
+                gpu_task->nb_sec_stage_in_h2d++;
+        }
     #endif
 
         /* If it is already under transfer, don't schedule the transfer again.
@@ -2286,6 +2298,24 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
 #if defined(PARSEC_PROF_TRACE)
     rc = cudaEventRecord( cuda_stream->begin_events[stream->start], cuda_stream->cuda_stream );
     assert(cudaSuccess == rc);
+
+    assert( task != NULL);
+    
+    if(stream == gpu_device->exec_stream[0]) //stage_in stream
+    {
+        if( task->migrate_status < TASK_MIGRATED_AFTER_STAGE_IN ) //first stage_in start time
+            task->first_stage_in_time_start = MPI_Wtime();
+        else //second stage_in start time
+            task->sec_stage_in_time_start = MPI_Wtime();  
+    }
+    else if(stream == gpu_device->exec_stream[1]) //stage_out stream
+    {
+        task->stage_out_time_start = MPI_Wtime();
+    }
+    else //execution stream
+    {
+        task->exec_time_start = MPI_Wtime();  
+    }
 #endif
 
     rc = progress_fct( gpu_device, task, stream );
@@ -2320,27 +2350,6 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     rc = cudaEventRecord( cuda_stream->events[stream->start], cuda_stream->cuda_stream );
     assert(cudaSuccess == rc);
     stream->tasks[stream->start] = task;
-
-#if defined(PARSEC_PROF_TRACE)
-    assert( task != NULL);
-    
-    if(stream == gpu_device->exec_stream[0]) //stage_in stream
-    {
-        if( task->migrate_status < TASK_MIGRATED_AFTER_STAGE_IN ) //first stage_in start time
-            task->first_stage_in_time_start = MPI_Wtime();
-        else //second stage_in start time
-            task->sec_stage_in_time_start = MPI_Wtime();  
-    }
-    else if(stream == gpu_device->exec_stream[1]) //stage_out stream
-    {
-        task->stage_out_time_start = MPI_Wtime();
-    }
-    else //execution stream
-    {
-        task->exec_time_start = MPI_Wtime();  
-    }
-    
-#endif
 
     stream->start = (stream->start + 1) % stream->max_events;
     PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
@@ -2894,6 +2903,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->sec_waiting_tasks         = 0;
         gpu_task->nb_first_stage_in         = 0;
         gpu_task->nb_sec_stage_in           = 0;
+        gpu_task->nb_first_stage_in_d2d     = 0;
+        gpu_task->nb_first_stage_in_h2d     = 0;
+        gpu_task->nb_sec_stage_in_d2d       = 0;
+        gpu_task->nb_sec_stage_in_h2d       = 0;
     }
     else
     {
@@ -3124,6 +3137,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.mig_status                 = gpu_task->migrate_status;
         prof_info.nb_first_stage_in          = gpu_task->nb_first_stage_in;
         prof_info.nb_sec_stage_in            = gpu_task->nb_sec_stage_in;
+        prof_info.nb_first_stage_in_d2d      = gpu_task->nb_first_stage_in_d2d;
+        prof_info.nb_first_stage_in_h2d      = gpu_task->nb_first_stage_in_h2d;
+        prof_info.nb_sec_stage_in_d2d        = gpu_task->nb_sec_stage_in_d2d;
+        prof_info.nb_sec_stage_in_h2d        = gpu_task->nb_sec_stage_in_h2d;
 
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,
