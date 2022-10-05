@@ -114,6 +114,7 @@ struct parsec_gpu_task_s {
     int32_t                          nb_first_stage_in_h2d;
     int32_t                          nb_sec_stage_in_d2d;
     int32_t                          nb_sec_stage_in_h2d;
+    int32_t                          clock_speed;
 #endif
     union {
         struct {

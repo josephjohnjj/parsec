@@ -2315,6 +2315,14 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     else //execution stream
     {
         task->exec_time_start = MPI_Wtime();  
+
+        unsigned int clock = 0;
+        nvmlDevice_t dev;
+        rc = nvmlDeviceGetHandleByIndex_v2( CUDA_DEVICE_NUM(gpu_device->super.device_index), &dev );
+        assert( NVML_SUCCESS == rc );
+        rc = nvmlDeviceGetClockInfo( dev , NVML_CLOCK_SM, &clock );
+        assert( NVML_SUCCESS  == rc );
+        task->clock_speed = clock;
     }
 #endif
 
@@ -2907,6 +2915,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->nb_first_stage_in_h2d     = 0;
         gpu_task->nb_sec_stage_in_d2d       = 0;
         gpu_task->nb_sec_stage_in_h2d       = 0;
+        gpu_task->clock_speed               = 0;
     }
     else
     {
@@ -3141,6 +3150,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.nb_first_stage_in_h2d      = gpu_task->nb_first_stage_in_h2d;
         prof_info.nb_sec_stage_in_d2d        = gpu_task->nb_sec_stage_in_d2d;
         prof_info.nb_sec_stage_in_h2d        = gpu_task->nb_sec_stage_in_h2d;
+        prof_info.clock_speed                = gpu_task->clock_speed;
 
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,

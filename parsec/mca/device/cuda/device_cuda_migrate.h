@@ -91,6 +91,7 @@ typedef struct gpu_dev_prof_s
     double nb_first_stage_in_h2d;
     double nb_sec_stage_in_d2d;
     double nb_sec_stage_in_h2d;
+    double clock_speed;
     double task_type;
 } gpu_dev_prof_t;
 
