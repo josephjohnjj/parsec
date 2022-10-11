@@ -93,6 +93,7 @@ typedef struct gpu_dev_prof_s
     double nb_sec_stage_in_h2d;
     double clock_speed;
     double task_type;
+    double class_id;
 } gpu_dev_prof_t;
 
 int parsec_cuda_migrate_init(int ndevices);
@@ -108,7 +109,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
 int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *dealer_device,
                          parsec_device_gpu_module_t *starving_device, int stage_in_status);
 int gpu_data_version_increment(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t *gpu_device);
-double current_time();
+uint64_t time_stamp();
 int update_task_to_device_mapping(parsec_task_t *task, int device_index);
 int find_task_to_device_mapping(parsec_task_t *task);
 void clear_task_migrated_per_tp();
@@ -116,6 +117,7 @@ void print_task_migrated_per_tp();
 int dec_compute_task_count(int device_index);
 int inc_compute_task_count(int device_index);
 int inc_compute_tasks_executed(int device_index);
+int get_compute_tasks_executed(int device_index);
 int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status);
 int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
                           parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task);
