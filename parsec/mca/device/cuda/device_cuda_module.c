@@ -2199,10 +2199,18 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
             assert( cudaSuccess == rc );
             rc = cudaEventElapsedTime( &event_duration, cuda_stream->begin_events[stream->end], cuda_stream->events[stream->end] );
             assert( cudaSuccess == rc );
-            assert( event_duration >=0 );
-            
-            event_duration = event_duration / 1000; // ms to sec to match with MPI_Wtime();
+            assert( event_duration >=0 ); 
+            /**
+             * cudaEventQuery() return time in milli sec, with a resolution of .5 micro sec.
+             * time_stamp() return time in nano sec. 
+             * So convert ms to ns.
+             */
+            event_duration = event_duration * 1000000; 
 
+            /**
+             * @brief Updated the event end time based on the event start time
+             * and the elasped time after the start of the event.
+             */
             if(stream == gpu_device->exec_stream[0]) //stage_in stream
             {
                 if( (*out_task)->migrate_status < TASK_MIGRATED_AFTER_STAGE_IN ) 
@@ -2305,17 +2313,17 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     if(stream == gpu_device->exec_stream[0]) //stage_in stream
     {
         if( task->migrate_status < TASK_MIGRATED_AFTER_STAGE_IN ) //first stage_in start time
-            task->first_stage_in_time_start = MPI_Wtime();
+            task->first_stage_in_time_start = time_stamp();
         else //second stage_in start time
-            task->sec_stage_in_time_start = MPI_Wtime();  
+            task->sec_stage_in_time_start = time_stamp();  
     }
     else if(stream == gpu_device->exec_stream[1]) //stage_out stream
     {
-        task->stage_out_time_start = MPI_Wtime();
+        task->stage_out_time_start = time_stamp();
     }
     else //execution stream
     {
-        task->exec_time_start = MPI_Wtime();  
+        task->exec_time_start = time_stamp();  
 
         unsigned int clock = 0;
         nvmlDevice_t dev;
@@ -2896,7 +2904,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 #if defined(PARSEC_PROF_TRACE)    
     if(gpu_task->migrate_status == TASK_NOT_MIGRATED)
     {
-        gpu_task->first_queue_time          = MPI_Wtime();
+        gpu_task->first_queue_time          = time_stamp();
         gpu_task->select_time               = 0;
         gpu_task->second_queue_time         = 0;
         gpu_task->exec_time_start           = 0;
@@ -2920,7 +2928,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     }
     else
     {
-        gpu_task->second_queue_time = MPI_Wtime();
+        gpu_task->second_queue_time = time_stamp();
         gpu_task->sec_waiting_tasks = gpu_device->mutex - 1;
     }
 #endif
@@ -3106,7 +3114,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
 #if defined(PARSEC_PROF_TRACE)
     if(gpu_task != NULL)
-        gpu_task->complete_time = MPI_Wtime();
+        gpu_task->complete_time = time_stamp();
 #endif
 
     /**
@@ -3124,7 +3132,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
             PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
     }
 
-    #if defined(PARSEC_PROF_TRACE)
+#if defined(PARSEC_PROF_TRACE)
+    if( gpu_task != NULL )
+    {
         gpu_dev_prof_t prof_info;
 
         prof_info.task_type                  = gpu_task->task_type;
@@ -3152,12 +3162,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.nb_sec_stage_in_d2d        = gpu_task->nb_sec_stage_in_d2d;
         prof_info.nb_sec_stage_in_h2d        = gpu_task->nb_sec_stage_in_h2d;
         prof_info.clock_speed                = gpu_task->clock_speed;
+        prof_info.class_id                   = gpu_task->ec->task_class->task_class_id;
 
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,
             (uint64_t)gpu_task->ec->task_class->key_functions->key_hash(gpu_task->ec->task_class->make_key(gpu_task->ec->taskpool, gpu_task->ec->locals), NULL),
             gpu_task->ec->taskpool->taskpool_id, &prof_info, 0);
-    #endif  
+    }
+#endif  
 
     if (parsec_migrate_statistics)
     {
