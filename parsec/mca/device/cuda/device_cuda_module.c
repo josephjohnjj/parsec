@@ -55,6 +55,7 @@ extern int parsec_gpu_task_count_start;
 extern int parsec_gpu_task_count_end;
 extern int parsec_cuda_migrate_tasks;
 extern int parsec_migrate_statistics;
+extern int parsec_cuda_delegate_task_completion; 
 
 /* look up how many FMA per cycle in single/double, per cuda MP
  * precision.
@@ -3114,7 +3115,16 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
     gpu_device->super.executed_tasks++;
-    __parsec_complete_execution( es, gpu_task->ec );
+
+    if( parsec_cuda_delegate_task_completion == 0 )
+        __parsec_complete_execution( es, gpu_task->ec );
+    else
+    {
+        gpu_task->ec->priority = INT32_MAX;  /* Assign maximum priority */
+        gpu_task->ec->status = PARSEC_TASK_STATUS_COMPLETE;
+        PARSEC_LIST_ITEM_SINGLETON(gpu_task->ec);
+        __parsec_schedule(es, (parsec_task_t *)gpu_task->ec, 0);
+    }
 
 #if defined(PARSEC_PROF_TRACE)
     if(gpu_task != NULL)

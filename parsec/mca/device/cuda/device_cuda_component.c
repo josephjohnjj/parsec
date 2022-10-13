@@ -40,11 +40,12 @@ int parsec_device_cuda_enabled_index, parsec_device_cuda_enabled;
 int parsec_cuda_sort_pending = 0, parsec_cuda_max_streams = PARSEC_GPU_MAX_STREAMS;
 int parsec_cuda_memory_block_size, parsec_cuda_memory_percentage, parsec_cuda_memory_number_of_blocks;
 char* parsec_cuda_lib_path = NULL;
-int parsec_cuda_migrate_tasks = 0;
-int parsec_migrate_statistics = 0;
-int parsec_cuda_iterative = 0;
-int parsec_cuda_migrate_chunk_size = 0;
-int parsec_cuda_migrate_task_selection = 0;
+int parsec_cuda_migrate_tasks            = 0;
+int parsec_migrate_statistics            = 0;
+int parsec_cuda_iterative                = 0;
+int parsec_cuda_migrate_chunk_size       = 0;
+int parsec_cuda_migrate_task_selection   = 0;
+int parsec_cuda_delegate_task_completion = 0;
 
 static int cuda_mask, cuda_nvlink_mask;
 
@@ -217,6 +218,9 @@ static int device_cuda_component_register(void)
     (void)parsec_mca_param_reg_int_name("device_cuda", "migrate_task_selection",
                                         "Integer to choose the method of task selection during migration",
                                         false, false, 1, &parsec_cuda_migrate_task_selection);
+    (void)parsec_mca_param_reg_int_name("device_cuda", "delegate_task_completion",
+                                        "Integer to choose the whether task completion should be done by a manager thread (default is yes)",
+                                        false, false, 1, &parsec_cuda_delegate_task_completion);
 
                                         
 
