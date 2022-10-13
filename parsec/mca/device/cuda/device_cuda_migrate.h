@@ -17,9 +17,10 @@
 #define TASK_MIGRATED_BEFORE_STAGE_IN 1
 #define TASK_MIGRATED_AFTER_STAGE_IN  2
 
-#define SINGLE_TRY_SELECTION  0
-#define SINGLE_PASS_SELECTION 1
-#define TWO_PASS_SELECTION    2
+#define SINGLE_TRY_SELECTION      0
+#define SINGLE_PASS_SELECTION     1
+#define TWO_PASS_SELECTION        2
+#define AFFINITY_ONLY_SELECTION   3
 
 #define FIRST_PASS  1
 #define SECOND_PASS 2
@@ -94,6 +95,7 @@ typedef struct gpu_dev_prof_s
     double clock_speed;
     double task_type;
     double class_id;
+    double exec_stream_index;
 } gpu_dev_prof_t;
 
 int parsec_cuda_migrate_init(int ndevices);
@@ -125,6 +127,8 @@ int two_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t
                        parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task);
 int single_try_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
                          parsec_gpu_task_t **migrated_gpu_task);
+int affinity_only_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
+                       parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task);
 parsec_list_item_t* find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *starving_device, int stage_in_status, 
                                        int pass_count, int selection_type);
 
