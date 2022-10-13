@@ -3001,6 +3001,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                              gpu_task->ec->priority );
     }
 
+#if defined(PARSEC_PROF_TRACE)
+    if(gpu_task != NULL)
+        gpu_task->exec_stream_index = 2+exec_stream;
+#endif
     rc = progress_stream( gpu_device,
                           gpu_device->exec_stream[2+exec_stream],
                           NULL,
@@ -3163,6 +3167,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.nb_sec_stage_in_h2d        = gpu_task->nb_sec_stage_in_h2d;
         prof_info.clock_speed                = gpu_task->clock_speed;
         prof_info.class_id                   = gpu_task->ec->task_class->task_class_id;
+        prof_info.exec_stream_index           = gpu_task->exec_stream_index;
 
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,

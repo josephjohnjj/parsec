@@ -38,7 +38,7 @@ static void gpu_dev_profiling_init()
 {
     parsec_profiling_add_dictionary_keyword("GPU_TASK_COUNT", "fill:#FF0000",
                                             sizeof(gpu_dev_prof_t),
-                                            "first_queue_time{double};select_time{double};second_queue_time{double};exec_time_start{double};exec_time_end{double};first_stage_in_time_start{double};sec_stage_in_time_start{double};first_stage_in_time_end{double};sec_stage_in_time_end{double};stage_out_time_start{double};stage_out_time_end{double};complete_time{double};device_index{double};task_count{double};first_waiting_tasks{double};sec_waiting_tasks{double};mig_status{double};nb_first_stage_in{double};nb_sec_stage_in{double};nb_first_stage_in_d2d{double};nb_first_stage_in_h2d{double};nb_sec_stage_in_d2d{double};nb_sec_stage_in_h2d{double};clock_speed{double};task_type{double};class_id{double}",
+                                            "first_queue_time{double};select_time{double};second_queue_time{double};exec_time_start{double};exec_time_end{double};first_stage_in_time_start{double};sec_stage_in_time_start{double};first_stage_in_time_end{double};sec_stage_in_time_end{double};stage_out_time_start{double};stage_out_time_end{double};complete_time{double};device_index{double};task_count{double};first_waiting_tasks{double};sec_waiting_tasks{double};mig_status{double};nb_first_stage_in{double};nb_sec_stage_in{double};nb_first_stage_in_d2d{double};nb_first_stage_in_h2d{double};nb_sec_stage_in_d2d{double};nb_sec_stage_in_h2d{double};clock_speed{double};task_type{double};class_id{double};exec_stream_index{double}",
                                             &parsec_gpu_task_count_start, &parsec_gpu_task_count_end);
 }
 
@@ -168,11 +168,13 @@ int parsec_cuda_migrate_fini()
     }
 
     if(parsec_cuda_migrate_task_selection == 0)
-        printf("Task selection                         : single try \n" );
+        printf("Task selection                         : single-try \n" );
+    else if(parsec_cuda_migrate_task_selection == 1)
+        printf("Task selection                         : single-pass \n" );
     else if(parsec_cuda_migrate_task_selection == 2)
-        printf("Task selection                         : two pass \n" );
+        printf("Task selection                         : two-pass \n" );
     else
-        printf("Task selection                         : single pass \n" );
+        printf("Task selection                         : affinity-only \n" );
 
      printf("\n---------Execution time = %ld ns ( %lf s)------------ \n", time_stamp(), (double) time_stamp() / 1000000000);
     PARSEC_OBJ_RELEASE(migrated_task_list);
@@ -393,10 +395,12 @@ int select_tasks(parsec_execution_stream_t *es, parsec_list_t *ring,
 
         if (selection_type == 0)
             execution_level = single_try_selection(es, dealer_device, &migrated_gpu_task);
+        else if (selection_type == 1) //default
+            execution_level = single_pass_selection(es, dealer_device, starving_device, &migrated_gpu_task);
         else if (selection_type == 2)
             execution_level = two_pass_selection(es, dealer_device, starving_device, &migrated_gpu_task);
-        else //default
-            execution_level = single_pass_selection(es, dealer_device, starving_device, &migrated_gpu_task);
+        else if (selection_type == 3)
+            execution_level = affinity_only_selection(es, dealer_device, starving_device, &migrated_gpu_task);
 
         if (migrated_gpu_task != NULL)
         {
@@ -553,7 +557,7 @@ parsec_list_item_t* find_compute_tasks(parsec_list_t *list, parsec_device_gpu_mo
                 break;
         }
     }
-    else if ( (pass_count == FIRST_PASS))
+    else if ( (pass_count == FIRST_PASS) || (selection_type == AFFINITY_ONLY_SELECTION) )
     {
         for (item = PARSEC_LIST_ITERATOR_FIRST(list); PARSEC_LIST_ITERATOR_END(list) != item; item = PARSEC_LIST_ITERATOR_NEXT(item))
         {
@@ -705,6 +709,54 @@ int two_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t
 
     (void )es;
 
+    return execution_level;
+}
+
+
+/**
+ * @brief Select task  from the different device queues using a single pass through the
+ * device queues. 
+ * @param es
+ * @param dealer_device
+ * @param migrated_gpu_task
+ * @return int
+ */
+
+int affinity_only_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
+                          parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task)
+{
+    int j = 0;
+    int execution_level = 0;
+
+    *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(&(dealer_device->pending), starving_device, 
+                                            TASK_MIGRATED_BEFORE_STAGE_IN, -1, AFFINITY_ONLY_SELECTION);
+    execution_level = 0;
+
+    if (*migrated_gpu_task == NULL)
+    {
+        // level1 - task is availble in the stage_in queue. Stage_in not started.
+        *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[0]->fifo_pending, starving_device, 
+                                            TASK_MIGRATED_BEFORE_STAGE_IN, -1, AFFINITY_ONLY_SELECTION);
+        execution_level = 1;
+
+        if (*migrated_gpu_task == NULL)
+        {
+            for (j = 0; j < (dealer_device->num_exec_streams - 2); j++)
+            {
+                // level2 - task is available in one of the execution queue stage_in is complete
+                *migrated_gpu_task = (parsec_gpu_task_t *)find_compute_tasks(dealer_device->exec_stream[(2 + j)]->fifo_pending, starving_device, 
+                                            TASK_MIGRATED_AFTER_STAGE_IN, -1, AFFINITY_ONLY_SELECTION);
+
+                if (*migrated_gpu_task != NULL)
+                {
+                    execution_level = 2;
+                    break;
+                }
+            }
+        } // end of j
+    }
+
+    (void)es;
     return execution_level;
 }
 
