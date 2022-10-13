@@ -6,6 +6,7 @@ extern int parsec_device_cuda_enabled;
 extern int parsec_migrate_statistics;
 extern int parsec_cuda_migrate_chunk_size; // chunks of task migrated to a device (default=5)
 extern int parsec_cuda_migrate_task_selection; // method of task selection (default == single_pass_selection)
+extern int parsec_cuda_delegate_task_completion; // task completion delegation
 
 parsec_device_cuda_info_t *device_info;
 static parsec_list_t *migrated_task_list;           // list of all migrated task
@@ -175,6 +176,11 @@ int parsec_cuda_migrate_fini()
         printf("Task selection                         : two-pass \n" );
     else
         printf("Task selection                         : affinity-only \n" );
+
+    if(parsec_cuda_delegate_task_completion == 0)
+        printf("Task completion                        : not delegated\n");
+    else
+        printf("Task completion                        : delegated\n");
 
      printf("\n---------Execution time = %ld ns ( %lf s)------------ \n", time_stamp(), (double) time_stamp() / 1000000000);
     PARSEC_OBJ_RELEASE(migrated_task_list);
