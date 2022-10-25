@@ -49,6 +49,7 @@ typedef struct parsec_device_cuda_info_s
     int success_count;
     int ready_compute_tasks;
     int total_compute_tasks;
+    int evictions;
     int affinity_count;
 } parsec_device_cuda_info_t;
 
@@ -131,5 +132,6 @@ int affinity_only_selection(parsec_execution_stream_t *es, parsec_device_gpu_mod
                        parsec_device_gpu_module_t *starving_device, parsec_gpu_task_t **migrated_gpu_task);
 parsec_list_item_t* find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *starving_device, int stage_in_status, 
                                        int pass_count, int selection_type);
+int parsec_cuda_inc_eviction_count(int device_index);
 
 #endif

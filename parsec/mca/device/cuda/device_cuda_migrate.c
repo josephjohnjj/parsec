@@ -101,6 +101,7 @@ int parsec_cuda_migrate_fini()
     int summary_total_tasks_migrated = 0, summary_total_l0_tasks_migrated = 0, summary_total_l1_tasks_migrated = 0, summary_total_l2_tasks_migrated = 0;
     int summary_deals = 0, summary_successful_deals = 0, summary_affinity = 0;
     float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
+    int summary_total_evictions = 0;
 
 #if defined(PARSEC_PROF_TRACE)
     nvmlShutdown();
@@ -123,6 +124,7 @@ int parsec_cuda_migrate_fini()
             avg_task_migrated = ((float)tot_task_migrated) / ((float)device_info[i].deal_count);
             deal_success_perc = (((float)device_info[i].success_count) / ((float)device_info[i].deal_count)) * 100;
             avg_task_migrated_per_sucess = ((float)tot_task_migrated) / ((float)device_info[i].success_count);
+            summary_total_evictions += device_info[i].evictions;
 
             printf("\n       *********** DEVICE %d *********** \n", i);
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
@@ -145,6 +147,7 @@ int parsec_cuda_migrate_fini()
             printf("Avg task migrated per deal             : %lf \n", avg_task_migrated);
             printf("Avg task migrated per successfull deal : %lf \n", avg_task_migrated_per_sucess);
             printf("Perc of successfull deals              : %lf \n", deal_success_perc);
+            printf("Evictions                              : %d \n", device_info[i].evictions);
         }
 
         printf("\n      *********** SUMMARY *********** \n");
@@ -166,23 +169,26 @@ int parsec_cuda_migrate_fini()
         printf("Avg task migrated per deal             : %lf \n", summary_avg_task_migrated);
         printf("Avg task migrated per successfull deal : %lf \n", summary_avg_task_migrated_per_sucess);
         printf("perc of successfull deals              : %lf \n", summary_deal_success_perc);
+        printf("Total evictions                        : %d \n", summary_total_evictions);
+
+        if(parsec_cuda_migrate_task_selection == 0)
+        printf("Task selection                         : single-try \n" );
+        else if(parsec_cuda_migrate_task_selection == 1)
+            printf("Task selection                         : single-pass \n" );
+        else if(parsec_cuda_migrate_task_selection == 2)
+            printf("Task selection                         : two-pass \n" );
+        else
+            printf("Task selection                         : affinity-only \n" );
+
+        if(parsec_cuda_delegate_task_completion == 0)
+            printf("Task completion                        : not delegated\n");
+        else
+            printf("Task completion                        : delegated\n");
+
+        printf("\n---------Execution time = %ld ns ( %lf s)------------ \n", time_stamp(), (double) time_stamp() / 1000000000);
     }
 
-    if(parsec_cuda_migrate_task_selection == 0)
-        printf("Task selection                         : single-try \n" );
-    else if(parsec_cuda_migrate_task_selection == 1)
-        printf("Task selection                         : single-pass \n" );
-    else if(parsec_cuda_migrate_task_selection == 2)
-        printf("Task selection                         : two-pass \n" );
-    else
-        printf("Task selection                         : affinity-only \n" );
-
-    if(parsec_cuda_delegate_task_completion == 0)
-        printf("Task completion                        : not delegated\n");
-    else
-        printf("Task completion                        : delegated\n");
-
-     printf("\n---------Execution time = %ld ns ( %lf s)------------ \n", time_stamp(), (double) time_stamp() / 1000000000);
+    
     PARSEC_OBJ_RELEASE(migrated_task_list);
     free(device_info);
 
@@ -238,6 +244,12 @@ int parsec_cuda_set_device_task(int device, int task_count, int level)
 int parsec_cuda_tasks_executed(int device)
 {
     int rc = parsec_atomic_fetch_add_int32(&(device_info[device].total_tasks_executed), 1);
+    return rc + 1;
+}
+
+int parsec_cuda_inc_eviction_count(int device)
+{
+    int rc = parsec_atomic_fetch_add_int32(&(device_info[device].evictions), 1);
     return rc + 1;
 }
 
@@ -909,7 +921,8 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
 
-                if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
+                if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version || 
+                    task->data[i].data_out->version > task->data[i].data_in->version)
                 {
                     task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
@@ -942,7 +955,8 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
 
-                if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version)
+                if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version ||
+                    task->data[i].data_out->version > task->data[i].data_in->version)
                 {
                     task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
                     parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
