@@ -1550,6 +1550,9 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     }
 
     /* Do not need to be tranferred */
+    if (parsec_migrate_statistics) 
+        parsec_cuda_inc_stage_in_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
+
     if( -1 == transfer_from ) 
     {
         gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
@@ -1561,6 +1564,9 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     } 
     else 
     {
+        if (parsec_migrate_statistics) 
+            parsec_cuda_inc_stage_in_req_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
+
         /* Update the transferred required_data_in size */
         gpu_device->super.required_data_in += original->nb_elts;
 

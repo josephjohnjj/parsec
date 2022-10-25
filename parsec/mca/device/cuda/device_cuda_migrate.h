@@ -49,8 +49,10 @@ typedef struct parsec_device_cuda_info_s
     int success_count;
     int ready_compute_tasks;
     int total_compute_tasks;
-    int evictions;
     int affinity_count;
+    int evictions;
+    int nb_stage_in;
+    int nb_stage_in_req;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
@@ -135,5 +137,7 @@ int find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *dealer_d
                        int pass_count, int selection_type, int execution_level,
                        parsec_list_t *ring, int *tries, int *deal_success);
 int parsec_cuda_inc_eviction_count(int device_index);
+int parsec_cuda_inc_stage_in_count(int device);
+int parsec_cuda_inc_stage_in_req_count(int device);
 
 #endif
