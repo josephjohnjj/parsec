@@ -76,6 +76,9 @@ int parsec_cuda_migrate_init(int ndevices)
         device_info[i].success_count = 0;
         device_info[i].ready_compute_tasks = 0;
         device_info[i].affinity_count = 0;
+        device_info[i].evictions = 0;
+        device_info[i].nb_stage_in = 0;
+        device_info[i].nb_stage_in_req= 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -101,7 +104,7 @@ int parsec_cuda_migrate_fini()
     int summary_total_tasks_migrated = 0, summary_total_l0_tasks_migrated = 0, summary_total_l1_tasks_migrated = 0, summary_total_l2_tasks_migrated = 0;
     int summary_deals = 0, summary_successful_deals = 0, summary_affinity = 0;
     float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
-    int summary_total_evictions = 0;
+    int summary_total_evictions = 0, summary_total_stage_in = 0, summary_total_stage_in_req;
 
 #if defined(PARSEC_PROF_TRACE)
     nvmlShutdown();
@@ -125,6 +128,8 @@ int parsec_cuda_migrate_fini()
             deal_success_perc = (((float)device_info[i].success_count) / ((float)device_info[i].deal_count)) * 100;
             avg_task_migrated_per_sucess = ((float)tot_task_migrated) / ((float)device_info[i].success_count);
             summary_total_evictions += device_info[i].evictions;
+            summary_total_stage_in += device_info[i].nb_stage_in;
+            summary_total_stage_in_req = device_info[i].nb_stage_in_req;
 
             printf("\n       *********** DEVICE %d *********** \n", i);
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
@@ -148,6 +153,10 @@ int parsec_cuda_migrate_fini()
             printf("Avg task migrated per successfull deal : %lf \n", avg_task_migrated_per_sucess);
             printf("Perc of successfull deals              : %lf \n", deal_success_perc);
             printf("Evictions                              : %d \n", device_info[i].evictions);
+            printf("Stage in initiated                     : %d \n", device_info[i].nb_stage_in);
+            printf("Stage in required                      : %d \n", device_info[i].nb_stage_in_req);
+            printf("Perc eviction for stage in initiated   : %lf \n", (( (float)device_info[i].evictions / device_info[i].nb_stage_in) * 100 ) );
+            printf("Perc eviction for stage in required    : %lf \n", (((float)device_info[i].evictions / device_info[i].nb_stage_in_req) * 100 ));
         }
 
         printf("\n      *********** SUMMARY *********** \n");
@@ -169,7 +178,14 @@ int parsec_cuda_migrate_fini()
         printf("Avg task migrated per deal             : %lf \n", summary_avg_task_migrated);
         printf("Avg task migrated per successfull deal : %lf \n", summary_avg_task_migrated_per_sucess);
         printf("perc of successfull deals              : %lf \n", summary_deal_success_perc);
+
         printf("Total evictions                        : %d \n", summary_total_evictions);
+        printf("Total stage in initiated               : %d \n", summary_total_stage_in);
+        printf("Total stage in required                : %d \n", summary_total_stage_in_req);
+        printf("Perc eviction for stage in initiated   : %lf \n", (((float)summary_total_evictions / summary_total_stage_in) * 100 ) );
+        printf("Perc eviction for stage in required    : %lf \n", (((float)summary_total_evictions / summary_total_stage_in_req) * 100 ) );
+
+        
 
         if (parsec_cuda_migrate_task_selection == 0)
             printf("Task selection                         : single-try \n");
@@ -249,6 +265,18 @@ int parsec_cuda_tasks_executed(int device)
 int parsec_cuda_inc_eviction_count(int device)
 {
     int rc = parsec_atomic_fetch_add_int32(&(device_info[device].evictions), 1);
+    return rc + 1;
+}
+
+int parsec_cuda_inc_stage_in_count(int device)
+{
+    int rc = parsec_atomic_fetch_add_int32(&(device_info[device].nb_stage_in), 1);
+    return rc + 1;
+}
+
+int parsec_cuda_inc_stage_in_req_count(int device)
+{
+    int rc = parsec_atomic_fetch_add_int32(&(device_info[device].nb_stage_in_req), 1);
     return rc + 1;
 }
 
