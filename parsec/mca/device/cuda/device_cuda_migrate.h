@@ -13,16 +13,17 @@
 #define CUDA_DEVICE_NUM(DEVICE_NUM) (DEVICE_NUM - 2)
 #define DEVICE_NUM(CUDA_DEVICE_NUM) (CUDA_DEVICE_NUM + 2)
 
-#define TASK_NOT_MIGRATED 0
+#define TASK_NOT_MIGRATED             0
 #define TASK_MIGRATED_BEFORE_STAGE_IN 1
-#define TASK_MIGRATED_AFTER_STAGE_IN 2
+#define TASK_MIGRATED_AFTER_STAGE_IN  2
 
-#define SINGLE_TRY_SELECTION 0
-#define SINGLE_PASS_SELECTION 1
-#define TWO_PASS_SELECTION 2
+#define SINGLE_TRY_SELECTION    0
+#define SINGLE_PASS_SELECTION   1
+#define TWO_PASS_SELECTION      2
 #define AFFINITY_ONLY_SELECTION 3
+#define DATA_REUSE_SELECTION    4
 
-#define FIRST_PASS 1
+#define FIRST_PASS  1
 #define SECOND_PASS 2
 
 /**
@@ -123,7 +124,8 @@ int dec_compute_task_count(int device_index);
 int inc_compute_task_count(int device_index);
 int inc_compute_tasks_executed(int device_index);
 int get_compute_tasks_executed(int device_index);
-int find_task_affinity(parsec_gpu_task_t *gpu_task, int device_index, int status);
+int find_task_affinity_to_starving_node(parsec_gpu_task_t *gpu_task, int device_index, int status);
+int find_task_to_task_affinity(parsec_gpu_task_t *gpu_task, parsec_gpu_task_t *first_task, int status);
 int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
                           parsec_device_gpu_module_t *starving_device, parsec_list_t *ring);
 int two_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
@@ -132,6 +134,8 @@ int single_try_selection(parsec_execution_stream_t *es, parsec_device_gpu_module
                          parsec_device_gpu_module_t *starving_device, parsec_list_t *ring);
 int affinity_only_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
                             parsec_device_gpu_module_t *starving_device, parsec_list_t *ring);
+int data_reuse_selection(parsec_execution_stream_t *es, parsec_device_gpu_module_t *dealer_device,
+                         parsec_device_gpu_module_t *starving_device, parsec_list_t *ring);
 int find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *dealer_device,
                        parsec_device_gpu_module_t *starving_device, int stage_in_status,
                        int pass_count, int selection_type, int execution_level,
