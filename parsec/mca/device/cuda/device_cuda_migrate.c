@@ -129,7 +129,7 @@ int parsec_cuda_migrate_fini()
             avg_task_migrated_per_sucess = ((float)tot_task_migrated) / ((float)device_info[i].success_count);
             summary_total_evictions += device_info[i].evictions;
             summary_total_stage_in += device_info[i].nb_stage_in;
-            summary_total_stage_in_req = device_info[i].nb_stage_in_req;
+            summary_total_stage_in_req += device_info[i].nb_stage_in_req;
 
             printf("\n       *********** DEVICE %d *********** \n", i);
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
