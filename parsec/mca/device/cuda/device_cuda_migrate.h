@@ -143,5 +143,6 @@ int find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *dealer_d
 int parsec_cuda_inc_eviction_count(int device_index);
 int parsec_cuda_inc_stage_in_count(int device);
 int parsec_cuda_inc_stage_in_req_count(int device);
-
+parsec_hook_return_t parsec_cuda_migrate_manager( parsec_execution_stream_t *es,
+                       parsec_device_gpu_module_t* gpu_device );
 #endif
