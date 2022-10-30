@@ -4,6 +4,7 @@
 
 extern int parsec_device_cuda_enabled;
 extern int parsec_migrate_statistics;
+extern int parsec_cuda_migrate_tasks;
 extern int parsec_cuda_migrate_chunk_size;       // chunks of task migrated to a device (default=5)
 extern int parsec_cuda_migrate_task_selection;   // method of task selection (default == single_pass_selection)
 extern int parsec_cuda_delegate_task_completion; // task completion delegation
@@ -202,6 +203,13 @@ int parsec_cuda_migrate_fini()
             printf("Task completion                        : not delegated\n");
         else
             printf("Task completion                        : delegated\n");
+
+        if ( parsec_cuda_migrate_tasks == 0)
+            printf("Migration                              : no migration \n");
+        else if ( parsec_cuda_migrate_tasks == 1)
+            printf("Migration                              : not delegated \n");
+        else
+            printf("Migration                              : delegated \n");
 
         printf("\n---------Execution time = %ld ns ( %lf s)------------ \n", time_stamp(), (double)time_stamp() / 1000000000);
     }

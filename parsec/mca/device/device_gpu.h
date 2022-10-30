@@ -161,6 +161,7 @@ struct parsec_device_gpu_module_s {
     parsec_gpu_exec_stream_t **exec_stream;
     size_t                     mem_block_size;
     int64_t                    mem_nb_blocks;
+    volatile int32_t           migrate_manager_mutex;
 };
 
 struct parsec_gpu_exec_stream_s {
