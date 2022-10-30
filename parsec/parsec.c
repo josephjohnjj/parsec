@@ -61,6 +61,13 @@
 #include "parsec/hbbuffer.h"
 #endif
 
+#ifdef PARSEC_HAVE_CUDA
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+#endif
+
+#include "parsec/mca/device/cuda/device_cuda_migrate.h"
+
 /*
  * Global variables.
  */
