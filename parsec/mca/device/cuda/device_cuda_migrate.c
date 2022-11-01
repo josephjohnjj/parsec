@@ -514,33 +514,31 @@ int find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *dealer_d
 
     assert(list != NULL);
 
+    parsec_list_lock(list);
+
     if ( selection_type == SINGLE_TRY_SELECTION )
     {
-        do
+        do 
         {
             *tries += 1;
-            task = (parsec_gpu_task_t *)parsec_list_pop_back(list);
+            task = (parsec_gpu_task_t *)parsec_list_nolock_pop_back(list);
             if (task != NULL)
             {
                 if ((task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) && (task->migrate_status == TASK_NOT_MIGRATED))
                 {
                     set_migrate_status(dealer_device, starving_device, task, execution_level);
                     PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)task);
-                    parsec_list_push_back(ring, (parsec_list_item_t *)task);
+                    parsec_list_nolock_push_back(ring, (parsec_list_item_t *)task);
                     *deal_success += 1;
                 }
                 else
                 {
-                    parsec_list_push_back(list, (parsec_list_item_t *)task);
+                    parsec_list_nolock_push_back(list, (parsec_list_item_t *)task);
                     task = NULL;
                 }
             }
         } while ((*tries < parsec_cuda_migrate_chunk_size) && (task != NULL));
-
-        return *deal_success;
     }
-
-    parsec_list_lock(list);
 
     if ( selection_type == DATA_REUSE_SELECTION )
     {
