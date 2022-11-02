@@ -47,6 +47,7 @@ static parsec_device_module_t **modules_activated = NULL;
 static mca_base_component_t **device_components = NULL;
 
 extern int parsec_cuda_iterative;
+extern int parsec_cuda_unfair_mapping;
 
 /**
  * Temporary solution: Use the following two arrays to taskpool the weight and
@@ -195,6 +196,20 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
                           parsec_task_snprintf(task_str, MAX_TASK_STRLEN, this_task), dev_index, i);
          }
      }
+
+    // map all tasks to the first device
+    if(parsec_cuda_unfair_mapping == 1)
+    {
+        dev_index = 2;
+    }
+    else if(parsec_cuda_unfair_mapping == 2) // map all tasks to the half of the available device
+    {
+        if( dev_index >  (parsec_mca_device_enabled() / 2) &&  dev_index != 2)
+        {
+           dev_index = dev_index - (parsec_mca_device_enabled() / 2) + 1 ;
+        }
+    }
+
     return dev_index;
 }
 

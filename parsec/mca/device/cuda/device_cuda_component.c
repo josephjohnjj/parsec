@@ -46,6 +46,7 @@ int parsec_cuda_iterative                = 0;
 int parsec_cuda_migrate_chunk_size       = 0;
 int parsec_cuda_migrate_task_selection   = 0;
 int parsec_cuda_delegate_task_completion = 0;
+int parsec_cuda_unfair_mapping           = 0;
 
 static int cuda_mask, cuda_nvlink_mask;
 
@@ -219,8 +220,13 @@ static int device_cuda_component_register(void)
                                         "Integer to choose the method of task selection during migration",
                                         false, false, 1, &parsec_cuda_migrate_task_selection);
     (void)parsec_mca_param_reg_int_name("device_cuda", "delegate_task_completion",
-                                        "Integer to choose the whether task completion should be done by a manager thread (default is yes)",
-                                        false, false, 1, &parsec_cuda_delegate_task_completion);
+                                        "Integer to choose the whether task completion should be done by a manager thread (default is no)",
+                                        false, false, 0, &parsec_cuda_delegate_task_completion);
+    (void)parsec_mca_param_reg_int_name("device_cuda", "unfair_mapping",
+                                        "Integer to choose the whether the we shpuld have an unfair task mapping. This is used only for testing purposes (default is no)",
+                                        false, false, 0, &parsec_cuda_unfair_mapping);
+
+                                        
 
                                         
 
