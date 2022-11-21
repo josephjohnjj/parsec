@@ -45,6 +45,8 @@ typedef struct remote_dep_wire_activate_s {
     uint32_t             task_class_id;
     uint32_t             length;
     parsec_assignment_t  locals[MAX_LOCAL_COUNT];
+    uint32_t             mig_info[MAX_LOCAL_COUNT]; /** for now this is used to carry the size of data items
+                                                        of a migrated task*/
 } remote_dep_wire_activate_t;
 
 typedef struct remote_dep_wire_get_s {
@@ -153,6 +155,15 @@ struct parsec_remote_deps_s {
  *   output[0] .. output[max_deps < MAX_PARAM_COUNT],
  *   (max_dep_count x (np+31)/32 uint32_t) rank_bits
  *   ((np+31)/32 x uint32_t) fw_mask_bitfield } */
+
+typedef struct remote_dep_cb_data_s {
+    parsec_list_item_t        super;
+    parsec_thread_mempool_t *mempool_owner;
+    parsec_remote_deps_t *deps; /* always local */
+    parsec_ce_mem_reg_handle_t memory_handle;
+    int k;
+} remote_dep_cb_data_t;
+PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(remote_dep_cb_data_t);
 
 /* This int can take the following values:
  * - negative: no communication engine has been enabled

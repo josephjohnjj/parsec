@@ -512,6 +512,7 @@ struct parsec_task_s {
     int                        sim_exec_date;
 #endif
     parsec_data_pair_t         data[MAX_PARAM_COUNT];
+    int                        mig_status;
 };
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(parsec_task_t);
 

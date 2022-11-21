@@ -16,6 +16,7 @@
 #include "parsec/parsec_binary_profile.h"
 
 #include "parsec/parsec_internal.h"
+#include "parsec/parsec_migrate.h"
 
 #if defined(PARSEC_DEBUG)
 static int64_t count_reshaping = 0;
@@ -23,7 +24,7 @@ static int64_t count_reshaping = 0;
 
 #define PARSEC_DTD_SKIP_SAVING -1
 
-int parsec_comm_gets_max  = DEP_NB_CONCURRENT * MAX_PARAM_COUNT;
+int parsec_comm_gets_max  = DEP_NB_CONCURRENT * MAX_PARAM_COUNT; 
 int parsec_comm_gets      = 0;
 int parsec_comm_puts_max  = DEP_NB_CONCURRENT * MAX_PARAM_COUNT;
 int parsec_comm_puts      = 0;
@@ -44,18 +45,11 @@ static int parsec_param_enable_aggregate = 0;
 
 parsec_mempool_t *parsec_remote_dep_cb_data_mempool = NULL;
 
-typedef struct remote_dep_cb_data_s {
-    parsec_list_item_t        super;
-    parsec_thread_mempool_t *mempool_owner;
-    parsec_remote_deps_t *deps; /* always local */
-    parsec_ce_mem_reg_handle_t memory_handle;
-    int k;
-} remote_dep_cb_data_t;
-
-PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(remote_dep_cb_data_t);
-
 PARSEC_OBJ_CLASS_INSTANCE(remote_dep_cb_data_t, parsec_list_item_t,
                    NULL, NULL);
+
+extern int parsec_runtime_node_migrate_tasks;
+extern int parsec_migration_engine_up;
 
 char*
 remote_dep_cmd_to_string(remote_dep_wire_activate_t* origin,
@@ -464,8 +458,6 @@ void* remote_dep_dequeue_main(parsec_context_t* context)
 
     remote_dep_bind_thread(context);
     PARSEC_PAPI_SDE_THREAD_INIT();
-
-    remote_dep_ce_init(context);
 
     /* Now synchronize with the main thread */
     pthread_mutex_lock(&mpi_thread_mutex);
@@ -2180,6 +2172,12 @@ remote_dep_ce_init(parsec_context_t* context)
         return rc;
     }
 
+    if(parsec_runtime_node_migrate_tasks && (context->nb_nodes > 1) )
+    {
+        parsec_node_migrate_init(context);
+    }
+
+
     parsec_remote_dep_cb_data_mempool = (parsec_mempool_t*) malloc (sizeof(parsec_mempool_t));
     parsec_mempool_construct(parsec_remote_dep_cb_data_mempool,
                              PARSEC_OBJ_CLASS(remote_dep_cb_data_t), sizeof(remote_dep_cb_data_t),
@@ -2196,6 +2194,9 @@ static int
 remote_dep_ce_fini(parsec_context_t* context)
 {
     remote_dep_mpi_profiling_fini();
+
+    if(parsec_migration_engine_up ==  1)
+        parsec_node_migrate_fini();
 
     // Unregister tags
     parsec_ce.tag_unregister(PARSEC_CE_REMOTE_DEP_ACTIVATE_TAG);

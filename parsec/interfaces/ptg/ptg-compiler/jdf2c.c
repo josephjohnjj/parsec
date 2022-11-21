@@ -1377,6 +1377,7 @@ static inline char* jdf_generate_task_typedef(void **elt, void* arg)
                             "    int                        sim_exec_date;\n"
                             "#endif\n"
                             "    struct __parsec_%s_%s_data_s data;\n"
+                            "    int    mig_status;"
                             "} %s;\n\n",
                             parsec_get_name(NULL, f, "task_s"),
                             jdf_basename, f->fname,
@@ -1426,7 +1427,7 @@ static void jdf_generate_header_file(const jdf_t* jdf)
             "  uint32_t arenas_datatypes_size;\n",
             UTIL_DUMP_LIST_FIELD( sa1, jdf->datatypes, next, name,
                                   dump_string, NULL, "", "", ",", ""),
-            jdf_basename);
+            jdf_basename); 
 
     houtput("} parsec_%s_taskpool_t;\n\n", jdf_basename);
 
@@ -1569,7 +1570,7 @@ static void jdf_generate_structure(jdf_t *jdf)
     }
     coutput("*/\n");
     if(nbfunctions != 0 ) {
-        coutput("  data_repo_t* repositories[%d];\n", nbfunctions );
+        coutput("  data_repo_t* repositories[%d];\n", nbfunctions);
     }
 
     coutput("};\n\n");
@@ -3968,12 +3969,8 @@ static void jdf_generate_release_task_fct(const jdf_t *jdf, jdf_function_entry_t
                 "    parsec_key_t key = this_task->task_class->make_key((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals);\n"
                 "    parsec_hashable_dependency_t *hash_dep = (parsec_hashable_dependency_t *)parsec_hash_table_remove(ht, key);\n",
                 f->task_class_id);
-        if( f->user_defines & JDF_FUNCTION_HAS_UD_STARTUP_TASKS_FUN ) {
-            coutput("    /* Must test for NULL, as user-provided startup tasks may not have a dep in the hash table */\n"
-                    "    if(NULL != hash_dep) parsec_thread_mempool_free(hash_dep->mempool_owner, hash_dep);\n");
-        } else {
-            coutput("    parsec_thread_mempool_free(hash_dep->mempool_owner, hash_dep);\n");
-        }
+        coutput("    /* Must test for NULL, as user-provided startup tasks or migrated tasks may not have a dep in the hash table */\n"
+                "    if(NULL != hash_dep) parsec_thread_mempool_free(hash_dep->mempool_owner, hash_dep);\n");
     }
     if( f->user_defines & JDF_HAS_UD_NB_LOCAL_TASKS ) {
         coutput("    if( (PARSEC_UNDETERMINED_NB_TASKS == __parsec_tp->super.super.nb_tasks) ||\n"
@@ -7270,8 +7267,10 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
      * Only legit have run datalookup & +1 usage limit.
      *
      */
+    int nbfunctions;
+    JDF_COUNT_LIST_ENTRIES(jdf->functions, jdf_function_entry_t, next, nbfunctions);
     coutput("      if (consume_local_repo) {\n"
-            "         data_repo_entry_used_once( %s_repo, this_task->repo_entry->ht_item.key );\n"
+            "           data_repo_entry_used_once( %s_repo, this_task->repo_entry->ht_item.key );\n"
             "      }\n",
             f->fname);
 

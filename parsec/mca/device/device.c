@@ -15,6 +15,7 @@
 #include "parsec/utils/argv.h"
 #include "parsec/parsec_internal.h"
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
+#include "parsec/parsec_migrate.h"
 
 #include <stdlib.h>
 #if defined(PARSEC_HAVE_ERRNO_H)
@@ -48,6 +49,7 @@ static mca_base_component_t **device_components = NULL;
 
 extern int parsec_cuda_iterative;
 extern int parsec_cuda_unfair_mapping;
+extern int parsec_migration_engine_up;
 
 /**
  * Temporary solution: Use the following two arrays to taskpool the weight and
@@ -84,6 +86,24 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
 {
     int i, dev_index = -1, data_index, prefer_index = -1;
     parsec_taskpool_t* tp = this_task->taskpool;
+    int rc = 0;
+
+    if(parsec_migration_engine_up == 1 )
+    {
+        /** dont migrate task that was already migrated **/
+        if(this_task->mig_status == PARSEC_NON_MIGRATED_TASK)
+        {
+            rc = select_task_for_inter_node_migration(this_task);
+            if(rc == 1)
+            {
+                /**
+                 * @brief rc == 1 implies that this task can be migrated across nodes.
+                 * So return a device index greater tha all the available devices.
+                 */
+                return parsec_mca_device_enabled();
+            }
+        }
+    }
 
     if(parsec_cuda_iterative)
     {

@@ -27,6 +27,7 @@
 #include "parsec/utils/backoff.h"
 
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
+#include "parsec/parsec_migrate.h"
 
 #include <signal.h>
 #if defined(PARSEC_HAVE_STRING_H)
@@ -124,6 +125,10 @@ int __parsec_context_wait_task( parsec_execution_stream_t* es,
     return -1;
 }
 #endif
+
+extern int parsec_runtime_node_migrate_tasks;
+extern int parsec_migration_engine_up;
+extern int parsec_runtime_node_migrate_stats;
 
 int __parsec_execute( parsec_execution_stream_t* es,
                       parsec_task_t* task )
@@ -501,6 +506,8 @@ int __parsec_task_progress( parsec_execution_stream_t* es,
         case PARSEC_HOOK_RETURN_DONE:    /* This execution succeeded */
             task->status = PARSEC_TASK_STATUS_COMPLETE;
             __parsec_complete_execution( es, task );
+            if(parsec_migration_engine_up ==  1 && parsec_runtime_node_migrate_stats)
+                parsec_node_mig_inc_task_executed();
             break;
         case PARSEC_HOOK_RETURN_AGAIN:   /* Reschedule later */
             task->status = PARSEC_TASK_STATUS_HOOK;
@@ -648,6 +655,11 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
             (void)rc;  /* for now ignore the return value */
 
             nbiterations++;
+        }
+        else
+        {
+            if(parsec_migration_engine_up ==  1)
+                send_steal_request(es);
         }
     }
 

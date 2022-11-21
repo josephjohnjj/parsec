@@ -122,6 +122,7 @@ set(SOURCES
   maxheap.c
   hbbuffer.c
   datarepo.c
+  parsec_migrate.c
   termdet.c)
 if( PARSEC_PROF_TRACE )
   list(APPEND SOURCES dictionary.c)

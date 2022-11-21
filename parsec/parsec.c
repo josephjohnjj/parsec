@@ -67,6 +67,7 @@
 #endif
 
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
+#include "parsec/parsec_migrate.h"
 
 /*
  * Global variables.
@@ -155,10 +156,13 @@ static char *parsec_enable_dot = NULL;
 static char *parsec_app_name = NULL;
 
 static int parsec_runtime_max_number_of_cores = -1;
-static int parsec_runtime_bind_main_thread = 1;
-static int parsec_runtime_bind_threads     = 1;
+static int parsec_runtime_bind_main_thread    = 1;
+static int parsec_runtime_bind_threads        = 1;
 
 int parsec_runtime_keep_highest_priority_task = 1;
+
+int parsec_runtime_node_migrate_tasks = 0;
+int parsec_runtime_node_migrate_stats = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -923,6 +927,11 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
         parsec_fini(&context);
         return NULL;
     }
+
+    parsec_mca_param_reg_int_name("runtime", "node_migrate_tasks", "migrate task at the node level",
+                                false, false, 0, &parsec_runtime_node_migrate_tasks);
+    parsec_mca_param_reg_int_name("runtime", "node_migrate_stats", "print stats related to migration",
+                                false, false, 0, &parsec_runtime_node_migrate_stats);
 
     if( NULL != cmd_line )
         PARSEC_OBJ_RELEASE(cmd_line);
@@ -1759,6 +1768,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             new_context->data[(int)dest_flow->flow_index].data_in   = target_dc;
             (void)data;
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
+            new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
 
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
                 PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "  Task %s is immediate and will be executed ASAP", tmp1);
@@ -1847,7 +1857,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 #if !defined(PARSEC_DIST_COLLECTIVES)
             assert(src_rank == es->virtual_process->parsec_context->my_rank);
 #endif
-            _array_pos = dst_rank / (8 * sizeof(uint32_t));
+            _array_pos = dst_rank / (8 * sizeof(uint32_t)); 
             _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
             PARSEC_ALLOCATE_REMOTE_DEPS_IF_NULL(arg->remote_deps, oldcontext, MAX_PARAM_COUNT);
             output = &arg->remote_deps->output[dep->dep_datatype_index];
