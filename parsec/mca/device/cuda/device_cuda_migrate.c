@@ -299,30 +299,8 @@ int parsec_cuda_inc_stage_in_req_count(int device)
  */
 int is_starving(int device)
 {
-    /**
-     * @brief The default number of execution stream in PaRSEC is 2. We assume
-     * starvtion if the number of ready tasks available is less than twice the
-     * number of execution stream.
-     */
     parsec_device_gpu_module_t *d = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(device));
-    return (d->mutex < 5) ? 1 : 0;
-
-    // return (parsec_cuda_get_device_task(device, -1) < 5) ? 1 : 0;
-    // return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
-}
-
-int will_starve(int device)
-{
-    /**
-     * @brief The default number of execution stream in PaRSEC is 2. We assume
-     * starvtion if migrating a task will push the number of ready tasks available
-     * to less than twice the number of execution stream.
-     */
-    // parsec_device_gpu_module_t* d = parsec_mca_device_get( DEVICE_NUM(device) );
-    // return (d->mutex < 5) ? 1 : 0;
-
-    // return ((parsec_cuda_get_device_task(device, -1) - 1) < 5) ? 1 : 0;
-    return (get_compute_tasks_executed(device) < 5) ? 1 : 0;
+    return (d->mutex < d->num_exec_streams ) ? 1 : 0;
 }
 
 /**
@@ -938,7 +916,7 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
     migrated_task_t *mig_task = NULL;
 
     dealer_device_index = CUDA_DEVICE_NUM(dealer_device->super.device_index);
-    if (will_starve(dealer_device_index))
+    if (is_starving(dealer_device_index))
         return 0;
 
     // parse all available device looking for starving devices.
@@ -984,7 +962,6 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
             PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)mig_task);
             parsec_cuda_mig_task_enqueue(es, mig_task);
 
-            device_info[dealer_device_index].last_device = starving_device_index;
             char tmp[MAX_TASK_STRLEN];
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "Task %s migrated (level %d, stage_in %d) from device %d to device %d",
                                  parsec_task_snprintf(tmp, MAX_TASK_STRLEN, ((parsec_gpu_task_t *)migrated_gpu_task)->ec),
@@ -992,10 +969,19 @@ int migrate_to_starving_device(parsec_execution_stream_t *es, parsec_device_gpu_
         } // end while
 
         if (deal_success > 0)
+        {
             device_info[dealer_device_index].success_count++;
-
-        if (will_starve(dealer_device_index))
+            device_info[dealer_device_index].last_device = starving_device_index;
+        }
+        else
+        {
             break;
+        }
+
+        if (is_starving(dealer_device_index))
+        {
+            break;
+        }
     } // end for d
 
     /* update the expected load on the GPU device */
