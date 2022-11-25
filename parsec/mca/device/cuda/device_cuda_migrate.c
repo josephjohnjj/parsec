@@ -1336,3 +1336,36 @@ int find_task_to_task_affinity(parsec_gpu_task_t *first_gpu_task, parsec_gpu_tas
 
     return affinity;
 }
+
+parsec_hook_return_t
+parsec_cuda_migrate_manager( parsec_execution_stream_t *es,
+                       parsec_device_gpu_module_t* gpu_device )
+{
+    int rc = 0, nb_migrated = 0;
+
+    (void)es;
+
+    if( gpu_device->migrate_manager_mutex > 0 ) 
+        return PARSEC_HOOK_RETURN_ASYNC;
+    else 
+    {
+        rc = gpu_device->migrate_manager_mutex;
+        if( !parsec_atomic_cas_int32( &gpu_device->migrate_manager_mutex, rc, rc+1 ) ) 
+            return PARSEC_HOOK_RETURN_ASYNC;
+    }
+
+    /**
+     * @brief The migrate_manager thread exits when there are no more
+     * work to be done.
+     */
+    while( gpu_device->mutex > 0)
+    {
+        nb_migrated = migrate_to_starving_device(es,  gpu_device);
+        if( nb_migrated > 0 )   
+        {
+            rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * nb_migrated);
+        }
+    }
+    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->migrate_manager_mutex) );
+    return PARSEC_HOOK_RETURN_ASYNC;
+}
