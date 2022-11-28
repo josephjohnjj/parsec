@@ -66,20 +66,22 @@ int parsec_cuda_migrate_init(int ndevices)
     {
         for (j = 0; j < EXECUTION_LEVEL; j++)
             device_info[i].task_count[j] = 0;
-        device_info[i].load = 0;
-        device_info[i].level0 = 0;
-        device_info[i].level1 = 0;
-        device_info[i].level2 = 0;
+        device_info[i].load                 = 0;
+        device_info[i].level0               = 0;
+        device_info[i].level1               = 0;
+        device_info[i].level2               = 0;
         device_info[i].total_tasks_executed = 0;
-        device_info[i].received = 0;
-        device_info[i].last_device = i;
-        device_info[i].deal_count = 0;
-        device_info[i].success_count = 0;
-        device_info[i].ready_compute_tasks = 0;
-        device_info[i].affinity_count = 0;
-        device_info[i].evictions = 0;
-        device_info[i].nb_stage_in = 0;
-        device_info[i].nb_stage_in_req= 0;
+        device_info[i].received             = 0;
+        device_info[i].last_device          = i;
+        device_info[i].deal_count           = 0;
+        device_info[i].success_count        = 0;
+        device_info[i].ready_compute_tasks  = 0;
+        device_info[i].affinity_count       = 0;
+        device_info[i].evictions            = 0;
+        device_info[i].nb_stage_in          = 0;
+        device_info[i].nb_stage_in_req      = 0;
+        device_info[i].completed_co_manager = 0;
+        device_info[i].completed_manager    = 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -105,7 +107,8 @@ int parsec_cuda_migrate_fini()
     int summary_total_tasks_migrated = 0, summary_total_l0_tasks_migrated = 0, summary_total_l1_tasks_migrated = 0, summary_total_l2_tasks_migrated = 0;
     int summary_deals = 0, summary_successful_deals = 0, summary_affinity = 0;
     float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
-    int summary_total_evictions = 0, summary_total_stage_in = 0, summary_total_stage_in_req;
+    int summary_total_evictions = 0, summary_total_stage_in = 0, summary_total_stage_in_req = 0;
+    int summary_completed_manager = 0, summary_completed_co_manager  = 0;
 
 #if defined(PARSEC_PROF_TRACE)
     nvmlShutdown();
@@ -131,6 +134,8 @@ int parsec_cuda_migrate_fini()
             summary_total_evictions += device_info[i].evictions;
             summary_total_stage_in += device_info[i].nb_stage_in;
             summary_total_stage_in_req += device_info[i].nb_stage_in_req;
+            summary_completed_manager += device_info[i].completed_manager;
+            summary_completed_co_manager += device_info[i].completed_co_manager;
 
             printf("\n       *********** DEVICE %d *********** \n", i);
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
@@ -158,6 +163,8 @@ int parsec_cuda_migrate_fini()
             printf("Stage in required                      : %d \n", device_info[i].nb_stage_in_req);
             printf("Perc eviction for stage in initiated   : %lf \n", (( (float)device_info[i].evictions / device_info[i].nb_stage_in) * 100 ) );
             printf("Perc eviction for stage in required    : %lf \n", (((float)device_info[i].evictions / device_info[i].nb_stage_in_req) * 100 ));
+            printf("Tasks completed by manager             : %d  \n", device_info[i].completed_manager);
+            printf("Tasks completed by co-manager          : %d  \n", device_info[i].completed_co_manager);
         }
 
         printf("\n      *********** SUMMARY *********** \n");
@@ -185,6 +192,9 @@ int parsec_cuda_migrate_fini()
         printf("Total stage in required                : %d \n", summary_total_stage_in_req);
         printf("Perc eviction for stage in initiated   : %lf \n", (((float)summary_total_evictions / summary_total_stage_in) * 100 ) );
         printf("Perc eviction for stage in required    : %lf \n", (((float)summary_total_evictions / summary_total_stage_in_req) * 100 ) );
+
+        printf("Tasks completed by manager             : %d  \n", summary_completed_manager);
+        printf("Tasks completed by co-manager          : %d  \n", summary_completed_co_manager);
 
         
 
@@ -1246,6 +1256,18 @@ int get_compute_tasks_executed(int device_index)
     return device_info[device_index].total_compute_tasks;
 }
 
+int inc_manager_complete_count(int device_index)
+{
+    parsec_atomic_fetch_inc_int32(&device_info[device_index].completed_manager);
+    return device_info[device_index].completed_manager;
+}
+
+int inc_co_manager_complete_count(int device_index)
+{
+    parsec_atomic_fetch_inc_int32(&device_info[device_index].completed_co_manager);
+    return device_info[device_index].completed_co_manager;
+}
+
 int find_task_affinity_to_starving_node(parsec_gpu_task_t *gpu_task, int device_index, int status)
 {
     int i;
@@ -1338,19 +1360,20 @@ int find_task_to_task_affinity(parsec_gpu_task_t *first_gpu_task, parsec_gpu_tas
 }
 
 parsec_hook_return_t
-parsec_cuda_migrate_manager( parsec_execution_stream_t *es,
+parsec_cuda_co_manager( parsec_execution_stream_t *es,
                        parsec_device_gpu_module_t* gpu_device )
 {
-    int rc = 0, nb_migrated = 0;
+    int rc = 0, nb_migrated = 0, i = 0;
+    parsec_task_t* task = NULL;
 
     (void)es;
 
-    if( gpu_device->migrate_manager_mutex > 0 ) 
+    if( gpu_device->co_manager_mutex > 0 ) 
         return PARSEC_HOOK_RETURN_ASYNC;
     else 
     {
-        rc = gpu_device->migrate_manager_mutex;
-        if( !parsec_atomic_cas_int32( &gpu_device->migrate_manager_mutex, rc, rc+1 ) ) 
+        rc = gpu_device->co_manager_mutex;
+        if( !parsec_atomic_cas_int32( &gpu_device->co_manager_mutex, rc, rc+1 ) ) 
             return PARSEC_HOOK_RETURN_ASYNC;
     }
 
@@ -1358,14 +1381,36 @@ parsec_cuda_migrate_manager( parsec_execution_stream_t *es,
      * @brief The migrate_manager thread exits when there are no more
      * work to be done.
      */
-    while( gpu_device->mutex > 0)
+    while( gpu_device->mutex > 0 || gpu_device->complete_mutex > 0)
     {
         nb_migrated = migrate_to_starving_device(es,  gpu_device);
         if( nb_migrated > 0 )   
         {
             rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * nb_migrated);
         }
+
+        if(gpu_device->complete_mutex > 0)
+        {
+
+            /** try completion PARSEC_MAX_EVENTS_PER_STREAM tasks */ 
+            for( i = 0; i < PARSEC_MAX_EVENTS_PER_STREAM; i++)
+            {
+                task = NULL;
+                task = (parsec_task_t*)parsec_fifo_pop( &(gpu_device->to_complete) );
+                if( task != NULL)
+                {
+                    __parsec_complete_execution( es, task );
+                    parsec_atomic_fetch_dec_int32( &(gpu_device->complete_mutex) );
+                }                                  
+
+                if( gpu_device->complete_mutex == 0 )
+                {
+                    break;
+                }
+            }
+        }
+        
     }
-    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->migrate_manager_mutex) );
+    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->co_manager_mutex) );
     return PARSEC_HOOK_RETURN_ASYNC;
 }

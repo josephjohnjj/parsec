@@ -377,7 +377,8 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
     if(-1 == len) { gpu_device->super.name = NULL; goto release_device; }
     gpu_device->data_avail_epoch = 0;
     gpu_device->mutex = 0;
-    gpu_device->migrate_manager_mutex = 0;
+    gpu_device->complete_mutex = 0;
+    gpu_device->co_manager_mutex = 0;
 
     gpu_device->max_exec_streams = parsec_cuda_max_streams;
     gpu_device->exec_stream =
@@ -494,6 +495,7 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
     PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_lru,       parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_owned_lru, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->pending,           parsec_fifo_t);
+    PARSEC_OBJ_CONSTRUCT(&gpu_device->to_complete,       parsec_fifo_t);
 
     gpu_device->sort_starting_p = NULL;
     gpu_device->peer_access_mask = 0;  /* No GPU to GPU direct transfer by default */
@@ -592,6 +594,8 @@ parsec_cuda_module_fini(parsec_device_module_t* device)
 
     /* Release pending queue */
     PARSEC_OBJ_DESTRUCT(&gpu_device->pending);
+    PARSEC_OBJ_DESTRUCT(&gpu_device->to_complete);
+    
 
     /* Release all streams */
     for( j = 0; j < gpu_device->num_exec_streams; j++ ) {
@@ -2954,18 +2958,20 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
          * @brief 
          * parsec_cuda_migrate_tasks == 0 : no task migration
          * parsec_cuda_migrate_tasks == 1 : task will be migrated by the manager thread
-         * parsec_cuda_migrate_tasks == 2 : task will be migrate a different thread
+         * parsec_cuda_migrate_tasks == 2 : task will be migrate by a co-manager
          * 
+         * parsec_cuda_delegate_task_completion == 0: the manager will complete the tasks
+         * parsec_cuda_delegate_task_completion == 1: the co-manager will complete the tasks  
          */
-        if(parsec_cuda_migrate_tasks == 2) 
+        if(parsec_cuda_migrate_tasks == 2 || parsec_cuda_delegate_task_completion == 1) 
         {
             /**
              * @brief 'rc1 == 1' is important or the manager thread will transition
-             * to migrate manager. 'migrate_manager_mutex == 0' will ensure that there 
+             * to co-manager. 'co_manager_mutex == 0' will ensure that there 
              * is only one migrate manager per device.
              */
-            if( rc1 == 1 && gpu_device->migrate_manager_mutex == 0 )
-                parsec_cuda_migrate_manager(es, gpu_device);
+            if( rc1 == 1 && gpu_device->co_manager_mutex == 0 )
+                parsec_cuda_co_manager(es, gpu_device);
         }
 
         return PARSEC_HOOK_RETURN_ASYNC;
@@ -3148,14 +3154,30 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     parsec_cuda_kernel_epilog( gpu_device, gpu_task );
     gpu_device->super.executed_tasks++;
 
+    /** The manager will complete the tasks */
     if( parsec_cuda_delegate_task_completion == 0 )
+    {
         __parsec_complete_execution( es, gpu_task->ec );
+
+        if(parsec_migrate_statistics)
+            inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
+    }
+    /** The co-manager will complete the task. But first check if such a manager is active */
+    else if ( gpu_device->co_manager_mutex > 0 ) 
+    {
+        parsec_atomic_fetch_inc_int32( &(gpu_device->complete_mutex) );
+        parsec_fifo_push( &(gpu_device->to_complete), (parsec_list_item_t*)gpu_task->ec );
+
+        if(parsec_migrate_statistics)
+            inc_co_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
+    }
+    /** If the co-manager is not yet ready */
     else
     {
-        gpu_task->ec->priority = INT32_MAX;  /* Assign maximum priority */
-        gpu_task->ec->status = PARSEC_TASK_STATUS_COMPLETE;
-        PARSEC_LIST_ITEM_SINGLETON(gpu_task->ec);
-        __parsec_schedule(es, (parsec_task_t *)gpu_task->ec, 0);
+        __parsec_complete_execution( es, gpu_task->ec );
+        
+        if(parsec_migrate_statistics)
+            inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
     }
 
 #if defined(PARSEC_PROF_TRACE)
@@ -3246,6 +3268,23 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         PARSEC_DEBUG_VERBOSE(2, parsec_gpu_output_stream,"GPU[%s]: Leaving GPU management at %s:%d", 
                              gpu_device->super.name, __FILE__, __LINE__);
 
+
+        /** manager has nothing else to do. So it can complete the tasks offloaded to the co-manager */
+        parsec_task_t *task = NULL;
+        while( gpu_device->complete_mutex > 0)
+        {
+            task = NULL;
+            task = (parsec_task_t*)parsec_fifo_pop( &(gpu_device->to_complete) );
+            if( task != NULL)
+            {
+                __parsec_complete_execution( es, task );
+                parsec_atomic_fetch_dec_int32( &(gpu_device->complete_mutex) );
+
+                if(parsec_migrate_statistics)
+                    inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
+            } 
+        }
+
         return PARSEC_HOOK_RETURN_ASYNC;
     }
     gpu_task = progress_task;
@@ -3291,38 +3330,5 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     return PARSEC_HOOK_RETURN_DISABLE;
 }
 
-
-parsec_hook_return_t
-parsec_cuda_migrate_manager( parsec_execution_stream_t *es,
-                       parsec_device_gpu_module_t* gpu_device )
-{
-    int rc = 0, nb_migrated = 0;
-
-    (void)es;
-
-    if( gpu_device->migrate_manager_mutex > 0 ) 
-        return PARSEC_HOOK_RETURN_ASYNC;
-    else 
-    {
-        rc = gpu_device->migrate_manager_mutex;
-        if( !parsec_atomic_cas_int32( &gpu_device->migrate_manager_mutex, rc, rc+1 ) ) 
-            return PARSEC_HOOK_RETURN_ASYNC;
-    }
-
-    /**
-     * @brief The migrate_manager thread exits when there are no more
-     * work to be done.
-     */
-    while( gpu_device->mutex > 0)
-    {
-        nb_migrated = migrate_to_starving_device(es,  gpu_device);
-        if( nb_migrated > 0 )   
-        {
-            rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * nb_migrated);
-        }
-    }
-    rc = parsec_atomic_fetch_dec_int32( &(gpu_device->migrate_manager_mutex) );
-    return PARSEC_HOOK_RETURN_ASYNC;
-}
 
 #endif /* PARSEC_HAVE_CUDA */
