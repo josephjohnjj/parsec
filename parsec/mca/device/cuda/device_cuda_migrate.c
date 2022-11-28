@@ -431,17 +431,14 @@ int set_migrate_status(parsec_device_gpu_module_t *dealer_device, parsec_device_
     {
         if (execution_level == 0)
         {
-            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 0);
             device_info[dealer_device_index].level0++;
         }
         if (execution_level == 1)
         {
-            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 1);
             device_info[dealer_device_index].level1++;
         }
         if (execution_level == 2)
         {
-            parsec_cuda_set_device_task(dealer_device_index, /* count */ -1, /* level */ 2);
             device_info[dealer_device_index].level2++;
         }
     }

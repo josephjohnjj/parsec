@@ -2175,25 +2175,7 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     if( NULL != task ) {
         PARSEC_PUSH_TASK(stream->fifo_pending, (parsec_list_item_t*)task);
 
-        if(parsec_migrate_statistics)
-        {
-            if (task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
-            {
-                if(stream == gpu_device->exec_stream[0])
-                {
-                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 0); 
-                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 1); 
-                }
-                else if(stream != gpu_device->exec_stream[1] && stream != gpu_device->exec_stream[0])
-                {
-                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 1); 
-                    parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */  1, /* level */ 2); 
-                }
-            }
-        }
-
         task = NULL;
-
     }
     *out_task = NULL;
     progress_fct = upstream_progress_fct;
@@ -2912,9 +2894,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
     }
 
-    if (parsec_migrate_statistics && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL))
-        parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ 1, /* level */ 0); // increment task count for this device
-
     // keep track of compute task count. Increment compute task count.
     if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
         inc_compute_task_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
@@ -3241,9 +3220,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 #endif  
 
     if (parsec_migrate_statistics)
-    {
-        parsec_cuda_set_device_task(CUDA_DEVICE_NUM(gpu_device->super.device_index), /* count */ -1, /* level */ 2); 
-        
+    {        
         if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
             inc_compute_tasks_executed(CUDA_DEVICE_NUM(gpu_device->super.device_index));
     }
