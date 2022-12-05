@@ -1380,10 +1380,13 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es,
      */
     while( gpu_device->mutex > 0 || gpu_device->complete_mutex > 0)
     {
-        nb_migrated = migrate_to_starving_device(es,  gpu_device);
-        if( nb_migrated > 0 )   
+       if(parsec_cuda_migrate_tasks == 2)
         {
-            rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * nb_migrated);
+            nb_migrated = migrate_to_starving_device(es,  gpu_device);
+            if( nb_migrated > 0 )   
+            {
+                rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), -1 * nb_migrated);
+            }
         }
 
         if(gpu_device->complete_mutex > 0)
