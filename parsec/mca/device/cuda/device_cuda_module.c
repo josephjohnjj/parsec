@@ -1360,6 +1360,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     parsec_data_copy_t* in_elem = task_data->data_in;
     parsec_data_t* original = in_elem->original;
     parsec_gpu_data_copy_t* gpu_elem = task_data->data_out;
+    parsec_data_copy_t *candidate = NULL;
     parsec_device_cuda_module_t *in_elem_dev = NULL;
     uint32_t nb_elts = gpu_task->flow_nb_elts[flow->flow_index];
     int transfer_from = -1;
@@ -1412,7 +1413,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
          * it means that we have already identifies a staged_in data as the possible 
          * candidate. So we can directly use that data for D2D transfer.
          */
-        parsec_data_copy_t *candidate = gpu_task->candidate[flow->flow_index];
+        candidate = gpu_task->candidate[flow->flow_index];
         parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(candidate->device_index);
         assert(PARSEC_DEV_CUDA == target->super.super.type && candidate != NULL );
 
@@ -1430,9 +1431,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         if( /* Check for NULL is important. Otherwise, in cases where the flow is a NEW on GPU it will cause problems */
             gpu_task->original_data_in[ flow->flow_index ] != NULL &&
             gpu_task->original_data_in[ flow->flow_index ] != task_data->data_in)
-            {
-                PARSEC_OBJ_RELEASE(task_data->data_in); 
-            }
+        {
+            PARSEC_OBJ_RELEASE(task_data->data_in); 
+            assert(task_data->data_in != candidate);
+        }
         
         /**
          * if the data was already staged_in then we would have already incremented
@@ -1464,7 +1466,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                  "GPU[%s]:\tData copy %p [readers %d, ref_count %d] on CUDA device %d is the best candidate (case 1) to Device to Device copy",
                  gpu_device->super.name, in_elem, in_elem->readers, in_elem->super.super.obj_reference_count, in_elem_dev->cuda_index);
                 
-                // Remember the original data_in. 
+                /** Remember the original data_in. */
                 assert( gpu_task->original_data_in[ flow->flow_index ] == NULL);
                 gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
                  
@@ -1476,7 +1478,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
             parsec_device_cuda_module_t *target = (parsec_device_cuda_module_t*)parsec_mca_device_get(t);
             if( PARSEC_DEV_CUDA != target->super.super.type ) continue;
             if(gpu_device->peer_access_mask & (1 << target->cuda_index)) {
-                parsec_data_copy_t *candidate = original->device_copies[t];
+                candidate = original->device_copies[t];
 
                 if( (NULL != candidate && candidate->version == in_elem->version )) 
                 {
@@ -1499,7 +1501,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                                          "GPU[%s]:\tData copy %p [ref_count %d] on CUDA device %d is the best candidate (case 3) to Device to Device copy, increasing its readers to %d",
                                          gpu_device->super.name, candidate, candidate->super.super.obj_reference_count, target->cuda_index, candidate->readers+1);
 
-                    // Remember the original data_in.
+                    /** Remember the original data_in. */
                     assert( gpu_task->original_data_in[ flow->flow_index ] == NULL);
                     gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
 
@@ -1538,7 +1540,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     transfer_from = parsec_data_start_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
 
     if( PARSEC_FLOW_ACCESS_WRITE & type && gpu_task->task_type != PARSEC_GPU_TASK_TYPE_PREFETCH ) {
-        //gpu_elem->version++;  /* on to the next version */
         gpu_elem->version = in_elem->version;
         PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                              "GPU[%s]: GPU copy %p [ref_count %d] increments version to %d at %s:%d",
@@ -1554,10 +1555,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                              "New tile created original %p ");
     }
 
-    /* Do not need to be tranferred */
     if (parsec_migrate_statistics) 
         parsec_cuda_inc_stage_in_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
 
+    /* Do not need to be tranferred */
     if( -1 == transfer_from ) 
     {
         gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
@@ -2163,7 +2164,9 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
 {
     parsec_advance_task_function_t progress_fct;
     int saved_rc = 0, rc;
+#if defined(PARSEC_PROF_TRACE)
     float event_duration = 0;
+#endif
 #if defined(PARSEC_DEBUG_NOISIER)
     char task_str[MAX_TASK_STRLEN];
 #endif

@@ -8,6 +8,7 @@ extern int parsec_cuda_migrate_tasks;
 extern int parsec_cuda_migrate_chunk_size;       // chunks of task migrated to a device (default=5)
 extern int parsec_cuda_migrate_task_selection;   // method of task selection (default == single_pass_selection)
 extern int parsec_cuda_delegate_task_completion; // task completion delegation
+extern int parsec_cuda_iterative;
 
 parsec_device_cuda_info_t *device_info;
 static parsec_list_t *migrated_task_list;           // list of all migrated task
@@ -168,6 +169,7 @@ int parsec_cuda_migrate_fini()
         }
 
         printf("\n      *********** SUMMARY *********** \n");
+        printf("Total devices                          : %d \n", NDEVICES);
         printf("Total tasks executed                   : %d \n", summary_total_tasks_executed);
         printf("Total compute tasks executed           : %d \n", summary_total_compute_tasks_executed);
         printf("Perc of compute tasks                  : %lf \n", ((float)summary_total_compute_tasks_executed / summary_total_tasks_executed) * 100);
@@ -220,6 +222,12 @@ int parsec_cuda_migrate_fini()
             printf("Migration                              : not delegated \n");
         else
             printf("Migration                              : delegated \n");
+
+        if(parsec_cuda_iterative)
+            printf("Iterative task mapping                 : yes \n");
+        else
+            printf("Iterative task mapping                 : no \n");
+
 
         printf("\n---------Execution time = %ld ns ( %lf s)------------ \n", time_stamp(), (double)time_stamp() / 1000000000);
     }
@@ -1119,6 +1127,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_data_copy_detach(original, task->data[i].data_out, gpu_device->super.device_index);
                 PARSEC_OBJ_RELEASE(task->data[i].data_out);
                 zone_free(gpu_device->memory, (void *)(task->data[i].data_out->device_private));
+                task->data[i].data_out->device_private = NULL;
             }
 
             parsec_atomic_unlock(&original->lock);

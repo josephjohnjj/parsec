@@ -207,13 +207,17 @@ int parsec_data_copy_detach(parsec_data_t* data,
     {
         for( i = 0; i < parsec_nb_devices; i++ ) 
         {
-            if( i == device) continue;
-            if( NULL == data->device_copies[i] ) continue;
+            if( i == device || NULL == data->device_copies[i]
+                || PARSEC_DATA_COHERENCY_INVALID == data->device_copies[i]->coherency_state) 
+            {
+                continue;
+            }
             if( data->device_copies[i]->version < copy->version)
             {
                 younger_version = i;
                 continue;
-            } 
+            }
+            
             
             data->owner_device = data->device_copies[i]->device_index;
             new_owner_copy = data->device_copies[i];
