@@ -716,6 +716,7 @@ int single_pass_selection(parsec_execution_stream_t *es, parsec_device_gpu_modul
             else
                 break;
         }
+
     }
 
     (void)es;
@@ -1036,77 +1037,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
             parsec_data_t *original = task->data[i].data_out->original;
             parsec_atomic_lock(&original->lock);
-
-            assert(original->device_copies[dealer_device->super.device_index] != NULL);
-            assert(original->device_copies[dealer_device->super.device_index] == task->data[i].data_out);
-            assert(task->data[i].data_out->device_index == dealer_device->super.device_index);
-
-            /**
-             * Even if the task has only read access, the data may have been modified
-             * by another task, and it may be 'dirty'. We check the version of the data
-             * to verify if it is dirty. If it is, then it is pushed to gpu_mem_owned_lru,
-             * if not is is pused to gpu_mem_lru.
-             */
-            if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
-                !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
-            {
-                assert(task->data[i].data_out->readers > 0);
-                /**
-                 * we set a possible candidate for this flow of the task. This will allow
-                 * us to easily find the stage_in data as the possible candidate in
-                 * parsec_gpu_data_stage_in() function.
-                 */
-                gpu_task->candidate[i] = task->data[i].data_out;
-
-                parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
-                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-
-                if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version ||
-                    task->data[i].data_out->version > task->data[i].data_in->version)
-                {
-                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
-                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
-                }
-                else
-                {
-                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-                }
-            }
-            /**
-             * If the task has only read-write access, the data may have been modified
-             * by another task, and it may be 'dirty'. We check the version of the data
-             * to verify if it is dirty. If it is, then it is pushed to gpu_mem_owned_lru,
-             * if not is is pused to gpu_mem_lru.
-             */
-            if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
-                (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
-            {
-                assert(task->data[i].data_out->readers > 0);
-                assert(original->device_copies[0] != NULL);
-                assert(task->data[i].data_in == original->device_copies[0]);
-                /**
-                 * we set a possible candidate for this flow of the task. This will allow
-                 * us to easily find the stage_in data as the possible candidate in
-                 * parsec_gpu_data_stage_in() function.
-                 */
-                gpu_task->candidate[i] = task->data[i].data_out;
-
-                parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
-                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-
-                if (original->device_copies[0] == NULL || task->data[i].data_out->version > original->device_copies[0]->version ||
-                    task->data[i].data_out->version > task->data[i].data_in->version)
-                {
-                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_OWNED;
-                    parsec_list_push_back(&dealer_device->gpu_mem_owned_lru, (parsec_list_item_t *)task->data[i].data_out);
-                }
-                else
-                {
-                    task->data[i].data_out->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
-                    parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-                }
-            }
+           
             /**
              * If the flow is write only, we free the data immediatly as this data should never
              * be written back. As the data_in of a write only flow is always CPU copy we revert
@@ -1120,23 +1051,50 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 assert(original->device_copies[0] != NULL);
                 assert(task->data[i].data_in == original->device_copies[0]);
 
+                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                                 "Migrate: data %p attached to original %p [readers %d, ref_count %d] freed from device %d)",
+                                 task->data[i].data_out, original, task->data[i].data_out->readers,
+                                 task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index);
+
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-
                 parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(task->data[i].data_out->device_index);
                 parsec_data_copy_detach(original, task->data[i].data_out, gpu_device->super.device_index);
-                PARSEC_OBJ_RELEASE(task->data[i].data_out);
+                
                 zone_free(gpu_device->memory, (void *)(task->data[i].data_out->device_private));
                 task->data[i].data_out->device_private = NULL;
+                PARSEC_OBJ_RELEASE(task->data[i].data_out);
+
+                /** The data in used in the first stage-in may have been released.
+                 * But we store the original data_in and that can bes used for the stage_in.
+                 * As the flow is write-only we dont care about the version of the data.
+                */
+                assert(gpu_task->original_data_in[i] != NULL);
+                task->data[i].data_in = gpu_task->original_data_in[i];
+
             }
+            else
+            {
+                assert(task->data[i].data_out->readers > 0);
+                /**
+                 * we set a possible candidate for this flow of the task. This will allow
+                 * us to easily find the stage_in data as the possible candidate in
+                 * parsec_gpu_data_stage_in() function.
+                 */
+                gpu_task->candidate[i] = task->data[i].data_out;
 
-            parsec_atomic_unlock(&original->lock);
+                parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
 
-            PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
                                  task->data[i].data_out, original, task->data[i].data_out->readers,
                                  task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
                                  starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+            }
+
+            parsec_atomic_unlock(&original->lock);
         }
     }
 
@@ -1371,6 +1329,10 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es,
 {
     int rc = 0, nb_migrated = 0, i = 0;
     parsec_task_t* task = NULL;
+    parsec_gpu_task_t *gpu_task = NULL;
+
+    parsec_list_t *gpu_tasks_to_free = NULL; 
+    gpu_tasks_to_free = PARSEC_OBJ_NEW(parsec_list_t);
 
     (void)es;
 
@@ -1404,12 +1366,24 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es,
             /** try completion PARSEC_MAX_EVENTS_PER_STREAM tasks */ 
             for( i = 0; i < PARSEC_MAX_EVENTS_PER_STREAM; i++)
             {
+                gpu_task = NULL;
                 task = NULL;
-                task = (parsec_task_t*)parsec_fifo_pop( &(gpu_device->to_complete) );
-                if( task != NULL)
+
+                gpu_task = (parsec_gpu_task_t*)parsec_fifo_pop( &(gpu_device->to_complete) );
+                if( gpu_task != NULL)
                 {
+                    task = gpu_task->ec;
                     __parsec_complete_execution( es, task );
                     parsec_atomic_fetch_dec_int32( &(gpu_device->complete_mutex) );
+
+                    int f = 0;
+                    for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
+                    {
+                        if( gpu_task->original_data_in[f] != NULL )
+                            PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
+                    }
+
+                    parsec_list_push_back(gpu_tasks_to_free, (parsec_list_item_t*)gpu_task);
                 }                                  
 
                 if( gpu_device->complete_mutex == 0 )
@@ -1420,6 +1394,18 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es,
         }
         
     }
+    
     rc = parsec_atomic_fetch_dec_int32( &(gpu_device->co_manager_mutex) );
+
+    /** We free the task delegated to the co-manager only at the end. Or else it may
+     * interfere with some operations in the manager.
+    */
+    while(NULL != (gpu_task = (parsec_gpu_task_t*)parsec_list_pop_front(gpu_tasks_to_free)) ) 
+    {
+        free(gpu_task);
+    }
+
+    PARSEC_OBJ_RELEASE(gpu_tasks_to_free);
+
     return PARSEC_HOOK_RETURN_ASYNC;
 }

@@ -2856,6 +2856,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     cudaError_t status;
     int rc, rc1, exec_stream = 0, nb_migrated = 0;
     parsec_gpu_task_t *progress_task, *out_task_submit = NULL, *out_task_pop = NULL;
+    int manager_completing_task  = 0;
 #if defined(PARSEC_DEBUG_NOISIER)
     char tmp[MAX_TASK_STRLEN];
 #endif
@@ -3041,6 +3042,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
                 __parsec_reschedule(es, progress_task->ec);
                 gpu_task = progress_task;
                 progress_task = NULL;
+                manager_completing_task = 1;
                 goto remove_gpu_task;
             }
             gpu_task = NULL;
@@ -3130,6 +3132,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_D2D_COMPLETE) {
         free( gpu_task->ec );
         gpu_task->ec = NULL;
+        manager_completing_task = 1;
         goto remove_gpu_task;
     }
 
@@ -3140,6 +3143,22 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     if( parsec_cuda_delegate_task_completion == 0 )
     {
         __parsec_complete_execution( es, gpu_task->ec );
+        manager_completing_task = 1;
+
+        /**
+         * @brief For tasks migrated after stage_ in, during the first stage_in 
+         * we would have increased the refcount of the data_in. If the task was not 
+         * migrated, then the generated code would have decremented this refcount after 
+         * the task was executed. But now as we have migrated the task, this decrement 
+         * will not happen. Here we RELEASE the remembered data_in of the task.
+         */
+    
+        int f = 0;
+        for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
+        {
+            if( gpu_task->original_data_in[f] != NULL )
+                PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
+        }
 
         if(parsec_migrate_statistics)
             inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
@@ -3148,7 +3167,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     else if ( gpu_device->co_manager_mutex > 0 ) 
     {
         parsec_atomic_fetch_inc_int32( &(gpu_device->complete_mutex) );
-        parsec_fifo_push( &(gpu_device->to_complete), (parsec_list_item_t*)gpu_task->ec );
+        parsec_fifo_push( &(gpu_device->to_complete), (parsec_list_item_t*)gpu_task );
+        manager_completing_task = 0;
 
         if(parsec_migrate_statistics)
             inc_co_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
@@ -3157,6 +3177,14 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     else
     {
         __parsec_complete_execution( es, gpu_task->ec );
+        manager_completing_task = 1;
+
+        int f = 0;
+        for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
+        {
+            if( gpu_task->original_data_in[f] != NULL )
+                PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
+        }
         
         if(parsec_migrate_statistics)
             inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
@@ -3167,20 +3195,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->complete_time = time_stamp();
 #endif
 
-    /**
-     * @brief For tasks migrated after stage_ in, during the first stage_in 
-     * we would have increased the refcount of the data_in. If the task was not 
-     * migrated, then the generated code would have decremented this refcount after 
-     * the task was executed. But now as we have migrated the task, this decrement 
-     * will not happen. Here we RELEASE the remembered data_in of the task.
-     */
-
-    int f = 0;
-    for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
-    {
-        if( gpu_task->original_data_in[f] != NULL )
-            PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
-    }
 
 #if defined(PARSEC_PROF_TRACE)
     if( gpu_task != NULL )
@@ -3213,7 +3227,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.nb_sec_stage_in_h2d        = gpu_task->nb_sec_stage_in_h2d;
         prof_info.clock_speed                = gpu_task->clock_speed;
         prof_info.class_id                   = gpu_task->ec->task_class->task_class_id;
-        prof_info.exec_stream_index           = gpu_task->exec_stream_index;
+        prof_info.exec_stream_index          = gpu_task->exec_stream_index;
 
         parsec_profiling_trace_flags(es->es_profile,
             parsec_gpu_task_count_end,
@@ -3237,7 +3251,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     parsec_device_load[gpu_device->super.device_index] -= parsec_device_sweight[gpu_device->super.device_index];
     PARSEC_DEBUG_VERBOSE(3, parsec_gpu_output_stream,"GPU[%s]: gpu_task %p freed at %s:%d", gpu_device->super.name, 
                          gpu_task, __FILE__, __LINE__);
-    free( gpu_task );
+
+    /* free the task only if the manager is completing the task*/
+    if(manager_completing_task == 1)
+        free( gpu_task );
+
     rc = parsec_atomic_fetch_dec_int32( &(gpu_device->mutex) );
     if( 1 == rc ) {  /* I was the last one */
 #if defined(PARSEC_PROF_TRACE)
@@ -3247,23 +3265,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 #endif  /* defined(PARSEC_PROF_TRACE) */
         PARSEC_DEBUG_VERBOSE(2, parsec_gpu_output_stream,"GPU[%s]: Leaving GPU management at %s:%d", 
                              gpu_device->super.name, __FILE__, __LINE__);
-
-
-        /** manager has nothing else to do. So it can complete the tasks offloaded to the co-manager */
-        parsec_task_t *task = NULL;
-        while( gpu_device->complete_mutex > 0)
-        {
-            task = NULL;
-            task = (parsec_task_t*)parsec_fifo_pop( &(gpu_device->to_complete) );
-            if( task != NULL)
-            {
-                __parsec_complete_execution( es, task );
-                parsec_atomic_fetch_dec_int32( &(gpu_device->complete_mutex) );
-
-                if(parsec_migrate_statistics)
-                    inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
-            } 
-        }
 
         return PARSEC_HOOK_RETURN_ASYNC;
     }
