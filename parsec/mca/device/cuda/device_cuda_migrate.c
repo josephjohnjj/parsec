@@ -230,8 +230,10 @@ int parsec_cuda_migrate_fini()
         else
             printf("Migration                              : delegated \n");
 
-        if(parsec_cuda_iterative)
-            printf("Iterative task mapping                 : yes \n");
+        if(parsec_cuda_iterative == 1)
+            printf("Iterative task mapping                 : mig task mapped \n");
+        else if(parsec_cuda_iterative == 2)
+            printf("Iterative task mapping                 : all tasks mapped \n");
         else
             printf("Iterative task mapping                 : no \n");
 

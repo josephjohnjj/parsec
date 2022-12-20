@@ -86,7 +86,7 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
     int i, dev_index = -1, data_index, prefer_index = -1;
     parsec_taskpool_t* tp = this_task->taskpool;
 
-    if(parsec_cuda_iterative)
+    if(parsec_cuda_iterative > 0)
     {
         // if task to device mapping is already available use that
         dev_index = find_task_to_device_mapping(this_task);
