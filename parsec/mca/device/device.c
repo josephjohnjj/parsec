@@ -48,6 +48,7 @@ static mca_base_component_t **device_components = NULL;
 
 extern int parsec_cuda_iterative;
 extern int parsec_cuda_unfair_mapping;
+extern int parsec_migrate_statistics;
 
 /**
  * Temporary solution: Use the following two arrays to taskpool the weight and
@@ -89,7 +90,13 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
     {
         // if task to device mapping is already available use that
         dev_index = find_task_to_device_mapping(this_task);
-        if(dev_index != -1) return dev_index;
+        if(dev_index != -1) 
+        {
+            if(parsec_migrate_statistics)
+                inc_iterative_mapped_count( CUDA_DEVICE_NUM(dev_index) );
+
+            return dev_index;
+        }
     }
 
     /* Select the location of the first data that is used in READ/WRITE or pick the

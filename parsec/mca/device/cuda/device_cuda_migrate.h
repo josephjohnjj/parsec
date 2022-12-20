@@ -56,6 +56,7 @@ typedef struct parsec_device_cuda_info_s
     int nb_stage_in_req;
     int completed_manager;
     int completed_co_manager;
+    int iterative_mapped;
 } parsec_device_cuda_info_t;
 
 typedef struct migrated_task_s
@@ -149,5 +150,6 @@ parsec_hook_return_t parsec_cuda_co_manager( parsec_execution_stream_t *es,
                        parsec_device_gpu_module_t* gpu_device );
 int inc_manager_complete_count(int device_index);
 int inc_co_manager_complete_count(int device_index);
+int inc_iterative_mapped_count(int device_index);
 
 #endif

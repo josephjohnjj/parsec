@@ -83,6 +83,7 @@ int parsec_cuda_migrate_init(int ndevices)
         device_info[i].nb_stage_in_req      = 0;
         device_info[i].completed_co_manager = 0;
         device_info[i].completed_manager    = 0;
+        device_info[i].iterative_mapped    = 0;
     }
 
     task_mapping_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -110,6 +111,7 @@ int parsec_cuda_migrate_fini()
     float summary_avg_task_migrated = 0, summary_deal_success_perc = 0, summary_avg_task_migrated_per_sucess = 0;
     int summary_total_evictions = 0, summary_total_stage_in = 0, summary_total_stage_in_req = 0;
     int summary_completed_manager = 0, summary_completed_co_manager  = 0;
+    int summary_iterative_mapped = 0;
 
 #if defined(PARSEC_PROF_TRACE)
     nvmlShutdown();
@@ -137,6 +139,7 @@ int parsec_cuda_migrate_fini()
             summary_total_stage_in_req += device_info[i].nb_stage_in_req;
             summary_completed_manager += device_info[i].completed_manager;
             summary_completed_co_manager += device_info[i].completed_co_manager;
+            summary_iterative_mapped += device_info[i].iterative_mapped;
 
             printf("\n       *********** DEVICE %d *********** \n", i);
             printf("Total tasks executed                   : %d \n", device_info[i].total_tasks_executed);
@@ -166,6 +169,8 @@ int parsec_cuda_migrate_fini()
             printf("Perc eviction for stage in required    : %lf \n", (((float)device_info[i].evictions / device_info[i].nb_stage_in_req) * 100 ));
             printf("Tasks completed by manager             : %d  \n", device_info[i].completed_manager);
             printf("Tasks completed by co-manager          : %d  \n", device_info[i].completed_co_manager);
+            printf("Tasks mapped iteratively               : %d  \n", device_info[i].iterative_mapped);
+            
         }
 
         printf("\n      *********** SUMMARY *********** \n");
@@ -197,6 +202,8 @@ int parsec_cuda_migrate_fini()
 
         printf("Tasks completed by manager             : %d  \n", summary_completed_manager);
         printf("Tasks completed by co-manager          : %d  \n", summary_completed_co_manager);
+        printf("Tasks mapped iteratively               : %d  \n", summary_iterative_mapped);
+        
 
         
 
@@ -1231,6 +1238,14 @@ int inc_co_manager_complete_count(int device_index)
     parsec_atomic_fetch_inc_int32(&device_info[device_index].completed_co_manager);
     return device_info[device_index].completed_co_manager;
 }
+
+int inc_iterative_mapped_count(int device_index)
+{
+    parsec_atomic_fetch_inc_int32(&device_info[device_index].iterative_mapped);
+    return device_info[device_index].iterative_mapped;
+}
+
+
 
 int find_task_affinity_to_starving_node(parsec_gpu_task_t *gpu_task, int device_index, int status)
 {
