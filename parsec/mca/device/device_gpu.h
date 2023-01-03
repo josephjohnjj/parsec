@@ -105,7 +105,8 @@ struct parsec_gpu_task_s {
     double                           exec_time_end;
     double                           stage_out_time_start;
     double                           stage_out_time_end;
-    double                           complete_time;
+    double                           complete_time_start;
+    double                           complete_time_end;
     int32_t                          first_waiting_tasks;
     int32_t                          sec_waiting_tasks;
     int32_t                          nb_first_stage_in;

@@ -841,7 +841,10 @@ static void parsec_cuda_memory_release_list(parsec_device_cuda_module_t* cuda_de
 #endif
         PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p [dev_prvt %p] attached to original %p on device_index %d at  %s:%d",
                     gpu_copy, gpu_copy->device_private, gpu_copy->original, gpu_copy->device_index ,__FILE__, __LINE__);
-        zone_free( cuda_device->super.memory, (void*)gpu_copy->device_private );
+        if( zone_is_allocated( cuda_device->super.memory, (void*)gpu_copy->device_private ) )
+        {
+            zone_free( cuda_device->super.memory, (void*)gpu_copy->device_private );
+        }
 #endif
         gpu_copy->device_private = NULL;
 
@@ -1207,7 +1210,10 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
             assert( 0 != (lru_gpu_elem->flags & PARSEC_DATA_FLAG_PARSEC_OWNED) );
             PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream, "Freed copy %p attached to original %p on device_index %d at %s:%d",
                     lru_gpu_elem, lru_gpu_elem->original, lru_gpu_elem->device_index, __FILE__, __LINE__);
-            zone_free( gpu_device->memory, (void*)(lru_gpu_elem->device_private) );
+            if( zone_is_allocated( gpu_device->memory, (void*)(lru_gpu_elem->device_private)) )
+            {
+                zone_free( gpu_device->memory, (void*)(lru_gpu_elem->device_private) );
+            }
             lru_gpu_elem->device_private = NULL;
             data_avail_epoch++;
             PARSEC_DEBUG_VERBOSE(3, parsec_gpu_output_stream,
@@ -1406,12 +1412,15 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         {
             if( !((1 == gpu_elem->readers) && (PARSEC_FLOW_ACCESS_READ & type)) ) 
             {
-                parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
+                if(gpu_task->migrate_status == TASK_NOT_MIGRATED)
+                {
+                    parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
                                "(possible anti-dependency,\n"
                                "or concurrent accesses), please prevent that with CTL dependencies\n",
                                gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count, gpu_elem->readers);
-                parsec_atomic_unlock( &original->lock );
-                return -1;
+                    parsec_atomic_unlock( &original->lock );
+                    return -1;
+                }
             }   
         }
         PARSEC_DEBUG_VERBOSE(20, parsec_gpu_output_stream,
@@ -2931,7 +2940,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         gpu_task->second_queue_time         = 0;
         gpu_task->exec_time_start           = 0;
         gpu_task->exec_time_end             = 0;
-        gpu_task->complete_time             = 0;
+        gpu_task->complete_time_start       = 0;
+        gpu_task->complete_time_end         = 0;
         gpu_task->first_stage_in_time_start = 0;
         gpu_task->sec_stage_in_time_start   = 0;
         gpu_task->first_stage_in_time_end   = 0;
@@ -3157,6 +3167,10 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     PARSEC_LIST_ITEM_SINGLETON(gpu_task);
     if (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_D2HTRANSFER) {
         parsec_gpu_complete_w2r_task(gpu_device, gpu_task, es);
+
+        if (parsec_migrate_statistics)
+            inc_thrashing_count(CUDA_DEVICE_NUM(gpu_device->super.device_index));
+
         gpu_task = progress_task;
         goto fetch_task_from_shared_queue;
     }
@@ -3173,8 +3187,17 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     /** The manager will complete the tasks */
     if( parsec_cuda_delegate_task_completion == 0 )
     {
+
+    #if defined(PARSEC_PROF_TRACE)
+        gpu_task->complete_time_start = time_stamp();
+    #endif
+
         __parsec_complete_execution( es, gpu_task->ec );
         manager_completing_task = 1;
+    
+    #if defined(PARSEC_PROF_TRACE)
+        gpu_task->complete_time_end = time_stamp();
+    #endif
 
         /**
          * @brief For tasks migrated after stage_ in, during the first stage_in 
@@ -3188,7 +3211,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
         {
             if( gpu_task->original_data_in[f] != NULL )
+            {
                 PARSEC_OBJ_RELEASE( gpu_task->original_data_in[f] );
+            }
         }
 
         if(parsec_migrate_statistics)
@@ -3207,8 +3232,17 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     /** If the co-manager is not yet ready */
     else
     {
+
+    #if defined(PARSEC_PROF_TRACE)
+        gpu_task->complete_time_start = time_stamp();
+    #endif
+
         __parsec_complete_execution( es, gpu_task->ec );
         manager_completing_task = 1;
+
+    #if defined(PARSEC_PROF_TRACE)
+        gpu_task->complete_time_end = time_stamp();
+    #endif
 
         int f = 0;
         for( f = 0; f < gpu_task->ec->task_class->nb_flows; f++)
@@ -3221,14 +3255,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
             inc_manager_complete_count( CUDA_DEVICE_NUM(gpu_device->super.device_index) );
     }
 
-#if defined(PARSEC_PROF_TRACE)
-    if(gpu_task != NULL)
-        gpu_task->complete_time = time_stamp();
-#endif
-
 
 #if defined(PARSEC_PROF_TRACE)
-    if( gpu_task != NULL )
+    if( gpu_task != NULL && manager_completing_task)
     {
         gpu_dev_prof_t prof_info;
 
@@ -3240,7 +3269,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         prof_info.second_queue_time          = gpu_task->second_queue_time;
         prof_info.exec_time_start            = gpu_task->exec_time_start;
         prof_info.exec_time_end              = gpu_task->exec_time_end;
-        prof_info.complete_time              = gpu_task->complete_time;
+        prof_info.complete_time_start        = gpu_task->complete_time_start;
+        prof_info.complete_time_end          = gpu_task->complete_time_end;
         prof_info.first_stage_in_time_start  = gpu_task->first_stage_in_time_start;
         prof_info.sec_stage_in_time_start    = gpu_task->sec_stage_in_time_start;
         prof_info.first_stage_in_time_end    = gpu_task->first_stage_in_time_end;

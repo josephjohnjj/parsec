@@ -274,6 +274,10 @@ parsec_gpu_create_w2r_task(parsec_device_gpu_module_t *gpu_device,
     w2r_task->stage_out        = NULL;
     w2r_task->complete_stage   = NULL;
 
+#if defined(PARSEC_PROF_TRACE)
+    w2r_task->prof_key_end = -1;
+#endif
+
     (void)es;
     return w2r_task;
 }
@@ -309,7 +313,6 @@ int parsec_gpu_complete_w2r_task(parsec_device_gpu_module_t *gpu_device,
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "D2H[%s] task %p:%i GPU data copy %p [%p] has a backup in memory",
                                  gpu_device->super.name, (void*)task, i, gpu_copy, gpu_copy->original);
-            printf("parsec_gpu_complete_w2r_task \n");
         } else {
             gpu_copy->coherency_state = PARSEC_DATA_COHERENCY_SHARED;
             cpu_copy->coherency_state =  PARSEC_DATA_COHERENCY_SHARED;

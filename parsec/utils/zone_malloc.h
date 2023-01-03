@@ -68,6 +68,11 @@ size_t zone_in_use(zone_malloc_t *gdata);
  */
 size_t zone_debug(zone_malloc_t *gdata, int level, int output_id, const char *prefix);
 
+/**
+ * Check if a segment was allocated
+ */
+int zone_is_allocated(zone_malloc_t *gdata, void *add);
+
 END_C_DECLS
 
 #endif /* _ZONE_MALLOC_H_ */
