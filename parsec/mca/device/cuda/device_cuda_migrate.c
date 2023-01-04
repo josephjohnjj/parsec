@@ -537,7 +537,6 @@ int find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *dealer_d
     {
         do 
         {
-            *tries += 1;
             task = (parsec_gpu_task_t *)parsec_list_nolock_pop_back(list);
             if (task != NULL)
             {
@@ -547,6 +546,7 @@ int find_compute_tasks(parsec_list_t *list, parsec_device_gpu_module_t *dealer_d
                     PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)task);
                     parsec_list_nolock_push_back(ring, (parsec_list_item_t *)task);
                     *deal_success += 1;
+                    *tries += 1;
                 }
                 else
                 {
