@@ -1062,11 +1062,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
             parsec_data_t *original = task->data[i].data_out->original;
             parsec_atomic_lock(&original->lock);
            
-            /**
-             * If the flow is write only, we free the data immediatly as this data should never
-             * be written back. As the data_in of a write only flow is always CPU copy we revert
-             * to the original stage_in mechanism for write only flows.
-             */
+            /** Write only access to data_out*/
             if (!(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
                 (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
@@ -1075,34 +1071,28 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 assert(original->device_copies[0] != NULL);
                 assert(task->data[i].data_in == original->device_copies[0]);
 
-                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                                 "Migrate: data %p attached to original %p [readers %d, ref_count %d] freed from device %d)",
-                                 task->data[i].data_out, original, task->data[i].data_out->readers,
-                                 task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index);
-
+                /**
+                 * @brief When the data is write access, is not in any tracking lists.
+                 * As this we won't need this data (as the data is write only and only
+                 * this task is supposed to be write to this data) we can add it to 
+                 * the gpu_mem_lru. As this data has no reader this ensure that the data
+                 * is reused during zone_malloc().
+                 */
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-                
-                parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(task->data[i].data_out->device_index);
-                parsec_data_copy_detach(original, task->data[i].data_out, gpu_device->super.device_index);
-                
-                if( zone_is_allocated(gpu_device->memory, (void *)(task->data[i].data_out->device_private)) )
-                {
-                    zone_free(gpu_device->memory, (void *)(task->data[i].data_out->device_private));
-                }
-                task->data[i].data_out->device_private = NULL;
-                PARSEC_OBJ_RELEASE(task->data[i].data_out);
 
                 /** The data in used in the first stage-in may have been released.
                  * But we store the original data_in and that can bes used for the stage_in.
                  * As the flow is write-only we dont care about the version of the data.
-                */
+                 */
                 assert(gpu_task->original_data_in[i] != NULL);
                 task->data[i].data_in = gpu_task->original_data_in[i];
 
             }
-            else
+            /** Read only access to data_out*/
+            else if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
+                    !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
                 assert(task->data[i].data_out->readers > 0);
                 /**
@@ -1112,16 +1102,54 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                  */
                 gpu_task->candidate[i] = task->data[i].data_out;
 
+                /**
+                 * As the data has atleast one reader, one of which is this task being
+                 * migrated, this data will not be evicted. So this is atleast in the
+                 * list gpu_mem_owned_lru. If some other task is writing to it (which
+                 * should not happen) this will not be in any tracking list, but the tasks
+                 * that is writing to it will eventually add it to the appropriate tracking 
+                 * list.
+                 */
+                #if 0
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-
-                PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
-                                 "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
-                                 task->data[i].data_out, original, task->data[i].data_out->readers,
-                                 task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
-                                 starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out); 
+                #endif
             }
+            /** Read and write access to data_out*/
+            else if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
+                    (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
+            {
+                assert(task->data[i].data_out->readers == 1);
+                /**
+                 * we set a possible candidate for this flow of the task. This will allow
+                 * us to easily find the stage_in data as the possible candidate in
+                 * parsec_gpu_data_stage_in() function.
+                 */
+                gpu_task->candidate[i] = task->data[i].data_out;
+
+                /**
+                 * @brief As the task has write access, it is not in any tracking lists.
+                 * As the data has atleast one reader, one of which is this task being
+                 * migrated, this data will not be evicted. So we add it to gpu_mem_lru.
+                 * As this task has write access, no ther task has write access to it,
+                 * and so we are not in danger of prematurely evicting the data because 
+                 * we added it to gpu_mem_lru.
+                 */
+                parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
+                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out); 
+            }
+            else
+            {
+                assert(0);
+            }
+
+            PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
+                task->data[i].data_out, original, task->data[i].data_out->readers,
+                task->data[i].data_out->super.super.obj_reference_count, dealer_device->super.device_index,
+                starving_device->super.device_index, TASK_MIGRATED_AFTER_STAGE_IN);
 
             parsec_atomic_unlock(&original->lock);
         }
