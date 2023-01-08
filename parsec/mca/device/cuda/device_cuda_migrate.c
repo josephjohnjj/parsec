@@ -1061,38 +1061,10 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
             parsec_data_t *original = task->data[i].data_out->original;
             parsec_atomic_lock(&original->lock);
-           
-            /** Write only access to data_out*/
-            if (!(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
-                (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
-            {
-                assert(task->data[i].data_out->readers == 0);
-                assert(task->data[i].data_out->super.super.obj_reference_count == 1);
-                assert(original->device_copies[0] != NULL);
-                assert(task->data[i].data_in == original->device_copies[0]);
 
-                /**
-                 * @brief When the data is write access, is not in any tracking lists.
-                 * As this we won't need this data (as the data is write only and only
-                 * this task is supposed to be write to this data) we can add it to 
-                 * the gpu_mem_lru. As this data has no reader this ensure that the data
-                 * is reused during zone_malloc().
-                 */
-                parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
-                PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
-
-                /** The data in used in the first stage-in may have been released.
-                 * But we store the original data_in and that can bes used for the stage_in.
-                 * As the flow is write-only we dont care about the version of the data.
-                 */
-                assert(gpu_task->original_data_in[i] != NULL);
-                task->data[i].data_in = gpu_task->original_data_in[i];
-
-            }
             /** Read only access to data_out*/
-            else if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
-                    !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
+            if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
+                !(PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
                 assert(task->data[i].data_out->readers > 0);
                 /**
@@ -1110,15 +1082,52 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                  * that is writing to it will eventually add it to the appropriate tracking 
                  * list.
                  */
-                #if 0
+
+               
+                /** The data in used in the first stage-in may have been released.
+                 * But we store the original data_in and that can bes used for the stage_in.
+                 * As the flow is write-only we dont care about the version of the data.
+                 */
+                assert(gpu_task->original_data_in[i] != NULL);
+                if( gpu_task->original_data_in[i] != NULL && task->data[i].data_in == NULL)
+                {
+                    task->data[i].data_in = gpu_task->original_data_in[i];
+                }
+        
+            }
+           
+            /** Write only access to data_out */
+            else if (!(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
+                (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
+            {
+                assert(task->data[i].data_out->readers == 0);
+                assert(task->data[i].data_out->super.super.obj_reference_count == 1);
+                
+                /**
+                 * @brief When the data is write access, is not in any tracking lists.
+                 * As  we won't need this data (as the data is write only and only
+                 * this task is supposed to be write to this data) we can add it to 
+                 * the gpu_mem_lru. As this data has no reader this ensure that the data
+                 * is reused during zone_malloc().
+                 */
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
-                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out); 
-                #endif
+                parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
+
+                /** The data in used in the first stage-in may have been released.
+                 * But we store the original data_in and that can bes used for the stage_in.
+                 * As the flow is write-only we dont care about the version of the data.
+                 */
+                assert(gpu_task->original_data_in[i] != NULL);
+                if( gpu_task->original_data_in[i] != NULL && task->data[i].data_in == NULL)
+                {
+                    task->data[i].data_in = gpu_task->original_data_in[i];
+                }
             }
+            
             /** Read and write access to data_out*/
             else if ((PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) &&
-                    (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
+                (PARSEC_FLOW_ACCESS_WRITE & gpu_task->flow[i]->flow_flags))
             {
                 assert(task->data[i].data_out->readers == 1);
                 /**
@@ -1139,6 +1148,16 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out); 
+
+                /** The data in used in the first stage-in may have been released.
+                 * But we store the original data_in and that can bes used for the stage_in.
+                 * As the flow is write-only we dont care about the version of the data.
+                 */
+                assert(gpu_task->original_data_in[i] != NULL);
+                if( gpu_task->original_data_in[i] != NULL && task->data[i].data_in == NULL)
+                {
+                    task->data[i].data_in = gpu_task->original_data_in[i];
+                }
             }
             else
             {
