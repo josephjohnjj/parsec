@@ -1105,11 +1105,19 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 
                 /**
                  * @brief When the data is write access, is not in any tracking lists.
-                 * As  we won't need this data (as the data is write only and only
+                 * As we won't need this data (as the data is write only and only
                  * this task is supposed to be write to this data) we can add it to 
-                 * the gpu_mem_lru. As this data has no reader this ensure that the data
-                 * is reused during zone_malloc().
+                 * the gpu_mem_lru. 
+                 * 
+                 * But we decided that as D2D trasfers are more fast, compared to H2D transfers, 
+                 * we can use this data as the candidate fro the next stage-in. 
+                 * As this data has no reader this may endup being reused during zone_malloc().
+                 * So we increase the reader for this data. This reader will get decremented
+                 * after the second arge in.
                  */
+                gpu_task->candidate[i] = task->data[i].data_out;
+                PARSEC_DATA_COPY_INC_READERS_ATOMIC(task->data[i].data_out);
+                
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
