@@ -157,7 +157,6 @@ struct parsec_device_gpu_module_s {
                                                    */
     parsec_list_t              gpu_mem_lru;   /* Read-only blocks, and fresh blocks */
     parsec_list_t              gpu_mem_owned_lru;  /* Dirty blocks */
-    parsec_list_t              gpu_mem_tmp_lru;  /* Dirty blocks */
     parsec_fifo_t              pending;
     parsec_fifo_t              to_complete;
     struct zone_malloc_s      *memory;

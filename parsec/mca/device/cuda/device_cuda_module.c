@@ -494,7 +494,6 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
     /* Initialize internal lists */
     PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_lru,       parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_owned_lru, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_tmp_lru,   parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->pending,           parsec_fifo_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->to_complete,       parsec_fifo_t);
 
@@ -646,7 +645,6 @@ parsec_cuda_module_fini(parsec_device_module_t* device)
     /* Cleanup the GPU memory. */
     PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_lru);
     PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_owned_lru);
-    PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_tmp_lru);
 
     return PARSEC_SUCCESS;
 }
@@ -881,11 +879,6 @@ parsec_cuda_flush_lru( parsec_device_module_t *device )
     /* Free all memory on GPU */
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_lru);
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_owned_lru);
-
-    if( !parsec_list_is_empty(&gpu_device->gpu_mem_tmp_lru) )
-    {
-        printf("LIST is not empty \n");
-    }
 
 
 #if !defined(PARSEC_GPU_CUDA_ALLOC_PER_TILE) && !defined(_NDEBUG)

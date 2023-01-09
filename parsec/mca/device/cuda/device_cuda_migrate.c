@@ -1054,9 +1054,7 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
 
         for (i = 0; i < task->task_class->nb_flows; i++)
         {
-            if (task->data[i].data_out == NULL)
-                continue;
-            if (PARSEC_FLOW_ACCESS_NONE == (PARSEC_FLOW_ACCESS_MASK & gpu_task->flow[i]->flow_flags)) // CTL flow
+            if ( !(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) && !(PARSEC_FLOW_ACCESS_READ & gpu_task->flow[i]->flow_flags) ) // CTL flow
                 continue;
 
             parsec_data_t *original = task->data[i].data_out->original;
@@ -1080,13 +1078,12 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                  * list gpu_mem_owned_lru. If some other task is writing to it (which
                  * should not happen) this will not be in any tracking list, but the tasks
                  * that is writing to it will eventually add it to the appropriate tracking 
-                 * list.
+                 * list during parsec_cuda_kernel_epilog.
                  */
 
                
-                /** The data in used in the first stage-in may have been released.
-                 * But we store the original data_in and that can bes used for the stage_in.
-                 * As the flow is write-only we dont care about the version of the data.
+                /** The data in used in the first stage-in may have been evicted.
+                 * But we store the original data_in and that can be used for the stage_in.
                  */
                 assert(gpu_task->original_data_in[i] != NULL);
                 if( gpu_task->original_data_in[i] != NULL && task->data[i].data_in == NULL)
@@ -1106,24 +1103,24 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 /**
                  * @brief When the data is write access, is not in any tracking lists.
                  * As we won't need this data (as the data is write only and only
-                 * this task is supposed to be write to this data) we can add it to 
-                 * the gpu_mem_lru. 
+                 * this task is supposed to be write to this data) and it doesnt have any other readers
+                 * we can add it to the gpu_mem_lru for eviction. 
                  * 
-                 * But we decided that as D2D trasfers are more fast, compared to H2D transfers, 
-                 * we can use this data as the candidate fro the next stage-in. 
-                 * As this data has no reader this may endup being reused during zone_malloc().
+                 * But we decided that as D2D trasfers are more fast, compared to H2D transfers. 
+                 * So we can use this data as the candidate for the next stage-in. 
+                 * As this data has no reader this may endup being evicted during zone_malloc().
                  * So we increase the reader for this data. This reader will get decremented
-                 * after the second arge in.
+                 * after the second stage-in.
                  */
                 gpu_task->candidate[i] = task->data[i].data_out;
                 PARSEC_DATA_COPY_INC_READERS_ATOMIC(task->data[i].data_out);
-                
+
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out);
 
                 /** The data in used in the first stage-in may have been released.
-                 * But we store the original data_in and that can bes used for the stage_in.
+                 * But we store the original data_in and that can be used for the stage_in.
                  * As the flow is write-only we dont care about the version of the data.
                  */
                 assert(gpu_task->original_data_in[i] != NULL);
@@ -1149,17 +1146,16 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                  * @brief As the task has write access, it is not in any tracking lists.
                  * As the data has atleast one reader, one of which is this task being
                  * migrated, this data will not be evicted. So we add it to gpu_mem_lru.
-                 * As this task has write access, no ther task has write access to it,
-                 * and so we are not in danger of prematurely evicting the data because 
-                 * we added it to gpu_mem_lru.
+                 * As this task has write access, no ther task has write access to it.
+                 * So when we add it to gpu_mem_lru, we are not in danger of prematurely 
+                 * evicting the data, to whichn some other task has read or write access.
                  */
                 parsec_list_item_ring_chop((parsec_list_item_t *)task->data[i].data_out);
                 PARSEC_LIST_ITEM_SINGLETON(task->data[i].data_out);
                 parsec_list_push_back(&dealer_device->gpu_mem_lru, (parsec_list_item_t *)task->data[i].data_out); 
 
                 /** The data in used in the first stage-in may have been released.
-                 * But we store the original data_in and that can bes used for the stage_in.
-                 * As the flow is write-only we dont care about the version of the data.
+                 * But we store the original data_in and that can be used for the stage_in.
                  */
                 assert(gpu_task->original_data_in[i] != NULL);
                 if( gpu_task->original_data_in[i] != NULL && task->data[i].data_in == NULL)
