@@ -120,6 +120,27 @@ void *zone_malloc(zone_malloc_t *gdata, size_t size)
     return NULL;
 }
 
+int zone_is_allocated(zone_malloc_t *gdata, void *add)
+{
+    segment_t *current_segment, *next_segment, *prev_segment;
+    int current_tid, next_tid, prev_tid;
+    off_t offset;
+
+    offset = (char*)add -gdata->base;
+    assert( (offset % gdata->unit_size) == 0);
+    current_tid = offset / gdata->unit_size;
+    current_segment = SEGMENT_AT_TID(gdata, current_tid);
+
+    if( NULL == current_segment ) 
+    {
+        return 0 ;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
 void zone_free(zone_malloc_t *gdata, void *add)
 {
     segment_t *current_segment, *next_segment, *prev_segment;

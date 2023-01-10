@@ -249,7 +249,6 @@ parsec_gpu_create_w2r_task(parsec_device_gpu_module_t *gpu_device,
             }
             parsec_list_item_ring_chop((parsec_list_item_t*)gpu_copy);
             PARSEC_LIST_ITEM_SINGLETON(gpu_copy);
-            //gpu_copy->readers++;
             PARSEC_DATA_COPY_INC_READERS(gpu_copy);
             d2h_task->data[nb_cleaned].data_out = gpu_copy;
             gpu_copy->data_transfer_status = PARSEC_DATA_STATUS_UNDER_TRANSFER;  /* mark the copy as in transfer */
@@ -280,6 +279,10 @@ parsec_gpu_create_w2r_task(parsec_device_gpu_module_t *gpu_device,
     w2r_task->stage_in         = NULL;
     w2r_task->stage_out        = NULL;
     w2r_task->complete_stage   = NULL;
+
+#if defined(PARSEC_PROF_TRACE)
+    w2r_task->prof_key_end = -1;
+#endif
 
     (void)es;
     return w2r_task;

@@ -105,7 +105,8 @@ struct parsec_gpu_task_s {
     double                           exec_time_end;
     double                           stage_out_time_start;
     double                           stage_out_time_end;
-    double                           complete_time;
+    double                           complete_time_start;
+    double                           complete_time_end;
     int32_t                          first_waiting_tasks;
     int32_t                          sec_waiting_tasks;
     int32_t                          nb_first_stage_in;
@@ -149,6 +150,7 @@ struct parsec_device_gpu_module_s {
                                                    *   the index of the set bit device.
                                                    */
     volatile int32_t           mutex;
+    volatile int32_t           complete_mutex; /* Count of task to be completed by the co-manager*/
     uint64_t                   data_avail_epoch;  /**< Identifies the epoch of the data status on the devide. It
                                                    *   is increased every time a new data is made available, so
                                                    *   that we know which tasks can be evaluated for submission.
@@ -156,12 +158,14 @@ struct parsec_device_gpu_module_s {
     parsec_list_t              gpu_mem_lru;   /* Read-only blocks, and fresh blocks */
     parsec_list_t              gpu_mem_owned_lru;  /* Dirty blocks */
     parsec_fifo_t              pending;
+    parsec_fifo_t              to_complete; /* task to be completed by co-manager*/
     struct zone_malloc_s      *memory;
     parsec_list_item_t        *sort_starting_p;
     parsec_gpu_exec_stream_t **exec_stream;
     size_t                     mem_block_size;
     int64_t                    mem_nb_blocks;
-    volatile int32_t           migrate_manager_mutex;
+    volatile int32_t           co_manager_mutex; /* mutex for GPU level co-manager*/
+    volatile int32_t           migrate_manager_mutex; /* mutex for node level migrate manager*/
 };
 
 struct parsec_gpu_exec_stream_s {

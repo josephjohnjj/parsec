@@ -11,6 +11,7 @@
 #include "parsec/utils/output.h"
 #include "parsec/include/parsec/os-spec-timing.h"
 #include "parsec/utils/debug.h"
+#include <errno.h>
 
 static int init_done = 0;
 static int init_status = 0;
