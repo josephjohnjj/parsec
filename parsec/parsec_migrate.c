@@ -172,11 +172,6 @@ int parsec_node_migrate_init( parsec_context_t* context )
     if(parsec_communication_engine_up > 0)
         parsec_migration_engine_up = 1;  
 
-    char hostname[256];
-    gethostname(hostname, sizeof(hostname));
-    printf("PID %d on %s ready for attach\n", getpid(), hostname);
-    sleep(20);
-
     return 0;
 
 }
