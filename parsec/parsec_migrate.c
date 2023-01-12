@@ -239,6 +239,9 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         
         if(parsec_runtime_node_migrate_stats)
             parsec_node_mig_inc_req_recvd();
+
+        PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p recvd from rank %d on rank %d. #task requested %d", 
+            steal_request, steal_request->src, steal_request->dst, steal_request->nb_task_request);
     }
 }
 
@@ -249,11 +252,9 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
  * @param device_index 
  * @return int 
  */
-int select_task_for_inter_node_migration(parsec_task_t* this_task)
+int process_mig_request(parsec_task_t* this_task)
 {
     int rc = 0;
-
-    assert(nb_current_steal_request >= 0);
 
     if(nb_current_steal_request == 0)
         return 0;
@@ -283,13 +284,14 @@ int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec
 
     steal_request = (steal_request_t*) parsec_list_pop_front( &steal_req_fifo );
     assert(steal_request != NULL);
-    
-    deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
-    assert( deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
 
     /** deps will be send to the node that initiated the request */
     dst_rank = steal_request->src; 
     src_rank = my_rank;
+    
+    deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
+    assert( deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
+
     /** find the size of the message the original message to be send */
     parsec_ce.pack_size(&parsec_ce, dep_count, dep_dtt, &dsize);
     assert(dep_count+RDEP_MSG_SHORT_LIMIT > dsize );

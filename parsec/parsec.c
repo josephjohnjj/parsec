@@ -163,6 +163,7 @@ int parsec_runtime_keep_highest_priority_task = 1;
 
 int parsec_runtime_node_migrate_tasks = 0;
 int parsec_runtime_node_migrate_stats = 0;
+int parsec_runtime_gdb_attach         = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -932,6 +933,16 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_node_migrate_tasks);
     parsec_mca_param_reg_int_name("runtime", "node_migrate_stats", "print stats related to migration",
                                 false, false, 0, &parsec_runtime_node_migrate_stats);
+    parsec_mca_param_reg_int_name("runtime", "gdb_attach", "attach GDB for debugging",
+                                false, false, 0, &parsec_runtime_gdb_attach);
+
+    if( parsec_runtime_gdb_attach > 0 )
+    {
+        char hostname[256];
+        gethostname(hostname, sizeof(hostname));
+        printf("PID %d on %s ready for attach\n", getpid(), hostname);
+        sleep(parsec_runtime_gdb_attach);
+    }
 
     if( NULL != cmd_line )
         PARSEC_OBJ_RELEASE(cmd_line);

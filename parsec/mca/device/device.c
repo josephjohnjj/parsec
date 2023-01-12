@@ -93,7 +93,7 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
         /** dont migrate task that was already migrated **/
         if(this_task->mig_status == PARSEC_NON_MIGRATED_TASK)
         {
-            rc = select_task_for_inter_node_migration(this_task);
+            rc = process_mig_request(this_task);
             if(rc == 1)
             {
                 /**

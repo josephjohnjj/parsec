@@ -28,6 +28,7 @@
 #include <cuda_runtime_api.h>
 
 #include "parsec/mca/device/cuda/device_cuda_migrate.h"
+#include "parsec/parsec_migrate.h"
 
 
 static int parsec_cuda_data_advise(parsec_device_module_t *dev, parsec_data_t *data, int advice);
@@ -2884,6 +2885,17 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     char tmp[MAX_TASK_STRLEN];
 #endif
     int pop_null = 0;
+
+    /** The number of GPUS is 1 less than parsec_mca_device_enabled.
+     * If the which_gpu == parsec_mca_device_enabled it implies that 
+     * there is a steal request and we can now try to migrate this GPU 
+     * task in tresponse to that steal request.
+    */
+    if( which_gpu == parsec_mca_device_enabled() )
+    {
+        schedule_task_for_inter_node_migration( es, gpu_task->ec );
+        return PARSEC_HOOK_RETURN_ASYNC;
+    }
 
     gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(which_gpu);
     cuda_device = (parsec_device_cuda_module_t *)gpu_device;

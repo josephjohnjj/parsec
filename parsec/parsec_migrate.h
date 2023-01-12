@@ -49,6 +49,6 @@ int send_steal_request(parsec_execution_stream_t* es);
 int process_steal_request(parsec_execution_stream_t* es);
 int parsec_node_mig_inc_task_executed();
 int parsec_node_mig_get_task_executed();
-int select_task_for_inter_node_migration(parsec_task_t* this_task);
+int process_mig_request(parsec_task_t* this_task);
 int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec_task_t* this_task);
 #endif
