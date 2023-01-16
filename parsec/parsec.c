@@ -161,9 +161,11 @@ static int parsec_runtime_bind_threads        = 1;
 
 int parsec_runtime_keep_highest_priority_task = 1;
 
-int parsec_runtime_node_migrate_tasks = 0;
-int parsec_runtime_node_migrate_stats = 0;
-int parsec_runtime_gdb_attach         = 0;
+int parsec_runtime_node_migrate_tasks    = 0;
+int parsec_runtime_node_migrate_stats    = 0;
+int parsec_runtime_gdb_attach            = 0;
+int parsec_runtime_steal_request_policy  = 0;
+int parsec_runtime_chunk_size            = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -935,6 +937,10 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_node_migrate_stats);
     parsec_mca_param_reg_int_name("runtime", "gdb_attach", "attach GDB for debugging",
                                 false, false, 0, &parsec_runtime_gdb_attach);
+    parsec_mca_param_reg_int_name("runtime", "steal_request_policy", "Select the policy to decide the victim node to which a steal request can be send",
+                                false, false, 0, &parsec_runtime_steal_request_policy);
+    parsec_mca_param_reg_int_name("runtime", "chunk_size", "Chunk size of task to be stolen",
+                                false, false, 1, &parsec_runtime_chunk_size);
 
     if( parsec_runtime_gdb_attach > 0 )
     {

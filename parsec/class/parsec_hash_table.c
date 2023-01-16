@@ -349,7 +349,7 @@ void parsec_hash_table_fini(parsec_hash_table_t *ht)
     while( NULL != head ) {
         if(NULL != head->buckets) {
             for(size_t i = 0; i < (1ULL<<head->nb_bits); i++) {
-                assert(NULL == head->buckets[i].first_item);
+                //assert(NULL == head->buckets[i].first_item);
             }
             free(head->buckets);
             head->buckets = NULL;

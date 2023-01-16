@@ -1,5 +1,7 @@
 
 #include "parsec/parsec_migrate.h"
+#include <time.h>
+#include <stdlib.h>
 
 extern parsec_mempool_t *parsec_remote_dep_cb_data_mempool;
 extern parsec_execution_stream_t parsec_comm_es;
@@ -7,6 +9,10 @@ extern parsec_sched_module_t *parsec_current_scheduler;
 extern int parsec_communication_engine_up;
 extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_runtime_node_migrate_stats;
+extern int parsec_runtime_steal_request_policy;
+extern int parsec_runtime_chunk_size;
+
+parsec_list_t mig_task_details_fifo;       /* fifo of migrated task details*/
 
 /**
  * parsec_migration_engine_up == 0 : there is no node level task migration
@@ -18,19 +24,19 @@ int parsec_migration_engine_up = -1;
  * @brief Ony one  steal request is send per node. This variable decides
  * of there are already any active steal request from this node in the system.
  **/
-volatile int32_t active_steal_request_mutex;
+volatile int32_t active_steal_request_mutex = 0;
 
 /**
  * @brief Only one thread processes a steal request at any given time. This decides
  * if the steal request processing is on going.
  **/
-volatile int32_t process_steal_request_mutex;
+volatile int32_t process_steal_request_mutex = 0;
 
 /**
  * @brief Keep track of the currect active requests in this node;
  * 
  */
-volatile int32_t nb_current_steal_request;
+volatile int32_t nb_current_steal_request = 0;
 
 /**
  * @brief list of all steal request received.
@@ -132,6 +138,8 @@ int parsec_node_migrate_init( parsec_context_t* context )
     my_rank = context->my_rank;
     nb_nodes = context->nb_nodes;
 
+    srand(time(NULL));
+
     rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, (dep_count+RDEP_MSG_SHORT_LIMIT) * sizeof(char));
     if( PARSEC_SUCCESS != rc )
     {
@@ -171,6 +179,8 @@ int parsec_node_migrate_init( parsec_context_t* context )
 
     if(parsec_communication_engine_up > 0)
         parsec_migration_engine_up = 1;  
+    
+    PARSEC_OBJ_CONSTRUCT(&mig_task_details_fifo, parsec_list_t);
 
     return 0;
 
@@ -202,9 +212,29 @@ int parsec_node_migrate_fini()
         printf("Steal req received        : %d \n", node_info->nb_req_recvd);
         printf("Steal req processed       : %d \n", node_info->nb_req_processed);
         printf("Successful steal requests : %d \n", node_info->nb_succesfull_req);
+        printf("Chunk size                : %d \n", parsec_runtime_chunk_size);
+
+        if( 0 == parsec_runtime_steal_request_policy)
+        {
+            printf("Steal req policy          : Ring \n");
+        }
+        else if( 1 == parsec_runtime_steal_request_policy)
+        {
+            printf("Steal req policy          : Random \n");
+        }
+        else if( 2 == parsec_runtime_steal_request_policy)
+        {
+            printf("Steal req policy          : Tree \n");
+        }
+        else if( 3 == parsec_runtime_steal_request_policy)
+        {
+            printf("Steal req policy          : Predictive \n");
+        }
 
         free(node_info);
     }
+
+    PARSEC_OBJ_DESTRUCT(&mig_task_details_fifo);
 
     return parsec_migration_engine_up;
 }
@@ -229,8 +259,7 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     {
         PARSEC_OBJ_RELEASE(steal_request);
         /** Decrement the mutex as we have recieved no response to the steal request */
-        if(parsec_runtime_node_migrate_stats)
-            parsec_atomic_fetch_dec_int32( &active_steal_request_mutex );
+        parsec_atomic_fetch_dec_int32( &active_steal_request_mutex );
     }
     else
     {
@@ -322,6 +351,20 @@ int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec
     *  this_task->task_class->release_task() will decrease the task count on this node. 
     */
 
+    for( i = 0; i < this_task->task_class->nb_flows; i++)
+    {
+        if(this_task->task_class->in[i] == NULL) continue;
+
+        /** If the repo associated with a data is not NULL reduce the usage count by one.*/
+        if( this_task->data[i].source_repo_entry != NULL)
+        {
+            assert( this_task->data[i].source_repo_entry->retained == 0);
+            
+            data_repo_entry_used_once(this_task->data[i].source_repo, this_task->data[i].source_repo_entry->ht_item.key);
+        }
+    }
+
+    /** If the tasks 'consumes' a local repo reduce the usage count by one.*/
     if(this_task->repo_entry != NULL)
     {
         data_repo_entry_used_once(this_task->taskpool->repo_array[this_task->task_class->task_class_id], this_task->repo_entry->ht_item.key);
@@ -331,9 +374,10 @@ int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec
     {
         if(this_task->task_class->in[i] == NULL) continue;
 
-        if( this_task->data[i].source_repo_entry != NULL)
-            data_repo_entry_used_once(this_task->data[i].source_repo, this_task->data[i].source_repo_entry->ht_item.key);
-        PARSEC_DATA_COPY_RELEASE( this_task->data[i].data_in );
+        if (NULL != this_task->data[i].data_in)
+        {
+            PARSEC_DATA_COPY_RELEASE( this_task->data[i].data_in );
+        }
     }
 
     /**
@@ -377,10 +421,43 @@ int send_steal_request(parsec_execution_stream_t* es)
     return PARSEC_HOOK_RETURN_ASYNC;
 }
 
-int find_victim_node(parsec_execution_stream_t* es)
+int steal_policy_ring(parsec_execution_stream_t* es)
 {
     assert( es->virtual_process->parsec_context != NULL);
+
     return  (my_rank + 1) % nb_nodes; 
+}
+
+int steal_policy_random(parsec_execution_stream_t* es)
+{
+    int victim_rank = 0;
+
+    assert( es->virtual_process->parsec_context != NULL);
+
+    victim_rank = rand() % nb_nodes;
+
+    if( victim_rank == my_rank )
+    {
+        victim_rank = (victim_rank + 1) % nb_nodes;
+    }
+
+    return  victim_rank; 
+}
+
+int find_victim_node(parsec_execution_stream_t* es)
+{
+    int victim = 0;
+    
+    if( 0 == parsec_runtime_steal_request_policy )
+    {
+        victim = steal_policy_ring(es);
+    }
+    else if( 1 == parsec_runtime_steal_request_policy )
+    {
+        victim = steal_policy_random(es);
+    }
+    
+    return victim;
 }
 
 parsec_remote_deps_t* prepare_remote_deps(parsec_execution_stream_t* es, 
@@ -465,7 +542,8 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
         rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, position,
                                                        length, deps);
-        get_mig_task_data(es, deps);
+
+        parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t*)deps);
     }
 
     /** Decrement the mutex as we have recived a response to the steal request */
@@ -477,6 +555,24 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
         
     return 1;
+}
+
+int process_mig_task_details(parsec_execution_stream_t* es)
+{
+    parsec_remote_deps_t* deps = NULL;
+
+    if(parsec_ce.can_serve(&parsec_ce)) 
+    {
+        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)parsec_list_try_pop_front(&mig_task_details_fifo);
+
+        if( NULL != deps)
+        {
+            get_mig_task_data(es, deps);
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t* es,
@@ -554,11 +650,7 @@ static void get_mig_task_data(parsec_execution_stream_t* es,
         callback_data->deps = deps;
         callback_data->k    = k;
 
-        /* prepare the local receiving data */
-        assert(NULL == deps->output[k].data.data); /* we do not support in-place tiles now, make sure it doesn't happen yet */
-        if(NULL == deps->output[k].data.data) {
-            deps->output[k].data.data = migrated_copy_allocate(&deps->output[k].data.remote);
-        }
+        deps->output[k].data.data = migrated_copy_allocate(&deps->output[k].data.remote);
         dtt   = deps->output[k].data.remote.dst_datatype;
         nbdtt = deps->output[k].data.remote.dst_count;
 

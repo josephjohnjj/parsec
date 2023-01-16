@@ -634,6 +634,12 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         misses_in_a_row++;  /* assume we fail to extract a task */
 
         /**
+         * @brief This function will processes any migrated task
+         * recieved from another node.
+         */
+        process_mig_task_details(es);
+
+        /**
          * @brief This function will force a thread to be a manager thread,
          * if there are any tasks migrated to a particular device. 
          * This will also ensure that a migrated task gets priority in execution
