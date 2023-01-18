@@ -1531,6 +1531,8 @@ static int remote_dep_mpi_progress(parsec_execution_stream_t* es)
         ret++;
     }
 
+    migrate_put_mpi_progress(es);
+
     return ret;
 }
 

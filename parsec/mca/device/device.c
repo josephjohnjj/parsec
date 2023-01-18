@@ -88,6 +88,7 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
     parsec_taskpool_t* tp = this_task->taskpool;
     int rc = 0;
 
+    #if 0
     if(parsec_migration_engine_up == 1 )
     {
         /** dont migrate task that was already migrated **/
@@ -104,6 +105,7 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
             }
         }
     }
+    #endif
 
     if(parsec_cuda_iterative)
     {

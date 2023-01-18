@@ -637,7 +637,11 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
          * @brief This function will processes any migrated task
          * recieved from another node.
          */
-        process_mig_task_details(es);
+        if(parsec_migration_engine_up ==  1)
+            process_mig_task_details(es);
+
+        if(parsec_migration_engine_up ==  1)
+            process_steal_request(es);
 
         /**
          * @brief This function will force a thread to be a manager thread,
@@ -668,6 +672,7 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
                 send_steal_request(es);
         }
     }
+
 
     parsec_rusage_per_es(es, true);
 

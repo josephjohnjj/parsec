@@ -2886,6 +2886,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 #endif
     int pop_null = 0;
 
+    #if 0
     /** The number of GPUS is 1 less than parsec_mca_device_enabled.
      * If the which_gpu == parsec_mca_device_enabled it implies that 
      * there is a steal request and we can now try to migrate this GPU 
@@ -2896,6 +2897,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         schedule_task_for_inter_node_migration( es, gpu_task->ec );
         return PARSEC_HOOK_RETURN_ASYNC;
     }
+    #endif
 
     gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(which_gpu);
     cuda_device = (parsec_device_cuda_module_t *)gpu_device;
