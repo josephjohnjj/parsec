@@ -262,10 +262,11 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
     steal_request = PARSEC_OBJ_NEW(steal_request_t);
     steal_request->nb_task_request = recv_request->nb_task_request;
+    steal_request->root = recv_request->root;
     steal_request->src = recv_request->src;
     steal_request->dst = recv_request->dst;
 
-    if (steal_request->src == my_rank) /** request initiated from this node */
+    if (steal_request->root == my_rank) /** request initiated from this node */
     {
         PARSEC_OBJ_RELEASE(steal_request);
         /** Decrement the mutex as we have recieved no response to the steal request */
@@ -391,14 +392,15 @@ int process_steal_request(parsec_execution_stream_t *es)
             }
         }
 
-        PARSEC_OBJ_RELEASE(ring);
         parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->src, steal_request, sizeof(steal_request_t));
+
+        PARSEC_OBJ_RELEASE(ring);
+        PARSEC_OBJ_RELEASE(steal_request);
     }
 }
 
 int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec_task_t *this_task, steal_request_t *steal_request)
 {
-    // steal_request_t *steal_request = NULL;
     parsec_remote_deps_t *deps = NULL;
     char packed_buffer[dep_count + RDEP_MSG_SHORT_LIMIT];
     int dsize = 0, total_message_size = 0, rc = 0, length = dep_count + RDEP_MSG_SHORT_LIMIT;
@@ -408,7 +410,7 @@ int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Task %p selected for migration", this_task);
 
     /** deps will be send to the node that initiated the request */
-    dst_rank = steal_request->src;
+    dst_rank = steal_request->root;
     src_rank = my_rank;
 
     deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
@@ -452,8 +454,6 @@ int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec
         /** If the repo associated with a data is not NULL reduce the usage count by one.*/
         if (this_task->data[i].source_repo_entry != NULL)
         {
-            // assert( this_task->data[i].source_repo_entry->retained == 0);
-
             data_repo_entry_used_once(this_task->data[i].source_repo, this_task->data[i].source_repo_entry->ht_item.key);
         }
     }
@@ -482,8 +482,6 @@ int schedule_task_for_inter_node_migration(parsec_execution_stream_t *es, parsec
     this_task->task_class->release_task(es, this_task);
 
     remote_dep_complete_and_cleanup(&deps, 1);
-    // PARSEC_OBJ_RELEASE(steal_request);
-
     return 0;
 }
 
@@ -500,6 +498,7 @@ int send_steal_request(parsec_execution_stream_t *es)
         PARSEC_HOOK_RETURN_ASYNC;
 
     steal_request.nb_task_request = parsec_runtime_chunk_size;
+    steal_request.root = my_rank;
     steal_request.src = my_rank;
     steal_request.dst = find_victim_node(es);
     assert(steal_request.src != steal_request.dst);

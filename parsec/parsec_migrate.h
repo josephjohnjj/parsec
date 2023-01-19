@@ -20,6 +20,7 @@
 
 typedef struct steal_request_s{
     parsec_list_item_t super;
+    int root;
     int src;
     int dst;
     int nb_task_request;
