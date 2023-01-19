@@ -37,6 +37,7 @@ typedef struct parsec_node_info_s
     int nb_tasks_executed;
     int nb_req_send;
     int nb_req_recvd;
+    int nb_req_forwarded;
     int nb_task_migrated;
     int nb_task_recvd;
     int nb_req_processed;
