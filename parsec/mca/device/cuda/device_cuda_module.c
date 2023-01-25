@@ -494,6 +494,7 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
     /* Initialize internal lists */
     PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_lru,       parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_mem_owned_lru, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&gpu_device->gpu_tmp_lru,       parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->pending,           parsec_fifo_t);
     PARSEC_OBJ_CONSTRUCT(&gpu_device->to_complete,       parsec_fifo_t);
 
@@ -645,6 +646,7 @@ parsec_cuda_module_fini(parsec_device_module_t* device)
     /* Cleanup the GPU memory. */
     PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_lru);
     PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_mem_owned_lru);
+    PARSEC_OBJ_DESTRUCT(&gpu_device->gpu_tmp_lru);
 
     return PARSEC_SUCCESS;
 }
@@ -879,13 +881,19 @@ parsec_cuda_flush_lru( parsec_device_module_t *device )
     /* Free all memory on GPU */
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_lru);
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_owned_lru);
+    parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_tmp_lru);
+    //if(parsec_list_is_empty( &gpu_device->gpu_tmp_lru ))
+    //{
+    //    printf("ERROR \n");
+    //    exit( 0 );
+    //}
 
 
 #if !defined(PARSEC_GPU_CUDA_ALLOC_PER_TILE) && !defined(_NDEBUG)
     if( (in_use = zone_in_use(gpu_device->memory)) != 0 ) {
         parsec_warning("GPU[%s] memory leak detected: %lu bytes still allocated on GPU",
                        device->name, in_use);
-        //assert(0);
+        assert(0);
     }
 #endif
     return PARSEC_SUCCESS;
@@ -1063,7 +1071,12 @@ parsec_gpu_data_reserve_device_space( parsec_device_cuda_module_t* cuda_device,
                                      "GPU[%s]:%s: Drop LRU-retrieved CUDA copy %p [readers %d, ref_count %d] original %p",
                                      gpu_device->super.name, task_name,
                                      lru_gpu_elem, lru_gpu_elem->readers, lru_gpu_elem->super.super.obj_reference_count, lru_gpu_elem->original);
-        
+                
+
+                parsec_list_item_ring_chop((parsec_list_item_t*)lru_gpu_elem);
+                PARSEC_LIST_ITEM_SINGLETON(lru_gpu_elem);
+                parsec_list_push_front(&gpu_device->gpu_tmp_lru, (parsec_list_item_t*)lru_gpu_elem);
+
                 goto find_another_data; // TODO: add an assert of some sort to check for leaks here?
             }
             /* It's also possible that the ref_count of that element is bigger than 1
@@ -1379,6 +1392,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     parsec_device_gpu_module_t *gpu_device = &cuda_device->super;
     int32_t type = flow->flow_flags;
     parsec_data_copy_t* in_elem = task_data->data_in;
+    parsec_data_copy_t* release_after_data_in_is_attached = NULL;
     parsec_data_t* original = in_elem->original;
     parsec_gpu_data_copy_t* gpu_elem = task_data->data_out;
     parsec_data_copy_t *candidate = NULL;
@@ -1407,10 +1421,10 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
             {
                 if(gpu_task->migrate_status == TASK_NOT_MIGRATED)
                 {
-                    parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
-                               "(possible anti-dependency,\n"
-                               "or concurrent accesses), please prevent that with CTL dependencies\n",
-                               gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count, gpu_elem->readers);
+                    //parsec_warning("GPU[%s]:\tWrite access to data copy %p [ref_count %d] with existing readers [%d] "
+                    //           "(possible anti-dependency,\n"
+                    //           "or concurrent accesses), please prevent that with CTL dependencies\n",
+                    //           gpu_device->super.name, gpu_elem, gpu_elem->super.super.obj_reference_count, gpu_elem->readers);
                     parsec_atomic_unlock( &original->lock );
                     return -1;
                 }
@@ -1493,7 +1507,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                 /** Remember the original data_in. */
                 assert( gpu_task->original_data_in[ flow->flow_index ] == NULL);
                 gpu_task->original_data_in[ flow->flow_index ] = task_data->data_in;
-                 
+
+                assert( gpu_task->migrate_status != TASK_MIGRATED_AFTER_STAGE_IN );
                 goto src_selected;
             }
         }
@@ -1537,6 +1552,7 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                     in_elem = candidate;
                     in_elem_dev = target;
 
+                    assert( gpu_task->migrate_status != TASK_MIGRATED_AFTER_STAGE_IN );
                     goto src_selected;
                 }
             }
@@ -1586,11 +1602,6 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
     if( -1 == transfer_from ) 
     {
         gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
-
-        if( undo_readers_inc_if_no_transfer )
-        {
-            PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
-        }
     } 
     else 
     {
@@ -1708,6 +1719,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                                    nb_elts);
                 }
                 parsec_atomic_unlock( &original->lock );
+                if( NULL != release_after_data_in_is_attached )
+                    PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
                 assert(0);
                 return -1;
             }
@@ -1733,8 +1746,17 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
         }
         gpu_elem->push_task = gpu_task->ec;  /* only the task who does the transfer can modify the data status later. */
         parsec_atomic_unlock( &original->lock );
+        if( NULL != release_after_data_in_is_attached )
+            PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
         return 1;
     }
+
+    if( undo_readers_inc_if_no_transfer )
+    {
+        gpu_elem->data_transfer_status = PARSEC_DATA_STATUS_COMPLETE_TRANSFER;
+        PARSEC_DATA_COPY_DEC_READERS_ATOMIC(in_elem);
+    }
+
     assert( transfer_from == -1 || gpu_elem->data_transfer_status == PARSEC_DATA_STATUS_COMPLETE_TRANSFER );
 
     parsec_data_end_transfer_ownership_to_copy(original, gpu_device->super.device_index, (uint8_t)type);
@@ -1747,6 +1769,8 @@ parsec_gpu_data_stage_in( parsec_device_cuda_module_t* cuda_device,
                          gpu_elem, gpu_elem->super.super.obj_reference_count, original->key, nb_elts,
                          in_elem->version, gpu_elem->version);
     parsec_atomic_unlock( &original->lock );
+     if( NULL != release_after_data_in_is_attached )
+        PARSEC_OBJ_RELEASE(release_after_data_in_is_attached);
     return 0;
 }
 

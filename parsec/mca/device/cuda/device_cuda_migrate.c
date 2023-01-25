@@ -1168,6 +1168,12 @@ int change_task_features(parsec_gpu_task_t *gpu_task, parsec_device_gpu_module_t
                 assert(0);
             }
 
+            if( task->data[i].data_out->push_task == task )
+            {
+                printf("ERROR 2                                                                                                                                                                                                                                                                                                                                                        \n");
+                exit(0);
+            }
+
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                 "Migrate: data %p attached to original %p [readers %d, ref_count %d] migrated from device %d to %d (stage_in: %d)",
                 task->data[i].data_out, original, task->data[i].data_out->readers,
