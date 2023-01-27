@@ -5311,7 +5311,7 @@ jdf_generate_code_reshape_input_from_dep(const jdf_t *jdf,
      * Format: type = XX   type_remote = ... -> pack XX unpack XX
      * */
     coutput("%s    data.data   = NULL;\n", spaces);
-    coutput("%s    if (NULL != consumed_entry) \n", spaces);
+    coutput("%s    if ( (NULL != consumed_entry) && (this_task->mig_status == 0) )\n", spaces);
     coutput("%s         data.data_future   = (parsec_datacopy_future_t*)consumed_entry->data[consumed_flow_index];\n",
             spaces);
 
