@@ -43,6 +43,7 @@ typedef struct parsec_node_info_s
     int nb_req_processed;
     int nb_succesfull_req;
     int nb_searches;
+    int full_yield;
     
 } parsec_node_info_t;
 
