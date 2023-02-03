@@ -50,6 +50,7 @@ PARSEC_OBJ_CLASS_INSTANCE(remote_dep_cb_data_t, parsec_list_item_t,
 
 extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_migration_engine_up;
+extern int parsec_runtime_node_migrate_stats;
 
 char*
 remote_dep_cmd_to_string(remote_dep_wire_activate_t* origin,
@@ -2179,6 +2180,11 @@ remote_dep_ce_init(parsec_context_t* context)
     {
         parsec_node_migrate_init(context);
     }
+    
+    if (parsec_runtime_node_migrate_stats)
+    {
+        parsec_node_stats_init();
+    }
 
 
     parsec_remote_dep_cb_data_mempool = (parsec_mempool_t*) malloc (sizeof(parsec_mempool_t));
@@ -2198,8 +2204,16 @@ remote_dep_ce_fini(parsec_context_t* context)
 {
     remote_dep_mpi_profiling_fini();
 
-    if(parsec_migration_engine_up ==  1)
+    /** parsec_migration_engine_up is 1 only when parsec_runtime_node_migrate_tasks && context->nb_nodes > 1*/
+    if(parsec_migration_engine_up ==  1) 
+    {
         parsec_node_migrate_fini();
+    }
+
+    if (parsec_runtime_node_migrate_stats)
+    {
+        parsec_node_stats_fini();
+    }
 
     // Unregister tags
     parsec_ce.tag_unregister(PARSEC_CE_REMOTE_DEP_ACTIVATE_TAG);

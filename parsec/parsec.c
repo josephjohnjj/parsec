@@ -166,6 +166,7 @@ int parsec_runtime_node_migrate_stats    = 0;
 int parsec_runtime_gdb_attach            = 0;
 int parsec_runtime_steal_request_policy  = 0;
 int parsec_runtime_chunk_size            = 0;
+int parsec_runtime_starvation_policy     = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -941,6 +942,8 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_steal_request_policy);
     parsec_mca_param_reg_int_name("runtime", "chunk_size", "Chunk size of task to be stolen",
                                 false, false, 1, &parsec_runtime_chunk_size);
+    parsec_mca_param_reg_int_name("runtime", "starvation_policy", "Chunk size of task to be stolen",
+                                false, false, 0, &parsec_runtime_starvation_policy);
 
     if( parsec_runtime_gdb_attach > 0 )
     {

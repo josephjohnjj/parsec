@@ -506,7 +506,7 @@ int __parsec_task_progress( parsec_execution_stream_t* es,
         case PARSEC_HOOK_RETURN_DONE:    /* This execution succeeded */
             task->status = PARSEC_TASK_STATUS_COMPLETE;
             __parsec_complete_execution( es, task );
-            if(parsec_migration_engine_up ==  1 && parsec_runtime_node_migrate_stats)
+            if(parsec_runtime_node_migrate_stats)
                 parsec_node_mig_inc_task_executed();
             break;
         case PARSEC_HOOK_RETURN_AGAIN:   /* Reschedule later */

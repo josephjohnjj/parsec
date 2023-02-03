@@ -56,4 +56,6 @@ int parsec_node_mig_get_task_executed();
 int process_mig_request(parsec_task_t* this_task);
 int process_mig_task_details(parsec_execution_stream_t* es);
 int migrate_put_mpi_progress(parsec_execution_stream_t* es);
+int parsec_node_stats_init();
+int parsec_node_stats_fini();
 #endif
