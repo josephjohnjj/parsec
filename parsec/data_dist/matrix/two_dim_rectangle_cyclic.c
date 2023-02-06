@@ -12,6 +12,7 @@
 #include "parsec/data_dist/matrix/matrix_internal.h"
 #include "parsec/mca/device/device.h"
 #include "parsec/vpmap.h"
+#include <math.h>
 
 static uint32_t twoDBC_rank_of(parsec_data_collection_t* dc, ...);
 static int32_t twoDBC_vpid_of(parsec_data_collection_t* dc, ...);
@@ -141,8 +142,9 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t * dc,
 
     /* Compute the number of rows handled by the local process */
     dc->nb_elem_r = 0;
+    int half = (( (tdesc->lmt + 1 ) / 2 ) - 1);
     temp = dc->grid.rrank * dc->grid.krows; /* row coordinate of the first tile to handle */
-    while( temp < tdesc->lmt ) {
+    while( temp < half ) {
         if(storage == PARSEC_MATRIX_LAPACK) {
             tdesc->slm += temp == 0          ? ((i % mb) == 0 ? mb : mb - i) /* first row */
                         : temp == tdesc->lmt ? ( m % mb)                     /* last row */
@@ -156,6 +158,15 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t * dc,
         dc->nb_elem_r += ((tdesc->lmt) - temp);
         break;
     }
+
+    if( dc->grid.rrank == 0 && dc->grid.crank == 0)
+    {
+        dc->nb_elem_r += tdesc->lmt - half; 
+    }
+
+    
+    printf("Total rows = %d \n", dc->nb_elem_r );
+    
 
     /* Compute the number of columns handled by the local process */
     dc->nb_elem_c = 0;
@@ -175,6 +186,8 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t * dc,
         break;
     }
 
+    printf("Total cols = %d \n", dc->nb_elem_c );
+
     /* If rows or cols are 0, then no elemns, set
      * both to 0.
      * */
@@ -183,6 +196,8 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t * dc,
     /* Total number of tiles stored locally */
     tdesc->nb_local_tiles = dc->nb_elem_r * dc->nb_elem_c;
     tdesc->data_map = (parsec_data_t**)calloc(tdesc->nb_local_tiles, sizeof(parsec_data_t*));
+
+    printf(" Local tiles = %d \n", tdesc->nb_local_tiles);
 
     /* Update llm and lln */
     if(storage != PARSEC_MATRIX_LAPACK) {
@@ -273,14 +288,26 @@ static uint32_t twoDBC_rank_of(parsec_data_collection_t * desc, ...)
     assert( m < dc->super.mt );
     assert( n < dc->super.nt );
 
+
     /* Offset by (i,j) to translate (m,n) in the global matrix */
     m += dc->super.i / dc->super.mb;
     n += dc->super.j / dc->super.nb;
+
+    int half = (( (dc->super.lmt + 1 ) / 2 ) - 1);
+
+    if( m > half )
+    {
+        //printf("(%d, %d) mapped to %d \n", m, n, 0);
+        
+        return 0;
+    }
 
     /* P(rr, cr) has the tile, compute the mpi rank*/
     rr = (m % dc->grid.rows + dc->grid.ip) % dc->grid.rows;
     cr = (n % dc->grid.cols + dc->grid.jq) % dc->grid.cols;
     res = rr * dc->grid.cols + cr;
+
+    //printf("(%d, %d) mapped in matric %dx%d to %d in process grid (%d, %d) \n", m, n, dc->super.lmt, dc->super.lnt, res, dc->grid.rows, dc->grid.cols);
 
     return res;
 }
@@ -351,16 +378,42 @@ static int32_t twoDBC_vpid_of_key(parsec_data_collection_t *desc, parsec_data_ke
 static inline int twoDBC_coordinates_to_position(parsec_matrix_block_cyclic_t *dc, int m, int n){
     int position, local_m, local_n;
 
-    /* Compute the local tile row */
-    local_m = m / dc->grid.rows;
-    assert( (m % dc->grid.rows) == dc->grid.rrank );
+    int half = (( (dc->super.lmt + 1 ) / 2 ) - 1);
 
-    /* Compute the local column */
-    local_n = n / dc->grid.cols;
-    assert( (n % dc->grid.cols) == dc->grid.crank );
+    if( m < half)
+    {
+        /* Compute the local tile row */
+        local_m = m / dc->grid.rows;
+        assert( (m % dc->grid.rows) == dc->grid.rrank );
 
-    assert(dc->nb_elem_r <= dc->super.lmt);
-    position = dc->nb_elem_r * local_n + local_m;
+        /* Compute the local column */
+        local_n = n / dc->grid.cols;
+        assert( (n % dc->grid.cols) == dc->grid.crank );
+
+        assert(dc->nb_elem_r <= dc->super.lmt);
+        position = dc->nb_elem_r * local_n + local_m;
+
+        printf("half %d nb_rows %d tile(%d, %d), local(%d, %d) position = %d \n", half, dc->nb_elem_r, m, n,  local_m, local_n, position);
+    
+    }
+    else
+    {
+        int max_rows = ceil( (half + 1) / dc->grid.rows);
+
+        /* Compute the local tile row */
+        //local_m = max_rows + ((m - half) / dc->grid.rows);
+        //local_m = max_rows + ((m - half) / dc->grid.rows);
+        local_m = max_rows + (m - half);
+        //assert( (m % dc->grid.rows) == dc->grid.rrank );
+
+        /* Compute the local column */
+        local_n = n / dc->grid.cols;
+        //assert( (n % dc->grid.cols) == dc->grid.crank );
+
+        position =  dc->nb_elem_r * local_n + local_m;
+
+        printf("half %d nb_rows %d tile(%d, %d), local(%d, %d) position = %d \n", half, dc->nb_elem_r, m, n,  local_m, local_n, position);
+    }
 
     return position;
 }

@@ -593,7 +593,7 @@ parsec_data_create( parsec_data_t **holder,
         }
     }
 
-    assert( data->key == key );
+    //assert( data->key == key );
     return data;
 }
 
