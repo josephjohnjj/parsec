@@ -882,11 +882,6 @@ parsec_cuda_flush_lru( parsec_device_module_t *device )
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_lru);
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_mem_owned_lru);
     parsec_cuda_memory_release_list(cuda_device, &gpu_device->gpu_tmp_lru);
-    //if(parsec_list_is_empty( &gpu_device->gpu_tmp_lru ))
-    //{
-    //    printf("ERROR \n");
-    //    exit( 0 );
-    //}
 
 
 #if !defined(PARSEC_GPU_CUDA_ALLOC_PER_TILE) && !defined(_NDEBUG)
