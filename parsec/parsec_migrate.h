@@ -58,4 +58,8 @@ int process_mig_task_details(parsec_execution_stream_t* es);
 int migrate_put_mpi_progress(parsec_execution_stream_t* es);
 int parsec_node_stats_init();
 int parsec_node_stats_fini();
+int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, 
+    steal_request_t *steal_request);
+int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
+    int selected_tasks);
 #endif
