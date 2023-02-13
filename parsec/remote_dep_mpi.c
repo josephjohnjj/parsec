@@ -2183,7 +2183,7 @@ remote_dep_ce_init(parsec_context_t* context)
     
     if (parsec_runtime_node_migrate_stats)
     {
-        parsec_node_stats_init();
+        parsec_node_stats_init(context);
     }
 
 

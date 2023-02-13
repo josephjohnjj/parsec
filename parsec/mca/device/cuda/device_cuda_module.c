@@ -2887,8 +2887,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 #endif
     int pop_null = 0;
 
-    if(gpu_task->ec->mig_status == PARSEC_MIGRATED_TASK)
-        printf("I am migrated 2\n");
 
     gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(which_gpu);
     cuda_device = (parsec_device_cuda_module_t *)gpu_device;

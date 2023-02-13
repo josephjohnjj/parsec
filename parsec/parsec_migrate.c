@@ -213,8 +213,10 @@ int parsec_node_migrate_init(parsec_context_t *context)
     return 0;
 }
 
-int parsec_node_stats_init()
+int parsec_node_stats_init(parsec_context_t *context)
 {
+    my_rank = context->my_rank;
+    nb_nodes = context->nb_nodes;
     
     node_info = (parsec_node_info_t *)calloc(1, sizeof(parsec_node_info_t));
     node_info->nb_tasks_executed = 0;
@@ -444,8 +446,6 @@ int process_steal_request(parsec_execution_stream_t *es)
                         parsec_list_push_back(ring, (parsec_list_item_t *)gpu_task);
                         selected++;
                         success_steals = 1;
-
-                        printf("Task class %d \n", gpu_task->ec->task_class->task_class_id);
 
                         if (selected == tasks_requested)
                         {
