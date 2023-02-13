@@ -494,6 +494,47 @@ int process_steal_request(parsec_execution_stream_t *es)
     return 1;
 }
 
+int migrate_single_task(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_task)
+{
+    steal_request_t *steal_request = NULL;
+    parsec_task_t *task = NULL;
+
+    if ( (gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL) || 
+         (gpu_task->ec->mig_status == PARSEC_MIGRATED_TASK) || 
+        (node_info->nb_task_migrated > 1) 
+    )
+    {
+        return 0;
+    }
+
+    steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
+
+    if (NULL != steal_request)
+    {
+        assert(0 <= steal_request->root && steal_request->root < nb_nodes);
+        assert(0 <= steal_request->src  && steal_request->src < nb_nodes);
+        assert(0 <= steal_request->dst  && steal_request->dst < nb_nodes);
+
+        parsec_atomic_fetch_add_int32(&nb_steal_request_received, -1);
+        if (parsec_runtime_node_migrate_stats)
+        {
+            parsec_node_mig_inc_req_processed();
+        }
+
+        send_selected_task_details(es, gpu_task->ec, steal_request);
+
+        parsec_node_mig_inc_success_steals();
+        
+        progress_steal_request(es, steal_request, 1);
+
+        PARSEC_OBJ_RELEASE(steal_request);
+
+        return 1;
+    }
+
+    return 0;
+}
+
 int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, steal_request_t *steal_request)
 {
     parsec_remote_deps_t *deps = NULL;
@@ -1193,6 +1234,8 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     {
         task->data[flow_index].source_repo = NULL;
         task->data[flow_index].source_repo_entry = NULL;
+        task->data[flow_index].data_in = NULL;
+        task->data[flow_index].data_out = NULL;
 
         if (task->task_class->in[flow_index] == NULL)
             continue;

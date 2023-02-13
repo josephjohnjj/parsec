@@ -2891,6 +2891,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(which_gpu);
     cuda_device = (parsec_device_cuda_module_t *)gpu_device;
 
+    if( migrate_single_task(es, gpu_task) )
+    {
+        return PARSEC_HOOK_RETURN_ASYNC;
+    }
+
 #if defined(PARSEC_PROF_TRACE)
     PARSEC_PROFILING_TRACE_FLAGS( es->es_profile,
                                   PARSEC_PROF_FUNC_KEY_END(gpu_task->ec->taskpool,
