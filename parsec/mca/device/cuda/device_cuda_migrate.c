@@ -10,6 +10,7 @@ extern int parsec_cuda_migrate_chunk_size;       // chunks of task migrated to a
 extern int parsec_cuda_migrate_task_selection;   // method of task selection (default == single_pass_selection)
 extern int parsec_cuda_delegate_task_completion; // task completion delegation
 extern int parsec_cuda_iterative;
+extern int parsec_runtime_node_migrate_stats;
 
 parsec_device_cuda_info_t *device_info;
 static parsec_list_t *migrated_task_list;           // list of all migrated task
@@ -1472,6 +1473,14 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es, parsec_device_gpu_module_
                 #endif
 
                     __parsec_complete_execution( es, task );
+
+                    if(parsec_runtime_node_migrate_stats)
+                    {
+                        if(gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
+                        {
+                            parsec_node_mig_inc_task_executed();
+                        }
+                    }
                 
                 #if defined(PARSEC_PROF_TRACE)
                      gpu_task->complete_time_end = time_stamp();

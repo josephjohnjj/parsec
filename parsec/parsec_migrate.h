@@ -44,6 +44,7 @@ typedef struct parsec_node_info_s
     int nb_succesfull_req;
     int nb_searches;
     int full_yield;
+    int nb_release;
     
 } parsec_node_info_t;
 
@@ -52,7 +53,6 @@ int parsec_node_migrate_fini();
 int send_steal_request(parsec_execution_stream_t* es);
 int process_steal_request(parsec_execution_stream_t* es);
 int parsec_node_mig_inc_task_executed();
-int parsec_node_mig_get_task_executed();
 int process_mig_request(parsec_task_t* this_task);
 int process_mig_task_details(parsec_execution_stream_t* es);
 int migrate_put_mpi_progress(parsec_execution_stream_t* es);
@@ -62,4 +62,5 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     steal_request_t *steal_request);
 int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
     int selected_tasks);
+int parsec_node_mig_inc_released();
 #endif
