@@ -778,7 +778,8 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 
     if( deps->max_priority < newcontext->priority ) deps->max_priority = newcontext->priority;
     deps->incoming_mask |= (1U << dep->dep_datatype_index);
-    deps->root           = src_rank;
+    //assert(deps->root == src_rank);
+    //deps->root           = src_rank;
 
     if(output->data.remote.dst_count == 0){
         /* control dep */
@@ -1857,6 +1858,7 @@ remote_dep_mpi_save_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         ce->unpack(ce, msg, length, &position, &deps->msg, dep_count, dep_dtt);
         deps->from = src;
         deps->eager_msg = msg;
+        deps->root = deps->msg.root;
 
         /* Retrieve the data arenas and update the msg.incoming_mask to reflect
          * the data we should be receiving from the predecessor.

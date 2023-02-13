@@ -45,8 +45,7 @@ typedef struct remote_dep_wire_activate_s {
     uint32_t             task_class_id;
     uint32_t             length;
     parsec_assignment_t  locals[MAX_LOCAL_COUNT];
-    uint32_t             mig_info[MAX_LOCAL_COUNT]; /** for now this is used to carry the size of data items
-                                                        of a migrated task*/
+    uint32_t             root;
 } remote_dep_wire_activate_t;
 
 typedef struct remote_dep_wire_get_s {

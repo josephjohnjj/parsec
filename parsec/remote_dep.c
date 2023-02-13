@@ -475,6 +475,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
     remote_deps->msg.deps        = (uintptr_t)remote_deps;
     remote_deps->msg.taskpool_id   = task->taskpool->taskpool_id;
     remote_deps->msg.task_class_id = tc->task_class_id;
+    remote_deps->msg.root =  remote_deps->root;
     for(i = 0; i < tc->nb_locals; i++) {
         remote_deps->msg.locals[i] = task->locals[i];
     }
