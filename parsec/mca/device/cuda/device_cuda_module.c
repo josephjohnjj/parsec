@@ -2898,6 +2898,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         {
             return PARSEC_HOOK_RETURN_ASYNC;
         }
+        parsec_node_mig_inc_selected();
     }
 
 #if defined(PARSEC_PROF_TRACE)

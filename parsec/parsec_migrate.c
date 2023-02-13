@@ -112,6 +112,11 @@ int parsec_node_mig_inc_released()
     return node_info->nb_release;
 }
 
+int parsec_node_mig_inc_selected()
+{
+    parsec_atomic_fetch_inc_int32(&(node_info->nb_selected ));
+    return node_info->nb_selected ;
+} 
 
 int parsec_node_mig_inc_req_send()
 {
@@ -219,18 +224,19 @@ int parsec_node_stats_init(parsec_context_t *context)
     nb_nodes = context->nb_nodes;
     
     node_info = (parsec_node_info_t *)calloc(1, sizeof(parsec_node_info_t));
-    node_info->nb_tasks_executed = 0;
-    node_info->nb_task_recvd = 0;
-    node_info->nb_task_migrated = 0;
-    node_info->nb_req_recvd = 0;
-    node_info->nb_req_send = 0;
-    node_info->nb_req_send = 0;
-    node_info->nb_req_processed = 0;
-    node_info->nb_succesfull_req = 0;
-    node_info->nb_searches = 0;
-    node_info->nb_req_forwarded = 0;
-    node_info->full_yield = 0;
-    node_info->nb_release = 0;
+    node_info->nb_tasks_executed    = 0;
+    node_info->nb_task_recvd        = 0;
+    node_info->nb_task_migrated     = 0;
+    node_info->nb_req_recvd         = 0;
+    node_info->nb_req_send          = 0;
+    node_info->nb_req_send          = 0;
+    node_info->nb_req_processed     = 0;
+    node_info->nb_succesfull_req    = 0;
+    node_info->nb_searches          = 0;
+    node_info->nb_req_forwarded     = 0;
+    node_info->full_yield           = 0;
+    node_info->nb_release           = 0;
+    node_info->nb_selected          = 0;
     
 
 }
@@ -242,6 +248,7 @@ int parsec_node_stats_fini()
     printf("Tasks released            : %d \n", node_info->nb_release );
     printf("Task recvd                : %d \n", node_info->nb_task_recvd);
     printf("Tasks migrated            : %d \n", node_info->nb_task_migrated);
+    printf("Tasks selected            : %d \n", node_info->nb_task_migrated);
     printf("Steal req send            : %d \n", node_info->nb_req_send);
     printf("Steal req received        : %d \n", node_info->nb_req_recvd);
     printf("Steal req processed       : %d \n", node_info->nb_req_processed);
@@ -344,33 +351,6 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     return 0;
 }
 
-/**
- * @brief return 1 if there is an active steal requests and we can migrate this
- * task in response to that.
- *
- * @param device_index
- * @return int
- */
-int process_mig_request(parsec_task_t *this_task)
-{
-    (void)this_task;
-
-    int rc = 0;
-
-    if (nb_steal_request_received == 0)
-        return 0;
-
-    rc = nb_steal_request_received;
-    if (parsec_atomic_cas_int32(&nb_steal_request_received, rc, rc - 1))
-    {
-        if (parsec_runtime_node_migrate_stats)
-            parsec_node_mig_inc_req_processed();
-
-        return 1;
-    }
-
-    return 0;
-}
 
 int process_steal_request(parsec_execution_stream_t *es)
 {
@@ -444,6 +424,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                         item = parsec_list_nolock_remove(list, item);
                         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
                         parsec_list_push_back(ring, (parsec_list_item_t *)gpu_task);
+
+                        parsec_node_mig_inc_selected();
                         selected++;
                         success_steals = 1;
 

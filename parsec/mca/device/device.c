@@ -88,25 +88,6 @@ int parsec_get_best_device( parsec_task_t* this_task, double ratio )
     parsec_taskpool_t* tp = this_task->taskpool;
     int rc = 0;
 
-    #if 0
-    if(parsec_migration_engine_up == 1 )
-    {
-        /** dont migrate task that was already migrated **/
-        if(this_task->mig_status == PARSEC_NON_MIGRATED_TASK)
-        {
-            rc = process_mig_request(this_task);
-            if(rc == 1)
-            {
-                /**
-                 * @brief rc == 1 implies that this task can be migrated across nodes.
-                 * So return a device index greater tha all the available devices.
-                 */
-                return parsec_mca_device_enabled();
-            }
-        }
-    }
-    #endif
-
     if(parsec_cuda_iterative)
     {
         // if task to device mapping is already available use that

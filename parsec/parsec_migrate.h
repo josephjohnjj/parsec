@@ -45,6 +45,7 @@ typedef struct parsec_node_info_s
     int nb_searches;
     int full_yield;
     int nb_release;
+    int nb_selected;
     
 } parsec_node_info_t;
 
@@ -63,4 +64,5 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
 int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
     int selected_tasks);
 int parsec_node_mig_inc_released();
+int parsec_node_mig_inc_selected();
 #endif
