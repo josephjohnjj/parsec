@@ -2892,6 +2892,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     gpu_device = (parsec_device_gpu_module_t*)parsec_mca_device_get(which_gpu);
     cuda_device = (parsec_device_cuda_module_t *)gpu_device;
 
+#if 0
     if(parsec_migration_engine_up ==  1)
     {
         if( migrate_single_task(es, gpu_task) )
@@ -2900,6 +2901,7 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
         }
         parsec_node_mig_inc_selected();
     }
+#endif
 
 #if defined(PARSEC_PROF_TRACE)
     PARSEC_PROFILING_TRACE_FLAGS( es->es_profile,
