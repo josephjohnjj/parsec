@@ -7708,6 +7708,10 @@ jdf_generate_code_iterate_successors_or_predecessors(const jdf_t *jdf,
             "  nc.chore_mask  = PARSEC_DEV_ALL;\n");
     coutput("#if defined(DISTRIBUTED)\n"
             "  rank_src = rank_of_%s(%s);\n"
+            "if(remote_dep_mpi_retrieve_datatype == ontask || parsec_gather_collective_pattern == ontask) \n"
+            "  rank_src = ((parsec_remote_deps_t *) ontask_arg)->root; \n"
+            "else"
+            "  rank_src = es->virtual_process->parsec_context->my_rank; \n"
             "#endif\n",
             f->predicate->func_or_mem,
             UTIL_DUMP_LIST(sa1, f->predicate->parameters, next,

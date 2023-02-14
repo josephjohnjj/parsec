@@ -435,4 +435,23 @@ extern int parsec_comm_gets;
 extern int parsec_comm_puts_max;
 extern int parsec_comm_puts;
 
+parsec_ontask_iterate_t
+parsec_gather_collective_pattern(parsec_execution_stream_t *es,
+                                 const parsec_task_t *newcontext,
+                                 const parsec_task_t *oldcontext,
+                                 const parsec_dep_t* dep,
+                                 parsec_dep_data_description_t* data,
+                                 int src_rank, int dst_rank, int dst_vpid,
+                                 data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                                 void *param);
+parsec_ontask_iterate_t
+remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
+                                 const parsec_task_t *newcontext,
+                                 const parsec_task_t *oldcontext,
+                                 const parsec_dep_t* dep,
+                                 parsec_dep_data_description_t* out_data,
+                                 int src_rank, int dst_rank, int dst_vpid,
+                                 data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                                 void *param);
+
 #endif /* __USE_PARSEC_REMOTE_DEP_H__ */

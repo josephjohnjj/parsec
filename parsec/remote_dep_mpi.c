@@ -1390,9 +1390,9 @@ static int remote_dep_nothread_memcpy(parsec_execution_stream_t* es,
                                cmd->memcpy.source, cmd->memcpy.layout.src_displ, cmd->memcpy.layout.src_datatype, cmd->memcpy.layout.src_count);
 
     PARSEC_DATA_COPY_RELEASE(cmd->memcpy.source);
-    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
-                            "PARSEC_DATA_COPY_RELEASE (remote_dep_release_incoming )copy %p [ref_count %d] for [original %p] ",
-                             cmd->memcpy.source, cmd->memcpy.source->super.super.obj_reference_count, cmd->memcpy.source->original);
+    //PARSEC_DEBUG_VERBOSE(20, parsec_debug_output,
+    //                        "PARSEC_DATA_COPY_RELEASE (remote_dep_release_incoming )copy %p [ref_count %d] for [original %p] ",
+    //                         cmd->memcpy.source, cmd->memcpy.source->super.super.obj_reference_count, cmd->memcpy.source->original);
     remote_dep_dec_flying_messages(item->cmd.memcpy.taskpool);
     (void)es;
     return rc;
