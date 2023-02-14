@@ -100,10 +100,16 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
 
-int parsec_node_mig_inc_task_executed()
+int parsec_node_mig_inc_gpu_task_executed()
 {
-    parsec_atomic_fetch_inc_int32(&(node_info->nb_tasks_executed));
-    return node_info->nb_tasks_executed;
+    parsec_atomic_fetch_inc_int32(&(node_info->nb_gpu_tasks_executed));
+    return node_info->nb_gpu_tasks_executed;
+}
+
+int parsec_node_mig_inc_cpu_task_executed()
+{
+    parsec_atomic_fetch_inc_int32(&(node_info->nb_cpu_tasks_executed));
+    return node_info->nb_cpu_tasks_executed;
 }
 
 int parsec_node_mig_inc_released()
@@ -224,19 +230,19 @@ int parsec_node_stats_init(parsec_context_t *context)
     nb_nodes = context->nb_nodes;
     
     node_info = (parsec_node_info_t *)calloc(1, sizeof(parsec_node_info_t));
-    node_info->nb_tasks_executed    = 0;
-    node_info->nb_task_recvd        = 0;
-    node_info->nb_task_migrated     = 0;
-    node_info->nb_req_recvd         = 0;
-    node_info->nb_req_send          = 0;
-    node_info->nb_req_send          = 0;
-    node_info->nb_req_processed     = 0;
-    node_info->nb_succesfull_req    = 0;
-    node_info->nb_searches          = 0;
-    node_info->nb_req_forwarded     = 0;
-    node_info->full_yield           = 0;
-    node_info->nb_release           = 0;
-    node_info->nb_selected          = 0;
+    node_info->nb_gpu_tasks_executed = 0;
+    node_info->nb_task_recvd         = 0;
+    node_info->nb_task_migrated      = 0;
+    node_info->nb_req_recvd          = 0;
+    node_info->nb_req_send           = 0; 
+    node_info->nb_req_send           = 0;
+    node_info->nb_req_processed      = 0;
+    node_info->nb_succesfull_req     = 0;
+    node_info->nb_searches           = 0;
+    node_info->nb_req_forwarded      = 0;
+    node_info->full_yield            = 0;
+    node_info->nb_release            = 0;
+    node_info->nb_selected           = 0;
     
 
 }
@@ -244,7 +250,8 @@ int parsec_node_stats_init(parsec_context_t *context)
 int parsec_node_stats_fini()
 {
     printf("\n*********** NODES %d/%d *********** \n", my_rank + 1, nb_nodes);
-    printf("Tasks executed            : %d \n", node_info->nb_tasks_executed);
+    printf("GPU Tasks executed        : %d \n", node_info->nb_gpu_tasks_executed);
+    printf("CPU Tasks executed        : %d \n", node_info->nb_cpu_tasks_executed);
     printf("Tasks released            : %d \n", node_info->nb_release );
     printf("Task recvd                : %d \n", node_info->nb_task_recvd);
     printf("Tasks migrated            : %d \n", node_info->nb_task_migrated);
@@ -970,8 +977,6 @@ int process_mig_task_details(parsec_execution_stream_t *es)
             return 1;
         }
     }
-
-    // migrate_put_mpi_progress(es);
 
     return 0;
 }

@@ -1478,7 +1478,7 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es, parsec_device_gpu_module_
                     {
                         if(gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
                         {
-                            parsec_node_mig_inc_task_executed();
+                            parsec_node_mig_inc_gpu_task_executed();
                         }
                     }
                 

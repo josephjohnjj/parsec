@@ -34,7 +34,8 @@ typedef struct deps_details_renamee_s
 
 typedef struct parsec_node_info_s 
 {
-    int nb_tasks_executed;
+    int nb_gpu_tasks_executed;
+    int nb_cpu_tasks_executed;
     int nb_req_send;
     int nb_req_recvd;
     int nb_req_forwarded;
@@ -53,7 +54,6 @@ int parsec_node_migrate_init(parsec_context_t* context );
 int parsec_node_migrate_fini();
 int send_steal_request(parsec_execution_stream_t* es);
 int process_steal_request(parsec_execution_stream_t* es);
-int parsec_node_mig_inc_task_executed();
 int process_mig_request(parsec_task_t* this_task);
 int process_mig_task_details(parsec_execution_stream_t* es);
 int migrate_put_mpi_progress(parsec_execution_stream_t* es);
@@ -65,4 +65,6 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
     int selected_tasks);
 int parsec_node_mig_inc_released();
 int parsec_node_mig_inc_selected();
+int parsec_node_mig_inc_gpu_task_executed();
+int parsec_node_mig_inc_cpu_task_executed();
 #endif
