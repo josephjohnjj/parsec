@@ -244,7 +244,7 @@ int parsec_node_stats_init(parsec_context_t *context)
     node_info->nb_release            = 0;
     node_info->nb_selected           = 0;
     
-
+    return 0;
 }
 
 int parsec_node_stats_fini()
@@ -269,19 +269,13 @@ int parsec_node_stats_fini()
     {
         printf("Steal req policy          : Ring \n");
     }
-    else if (1 == parsec_runtime_steal_request_policy)
+    else
     {
         printf("Steal req policy          : Random \n");
     }
-    else if (2 == parsec_runtime_steal_request_policy)
-    {
-        printf("Steal req policy          : Tree \n");
-    }
-    else if (3 == parsec_runtime_steal_request_policy)
-    {
-        printf("Steal req policy          : Predictive \n");
-    }
     free(node_info);
+
+    return 0;
 }
 
 int parsec_node_migrate_fini()
@@ -681,6 +675,8 @@ int initiate_steal_request(parsec_execution_stream_t *es)
 
     if (parsec_runtime_node_migrate_stats)
         parsec_node_mig_inc_req_send();
+
+    return 0;
 }
 
 int send_steal_request(parsec_execution_stream_t *es)
@@ -735,7 +731,7 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
             if (parsec_runtime_node_migrate_stats)
                 parsec_node_mig_inc_req_send();
         }
-        else if (1 == parsec_runtime_steal_request_policy) /* RANDOM */
+        else
         {
 
             victim_rank = rand() % nb_nodes;
@@ -758,114 +754,9 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
             if (parsec_runtime_node_migrate_stats)
                 parsec_node_mig_inc_req_send();
         }
-        else /* TREE*/
-        {
-            int victim_rank = 0, remaining_requests = 0;
-            int root = steal_request->root;
-            int my_pos = 0, left_pos = 0, right_pos = 0, left_rank = 0, right_rank = 0;
-
-            remaining_requests = steal_request->nb_task_request;
-
-            assert(es->virtual_process->parsec_context != NULL);
-
-            my_pos = (my_rank + nb_nodes) % root;
-
-            left_pos = (2 * my_pos) + 1;
-            if (left_pos < nb_nodes)
-            {
-                left_rank = my_rank + (left_pos - my_pos);
-            }
-            else
-            {
-                left_rank = -1;
-            }
-
-            right_pos = (2 * my_pos) + 2;
-            if (right_pos < nb_nodes)
-            {
-                right_rank = my_rank + (right_pos - my_pos);
-            }
-            else
-            {
-                right_rank = -1;
-            }
-
-            if (right_rank == -1 && left_rank == -1) /** No children*/
-            {
-                steal_request->dst = steal_request->root;
-                steal_request->nb_task_request = remaining_requests;
-
-                assert(0 <= steal_request->root && steal_request->root < nb_nodes);
-                assert(0 <= steal_request->src  && steal_request->src < nb_nodes);
-                assert(0 <= steal_request->dst  && steal_request->dst < nb_nodes);
-
-                parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->dst, steal_request, sizeof(steal_request_t));
-                PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p forwarded to rank %d from rank %d. #task requested %d",
-                                     steal_request, steal_request->dst, steal_request->src, steal_request->nb_task_request);
-            }
-            else if (right_rank == -1 && left_rank != -1) /** only one child*/
-            {
-                steal_request->dst = left_rank;
-                steal_request->nb_task_request = remaining_requests;
-
-                assert(0 <= steal_request->root && steal_request->root < nb_nodes);
-                assert(0 <= steal_request->src  && steal_request->src < nb_nodes);
-                assert(0 <= steal_request->dst  && steal_request->dst < nb_nodes);
-
-                parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->dst, steal_request, sizeof(steal_request_t));
-                PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p forwarded to rank %d from rank %d. #task requested %d",
-                                     steal_request, steal_request->dst, steal_request->src, steal_request->nb_task_request);
-            }
-            else /** two children*/
-            {
-                /** Propogate to left child*/
-
-                steal_request->dst = left_rank;
-                steal_request->nb_task_request = (remaining_requests + 1) / 2;
-
-                assert(0 <= steal_request->root && steal_request->root < nb_nodes);
-                assert(0 <= steal_request->src  && steal_request->src < nb_nodes);
-                assert(0 <= steal_request->dst  && steal_request->dst < nb_nodes);
-
-                parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->dst, steal_request, sizeof(steal_request_t));
-                PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p forwarded to rank %d from rank %d. #task requested %d",
-                                     steal_request, steal_request->dst, steal_request->src, steal_request->nb_task_request);
-
-                /** Propogate to right child*/
-
-                steal_request->dst = right_rank;
-                steal_request->nb_task_request = remaining_requests - steal_request->nb_task_request;
-                assert(0 <= steal_request->dst && steal_request->dst < nb_nodes);
-
-                if (steal_request->nb_task_request > 0)
-                {
-                    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->dst, steal_request, sizeof(steal_request_t));
-                    PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p forwarded to rank %d from rank %d. #task requested %d",
-                                         steal_request, steal_request->dst, steal_request->src, steal_request->nb_task_request);
-                }
-            }
-        }
     }
 
     return PARSEC_HOOK_RETURN_ASYNC;
-}
-
-int steal_policy_tree_victim(parsec_execution_stream_t *es, steal_request_t *steal_request)
-{
-    int victim_rank = 0;
-    int root = steal_request->root;
-    int my_pos = 0, left_pos = 0, right_pos = 0, left_rank = 0, right_rank = 0;
-
-    assert(es->virtual_process->parsec_context != NULL);
-
-    my_pos = (my_rank + nb_nodes) % root;
-    left_pos = (2 * my_pos) + 1;
-    right_pos = (2 * my_pos) + 2;
-
-    left_rank = left_pos - my_pos;
-    right_rank = right_pos - my_pos;
-
-    return victim_rank;
 }
 
 parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
@@ -1250,6 +1141,8 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
 
     remote_deps_free(origin);
+
+    return 0;
 }
 
 static int
@@ -1320,6 +1213,8 @@ int migrate_put_mpi_progress(parsec_execution_stream_t *es)
             migrate_dep_mpi_put_start(es, item);
         }
     }
+
+    return 0;
 }
 
 static void
