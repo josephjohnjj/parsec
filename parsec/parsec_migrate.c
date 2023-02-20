@@ -871,8 +871,9 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         
         if(-1 == rc)
         {
-            parsec_list_nolock_push_back(&mig_noobj_fifo, (parsec_list_item_t*)deps);
-            printf("I am here \n");
+            parsec_list_push_back(&mig_noobj_fifo, (parsec_list_item_t*)deps);
+            printf("I am here %d\n", deps->msg.taskpool_id);
+            fflush(stdout);
         }
         else
         {
@@ -909,7 +910,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
             parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)item);
 
-            printf("I ma here too\n");
+            printf("I am here too %d\n", obj->taskpool_id);
+            fflush(stdout);
         }
     }
 }
@@ -947,7 +949,8 @@ static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
 
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
 
-    if(NULL != deps->taskpool) return -1;
+    if(NULL == deps->taskpool) 
+        return -1;
 
     task.taskpool = deps->taskpool;
     task.task_class = task.taskpool->task_classes_array[deps->msg.task_class_id];
