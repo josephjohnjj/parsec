@@ -18,6 +18,7 @@ extern int parsec_runtime_node_migrate_stats;
 
 parsec_list_t mig_task_details_fifo; /* fifo of migrated task details*/
 parsec_list_t mig_dep_put_fifo;      /* fifo of deps of migrated tasks */
+parsec_list_t mig_noobj_fifo;        /* fifo of mig task details with taskpools not actually known */
 
 /**
  * parsec_migration_engine_up == 0 : there is no node level task migration
@@ -232,6 +233,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
     PARSEC_OBJ_CONSTRUCT(&mig_task_details_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_dep_put_fifo, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
 
     return 0;
 }
@@ -302,6 +304,7 @@ int parsec_node_migrate_fini()
     PARSEC_OBJ_DESTRUCT(&selected_task_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_task_details_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_dep_put_fifo);
+    PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
 
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
@@ -794,7 +797,10 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     deps->msg.taskpool_id = mig_task->taskpool->taskpool_id;
     deps->msg.deps = (uintptr_t)deps;
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
+
     assert(deps->taskpool == mig_task->taskpool);
+    assert(NULL != deps->taskpool);
+
     for (i = 0; i < mig_task->task_class->nb_locals; i++)
         deps->msg.locals[i] = mig_task->locals[i];
     _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
@@ -862,13 +868,16 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         deps->eager_msg = msg;
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
-        assert(rc == 1);
-
-        rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, position,
-                                                                length, deps);
-
-        parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)deps);
-        parsec_atomic_fetch_add_int32(&nb_tasks_expected, -1);
+        
+        if(-1 == rc)
+        {
+            parsec_list_nolock_push_back(&mig_noobj_fifo, (parsec_list_item_t*)deps);
+            printf("I am here \n");
+        }
+        else
+        {
+            parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)deps);
+        }
     }
 
     /** Decrement the mutex as we have recived a response to the steal request */
@@ -877,9 +886,38 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     return 1;
 }
 
+void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_item)
+{
+    parsec_taskpool_t* obj = dep_cmd_item->cmd.new_taskpool.tp;
+    parsec_list_item_t *item;
+    int rc;
+
+    for(item = PARSEC_LIST_ITERATOR_FIRST(&mig_noobj_fifo);
+        item != PARSEC_LIST_ITERATOR_END(&mig_noobj_fifo);
+        item = PARSEC_LIST_ITERATOR_NEXT(item) ) 
+    {
+        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
+
+        if( deps->msg.taskpool_id == obj->taskpool_id )
+        {
+            deps->taskpool = NULL;
+            rc = remote_dep_get_datatypes_of_mig_task(es, deps); 
+
+            assert( -1 != rc );
+            assert(deps->taskpool != NULL);
+        
+            item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
+            parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)item);
+
+            printf("I ma here too\n");
+        }
+    }
+}
+
 int process_mig_task_details(parsec_execution_stream_t *es)
 {
     parsec_remote_deps_t *deps = NULL;
+    int rc;
 
     if (parsec_ce.can_serve(&parsec_ce))
     {
@@ -887,6 +925,10 @@ int process_mig_task_details(parsec_execution_stream_t *es)
 
         if (NULL != deps)
         {
+            rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, NULL /*not imp today*/,
+                                                                0 /*not imp today*/, deps);
+            parsec_atomic_fetch_add_int32(&nb_tasks_expected, -1);
+
             get_mig_task_data(es, deps);
             return 1;
         }
@@ -904,7 +946,9 @@ static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
     struct remote_dep_output_param_s *output = NULL;
 
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
-    assert(NULL != deps->taskpool);
+
+    if(NULL != deps->taskpool) return -1;
+
     task.taskpool = deps->taskpool;
     task.task_class = task.taskpool->task_classes_array[deps->msg.task_class_id];
     for (i = 0; i < task.task_class->nb_locals; i++)
@@ -1171,6 +1215,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     /** mark the end of communication for this migration message */
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
 
+    remote_dep_dec_flying_messages(origin->taskpool);
     remote_deps_free(origin);
 
     return 0;
