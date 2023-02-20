@@ -106,9 +106,21 @@ int parsec_node_mig_inc_gpu_task_executed()
     return node_info->nb_gpu_tasks_executed;
 }
 
+int print_gpu_task_count()
+{
+    printf("# GPU tasks %d \n", node_info->nb_gpu_tasks_executed);
+    return node_info->nb_gpu_tasks_executed;
+}
+
 int parsec_node_mig_inc_cpu_task_executed()
 {
     parsec_atomic_fetch_inc_int32(&(node_info->nb_cpu_tasks_executed));
+    return node_info->nb_cpu_tasks_executed;
+}
+
+int print_cpu_task_count()
+{
+    printf("# CPU tasks %d \n", node_info->nb_cpu_tasks_executed);
     return node_info->nb_cpu_tasks_executed;
 }
 
@@ -568,6 +580,10 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     {
         if (this_task->task_class->in[i] == NULL)
             continue;
+        
+        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
+        if ((this_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) 
+            continue;
 
         /** If the repo associated with a data is not NULL reduce the usage count by one.*/
         if (this_task->data[i].source_repo_entry != NULL)
@@ -585,6 +601,10 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     for (i = 0; i < this_task->task_class->nb_flows; i++)
     {
         if (this_task->task_class->in[i] == NULL)
+            continue;
+
+        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
+        if (( this_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) 
             continue;
 
         if (NULL != this_task->data[i].data_in)
@@ -797,7 +817,10 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
         if (mig_task->task_class->in[i] == NULL)
             continue;
 
-        assert((mig_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_READ) || (mig_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_WRITE));
+        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
+        if (( mig_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) 
+            continue; 
+
         assert(NULL != parsec_data_copy_get_ptr(mig_task->data[i].data_in));
 
         output = &deps->output[i];
@@ -892,7 +915,11 @@ static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
         if (task.task_class->in[flow_index] == NULL)
             continue;
 
-        flow_mask = (1U << task.task_class->in[flow_index]->flow_index) | 0x80000000;
+        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
+        if ( (task.task_class->in[flow_index]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE )
+            continue;
+
+        flow_mask = (1U << task.task_class->in[flow_index]->flow_index) | 0x80000000U;
         output = &deps->output[flow_index];
         rc = task.task_class->get_datatype(es, &task, &flow_mask, &output->data);
         assert(PARSEC_HOOK_RETURN_NEXT == rc);
@@ -1116,6 +1143,10 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         task->data[flow_index].data_out = NULL;
 
         if (task->task_class->in[flow_index] == NULL)
+            continue;
+
+        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
+        if ( (task->task_class->in[flow_index]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) 
             continue;
 
         task->data[flow_index].data_in = origin->output[flow_index].data.data;

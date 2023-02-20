@@ -67,4 +67,6 @@ int parsec_node_mig_inc_released();
 int parsec_node_mig_inc_selected();
 int parsec_node_mig_inc_gpu_task_executed();
 int parsec_node_mig_inc_cpu_task_executed();
+int print_gpu_task_count();
+int print_cpu_task_count();
 #endif
