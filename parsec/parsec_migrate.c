@@ -107,9 +107,11 @@ int parsec_node_mig_inc_gpu_task_executed()
     return node_info->nb_gpu_tasks_executed;
 }
 
-int print_gpu_task_count()
+int print_stats()
 {
-    printf("# GPU tasks %d \n", node_info->nb_gpu_tasks_executed);
+    printf("Node %d:# GPU tasks exec %d CPU task exec %d Migrated tasks %d Recvd task %d\n", 
+        my_rank, node_info->nb_gpu_tasks_executed, node_info->nb_cpu_tasks_executed, 
+        node_info->nb_task_migrated, node_info->nb_task_recvd);
     return node_info->nb_gpu_tasks_executed;
 }
 
@@ -119,11 +121,6 @@ int parsec_node_mig_inc_cpu_task_executed()
     return node_info->nb_cpu_tasks_executed;
 }
 
-int print_cpu_task_count()
-{
-    printf("# CPU tasks %d \n", node_info->nb_cpu_tasks_executed);
-    return node_info->nb_cpu_tasks_executed;
-}
 
 int parsec_node_mig_inc_released()
 {
@@ -1203,6 +1200,9 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         // task->repo_entry->data[flow_index] = task->data[flow_index].data_in;
     }
 
+    /** mark the end of communication for this migration message */
+    origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
+
     /** Update the task count on this node */
     origin->taskpool->tdm.module->taskpool_addto_nb_tasks(origin->taskpool, 1);
     /** Schedule the task on this node */
@@ -1215,10 +1215,6 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     parsec_atomic_fetch_add_int32(&nb_tasks_received, 1);
 
-    /** mark the end of communication for this migration message */
-    origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
-
-    remote_dep_dec_flying_messages(origin->taskpool);
     remote_deps_free(origin);
 
     return 0;
