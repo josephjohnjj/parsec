@@ -45,12 +45,6 @@ volatile int32_t process_steal_request_mutex = 0;
 volatile int32_t nb_steal_request_received = 0;
 
 /**
- * @brief Keep track of the total tasks expected by the current active steal request;
- *
- */
-volatile int32_t nb_tasks_expected = 0;
-
-/**
  * @brief Keep track of the total tasks recieved for the current active steal request;
  *
  */
@@ -109,9 +103,10 @@ int parsec_node_mig_inc_gpu_task_executed()
 
 int print_stats()
 {
-    printf("Node %d:# GPU tasks exec %d CPU task exec %d Migrated tasks %d Recvd task %d\n", 
+    printf("Node %d:# GPU tasks exec %d CPU task exec %d Migrated tasks %d Recvd task %d active %d \n", 
         my_rank, node_info->nb_gpu_tasks_executed, node_info->nb_cpu_tasks_executed, 
-        node_info->nb_task_migrated, node_info->nb_task_recvd);
+        node_info->nb_task_migrated, node_info->nb_task_recvd, active_steal_request_mutex);
+        
     return node_info->nb_gpu_tasks_executed;
 }
 
@@ -338,15 +333,7 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     {
         int unsuccesfull_steals = steal_request->nb_task_request;
 
-        /** track the total tasks expected*/
-        parsec_atomic_fetch_add_int32(&nb_tasks_expected, -1 * unsuccesfull_steals);
-
-        if (0 == nb_tasks_expected)
-        {
-            /** Decrement the mutex as no tasks are expected from this steal requests */
-            parsec_atomic_fetch_dec_int32(&active_steal_request_mutex);
-        }
-
+        parsec_atomic_fetch_dec_int32(&active_steal_request_mutex);
         PARSEC_OBJ_RELEASE(steal_request);
     }
     else
@@ -646,10 +633,6 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         }
         steal_request.dst = victim_rank;
     }
-    
-
-    /** track the total tasks expected*/
-    parsec_atomic_fetch_add_int32(&nb_tasks_expected, steal_request.nb_task_request);
 
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request.dst, &steal_request, sizeof(steal_request_t));
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p send to rank %d from rank %d. #task requested %d",
@@ -813,8 +796,6 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         if(-1 == rc)
         {
             parsec_list_push_back(&mig_noobj_fifo, (parsec_list_item_t*)deps);
-            printf("I am here %d\n", deps->msg.taskpool_id);
-            fflush(stdout);
         }
         else
         {
@@ -850,9 +831,6 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
         
             item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
             parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)item);
-
-            printf("I am here too %d\n", obj->taskpool_id);
-            fflush(stdout);
         }
     }
 }
@@ -870,7 +848,6 @@ int process_mig_task_details(parsec_execution_stream_t *es)
         {
             rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, NULL /*not imp today*/,
                                                                 0 /*not imp today*/, deps);
-            parsec_atomic_fetch_add_int32(&nb_tasks_expected, -1);
 
             get_mig_task_data(es, deps);
             return 1;
