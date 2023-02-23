@@ -91,6 +91,10 @@ static void migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_ite
 static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_reg_handle_t lreg, ptrdiff_t ldispl,
                                       parsec_ce_mem_reg_handle_t rreg, ptrdiff_t rdispl, size_t size,
                                       int remote, void *cb_data);
+int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, 
+    steal_request_t *steal_request);
+int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
+    int selected_tasks);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -533,9 +537,15 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
     assert(deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
 
+    /** We are only sneding one message.*/
+    deps->msg.length = dep_count;
+    /** We only need to send the msg part of the deps. */
     void *buf = malloc(dep_count);
     memcpy( buf, &deps->msg, dep_count );
 
+    /** This will be decremented by remote_dep_complete_and_cleanup() which is called
+     * in migrate_dep_mpi_put_end_cb after() each PUT.
+    */
     remote_dep_inc_flying_messages(deps->taskpool);
 
     rc = deps->taskpool->tdm.module->outgoing_message_start(deps->taskpool, dst_rank, deps);
@@ -780,13 +790,15 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     while (position < length)
     {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
+        assert( NULL != deps );
 
-        //ce->unpack(ce, msg, length, &position, &deps->msg, dep_count, dep_dtt);
-        memcpy(&deps->msg, msg, sizeof(remote_dep_wire_get_t));
+        memcpy(&deps->msg, msg, dep_count);
         deps->from = src;
-        deps->eager_msg = msg;
+        deps->eager_msg = NULL;
 
-        position = position + sizeof(remote_dep_wire_get_t);
+        assert( deps->msg.length == dep_count);
+
+        position += dep_count;
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
         
@@ -812,6 +824,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
     parsec_list_item_t *item;
     int rc;
 
+    parsec_list_lock(&mig_noobj_fifo);
+
     for(item = PARSEC_LIST_ITERATOR_FIRST(&mig_noobj_fifo);
         item != PARSEC_LIST_ITERATOR_END(&mig_noobj_fifo);
         item = PARSEC_LIST_ITERATOR_NEXT(item) ) 
@@ -830,6 +844,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)item);
         }
     }
+
+    parsec_list_unlock(&mig_noobj_fifo);
 }
 
 int process_mig_task_details(parsec_execution_stream_t *es)
@@ -839,7 +855,7 @@ int process_mig_task_details(parsec_execution_stream_t *es)
 
     if (parsec_ce.can_serve(&parsec_ce))
     {
-        parsec_remote_deps_t *deps = (parsec_remote_deps_t *)parsec_list_try_pop_front(&mig_task_details_fifo);
+        parsec_remote_deps_t *deps = (parsec_remote_deps_t *)parsec_list_pop_front(&mig_task_details_fifo);
 
         if (NULL != deps)
         {
@@ -924,6 +940,7 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
     deps->incoming_mask = deps->msg.output_mask; /** This is important as we are changing deps->msg.output_mask soon */
 
     msg.source_deps = task->deps;                      /* the deps copied from activate message from source */
+    assert(NULL != task->deps);
     msg.callback_fn = (uintptr_t)get_mig_task_data_cb; /* Function to call when PUT, in response to the GET is done */
 
     for (k = 0; deps->incoming_mask >> k; k++)
@@ -946,8 +963,7 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         dtt = deps->output[k].data.remote.src_datatype;
         nbdtt = deps->output[k].data.remote.src_count;
 
-        /* We have the remote mem_handle.
-         * Let's allocate our mem_reg_handle
+        /* We have the remote mem_handle. Let's allocate our mem_reg_handle
          * and let the source know.
          */
         parsec_ce_mem_reg_handle_t receiver_memory_handle;
@@ -972,7 +988,7 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         }
 
         assert(NULL != receiver_memory_handle);
-        assert(receiver_memory_handle_size > 0);
+        assert(receiver_memory_handle_size == parsec_ce.get_mem_handle_size());
 
 #if defined(PARSEC_DEBUG_NOISIER)
         char type_name[MPI_MAX_OBJECT_NAME];
@@ -1002,8 +1018,7 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         void *buf = malloc(buf_size);
         memcpy(buf, &msg, sizeof(remote_dep_wire_get_t));
         memcpy(((char *)buf) + sizeof(remote_dep_wire_get_t),
-               receiver_memory_handle,
-               receiver_memory_handle_size);
+               receiver_memory_handle, receiver_memory_handle_size);
 
         /* Send AM */
         parsec_ce.send_am(&parsec_ce, PARSEC_MIG_DEP_GET_DATA_TAG, from, buf, buf_size);
@@ -1157,6 +1172,9 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
 #endif
     parsec_execution_stream_t *es = &parsec_comm_es;
 
+    /* we are expecting exactly one wire_get_t + remote memory handle */
+    assert(msg_size == sizeof(remote_dep_wire_get_t) + ce->get_mem_handle_size());
+
     item = (dep_cmd_item_t *)malloc(sizeof(dep_cmd_item_t));
     PARSEC_OBJ_CONSTRUCT(&item->super, parsec_list_item_t);
     item->action = DEP_GET_DATA;
@@ -1167,10 +1185,6 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
      * of the other side.
      */
     memcpy(task, msg, sizeof(remote_dep_wire_get_t));
-
-    /* we are expecting exactly one wire_get_t + remote memory handle */
-    //sizeof(remote_dep_wire_get_t)+ sizeof(mpi_funnelled_mem_reg_handle_t);
-    assert(msg_size == sizeof(remote_dep_wire_get_t) + ce->get_mem_handle_size());
 
     item->cmd.activate.remote_memory_handle = malloc(ce->get_mem_handle_size());
     memcpy(item->cmd.activate.remote_memory_handle,

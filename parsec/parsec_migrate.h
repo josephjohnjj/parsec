@@ -56,17 +56,13 @@ int send_steal_request(parsec_execution_stream_t* es);
 int process_steal_request(parsec_execution_stream_t* es);
 int process_mig_request(parsec_task_t* this_task);
 int process_mig_task_details(parsec_execution_stream_t* es);
-int migrate_put_mpi_progress(parsec_execution_stream_t* es);
 int parsec_node_stats_init();
 int parsec_node_stats_fini();
-int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, 
-    steal_request_t *steal_request);
-int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
-    int selected_tasks);
 int parsec_node_mig_inc_released();
 int parsec_node_mig_inc_selected();
 int parsec_node_mig_inc_gpu_task_executed();
 int parsec_node_mig_inc_cpu_task_executed();
 int print_stats();
 void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_item);
+int migrate_put_mpi_progress(parsec_execution_stream_t* es);
 #endif
