@@ -195,7 +195,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
     srand(time(NULL));
 
-    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, (dep_count + RDEP_MSG_SHORT_LIMIT) * sizeof(char));
+    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, dep_count * sizeof(char));
     if (PARSEC_SUCCESS != rc)
     {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
@@ -517,13 +517,12 @@ int migrate_single_task(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_ta
     return 0;
 }
 
+
 int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, steal_request_t *steal_request)
 {
     parsec_remote_deps_t *deps = NULL;
-    char packed_buffer[dep_count + RDEP_MSG_SHORT_LIMIT];
-    int dsize = 0, total_message_size = 0, rc = 0, length = dep_count + RDEP_MSG_SHORT_LIMIT;
     int src_rank = 0, dst_rank = 0;
-    int i = 0;
+    int i = 0, rc = 0;
 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Task %p selected for migration", this_task);
 
@@ -534,21 +533,14 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
     assert(deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
 
-    /** find the size of the message the original message to be send */
-    parsec_ce.pack_size(&parsec_ce, dep_count, dep_dtt, &dsize);
-    assert(dep_count + RDEP_MSG_SHORT_LIMIT > dsize);
-    /** pack the original message in the buffer */
-    parsec_ce.pack(&parsec_ce, &deps->msg, dep_count, dep_dtt, packed_buffer, length, &total_message_size);
-    /** pack the piggyback message to the original message */
-    deps->taskpool->tdm.module->outgoing_message_pack(deps->taskpool, dst_rank, packed_buffer, &total_message_size, length);
-    /**  Total message size = original message size +  piggyback message size */
-    deps->msg.length = dsize + deps->taskpool->tdm.module->outgoing_message_piggyback_size;
-    assert(deps->msg.length == total_message_size);
+    void *buf = malloc(dep_count);
+    memcpy( buf, &deps->msg, dep_count );
 
     remote_dep_inc_flying_messages(deps->taskpool);
 
     rc = deps->taskpool->tdm.module->outgoing_message_start(deps->taskpool, dst_rank, deps);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, packed_buffer, total_message_size);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, buf, dep_count);
+    free(buf);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Migration reply send to rank %d using deps %p with pending ack %d",
                          dst_rank, deps, deps->pending_ack);
@@ -783,13 +775,18 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     int position = 0, length = msg_size, rc;
     parsec_remote_deps_t *deps = NULL;
 
+    assert( (msg_size % dep_count) == 0); 
+
     while (position < length)
     {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
 
-        ce->unpack(ce, msg, length, &position, &deps->msg, dep_count, dep_dtt);
+        //ce->unpack(ce, msg, length, &position, &deps->msg, dep_count, dep_dtt);
+        memcpy(&deps->msg, msg, sizeof(remote_dep_wire_get_t));
         deps->from = src;
         deps->eager_msg = msg;
+
+        position = position + sizeof(remote_dep_wire_get_t);
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
         
@@ -974,6 +971,9 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
                                    &receiver_memory_handle, &receiver_memory_handle_size);
         }
 
+        assert(NULL != receiver_memory_handle);
+        assert(receiver_memory_handle_size > 0);
+
 #if defined(PARSEC_DEBUG_NOISIER)
         char type_name[MPI_MAX_OBJECT_NAME];
         int len;
@@ -997,10 +997,10 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
          * to the source. Source is anticipating this exact configuration.
          */
         int buf_size = sizeof(remote_dep_wire_get_t) + receiver_memory_handle_size;
+        assert(buf_size == sizeof(remote_dep_wire_get_t) + parsec_ce.get_mem_handle_size());
+
         void *buf = malloc(buf_size);
-        memcpy(buf,
-               &msg,
-               sizeof(remote_dep_wire_get_t));
+        memcpy(buf, &msg, sizeof(remote_dep_wire_get_t));
         memcpy(((char *)buf) + sizeof(remote_dep_wire_get_t),
                receiver_memory_handle,
                receiver_memory_handle_size);
@@ -1169,6 +1169,7 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
     memcpy(task, msg, sizeof(remote_dep_wire_get_t));
 
     /* we are expecting exactly one wire_get_t + remote memory handle */
+    //sizeof(remote_dep_wire_get_t)+ sizeof(mpi_funnelled_mem_reg_handle_t);
     assert(msg_size == sizeof(remote_dep_wire_get_t) + ce->get_mem_handle_size());
 
     item->cmd.activate.remote_memory_handle = malloc(ce->get_mem_handle_size());
@@ -1271,6 +1272,9 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
         }
 
         parsec_ce_mem_reg_handle_t remote_memory_handle = item->cmd.activate.remote_memory_handle;
+        assert( NULL != remote_memory_handle);
+        assert( NULL != source_memory_handle);
+        assert( source_memory_handle_size == parsec_ce.get_mem_handle_size() );
 
 #if defined(PARSEC_DEBUG_NOISIER)
         MPI_Type_get_name(dtt, type_name, &len);
