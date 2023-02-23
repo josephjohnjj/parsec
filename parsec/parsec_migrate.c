@@ -798,6 +798,7 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
         assert( deps->msg.length == dep_count);
 
+        /** Update position to manage the loop*/
         position += dep_count;
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
@@ -841,6 +842,7 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             assert(deps->taskpool != NULL);
         
             item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
+            PARSEC_LIST_ITEM_SINGLETON(item);
             parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)item);
         }
     }
@@ -1222,6 +1224,7 @@ int migrate_put_mpi_progress(parsec_execution_stream_t *es)
         if (NULL != item)
         {
             migrate_dep_mpi_put_start(es, item);
+            return 1;
         }
     }
 

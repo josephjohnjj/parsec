@@ -1516,7 +1516,7 @@ static int remote_dep_nothread_send(parsec_execution_stream_t* es,
  */
 static int remote_dep_mpi_progress(parsec_execution_stream_t* es)
 {
-    int ret = 0;
+    int ret = 0, rc = 0;
 
     if( !PARSEC_THREAD_IS_MASTER(es) ) return 0;
 
@@ -1532,9 +1532,6 @@ static int remote_dep_mpi_progress(parsec_execution_stream_t* es)
         remote_dep_mpi_put_start(es, item);
         ret++;
     }
-
-    if(parsec_migration_engine_up ==  1)
-        migrate_put_mpi_progress(es);
 
     return ret;
 }
