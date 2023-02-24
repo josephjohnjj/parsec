@@ -199,7 +199,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
     srand(time(NULL));
 
-    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, sizeof(remote_dep_wire_activate_t) * sizeof(char));
+    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, ACTIVATE_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc)
     {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
@@ -208,7 +208,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         return rc;
     }
     rc = parsec_ce.tag_register(PARSEC_MIG_STEAL_REQUEST_TAG, recieve_steal_request, context,
-                                sizeof(steal_request_t) * sizeof(char));
+                                STEAL_REQ_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc)
     {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_STEAL_REQUEST_TAG (error %d)\n", rc);
@@ -325,7 +325,7 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     steal_request_t *steal_request, *recv_request;
     recv_request = (steal_request_t *)msg;
 
-    assert( sizeof(steal_request_t) == msg_size );
+    assert( STEAL_REQ_SIZE == msg_size );
 
     steal_request = PARSEC_OBJ_NEW(steal_request_t);
     steal_request->nb_task_request = recv_request->nb_task_request;
@@ -542,10 +542,10 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     assert(deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
 
     /** We are only sneding one message.*/
-    deps->msg.length = sizeof(remote_dep_wire_activate_t);
+    deps->msg.length = ACTIVATE_MSG_SIZE;
     /** We only need to send the msg part of the deps. */
-    void *buf = malloc(sizeof(remote_dep_wire_activate_t));
-    memcpy( buf, &deps->msg, sizeof(remote_dep_wire_activate_t) );
+    void *buf = malloc(ACTIVATE_MSG_SIZE);
+    memcpy( buf, &deps->msg, ACTIVATE_MSG_SIZE );
 
     /** This will be decremented by remote_dep_complete_and_cleanup() which is called
      * in migrate_dep_mpi_put_end_cb after() each PUT.
@@ -553,7 +553,7 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     remote_dep_inc_flying_messages(deps->taskpool);
 
     rc = deps->taskpool->tdm.module->outgoing_message_start(deps->taskpool, dst_rank, deps);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, buf, sizeof(remote_dep_wire_activate_t));
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, buf, ACTIVATE_MSG_SIZE);
     free(buf);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Migration reply send to rank %d using deps %p with pending ack %d",
@@ -640,7 +640,7 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         steal_request.dst = victim_rank;
     }
 
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request.dst, &steal_request, sizeof(steal_request_t));
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request.dst, &steal_request, STEAL_REQ_SIZE);
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p send to rank %d from rank %d. #task requested %d",
                          &steal_request, steal_request.dst, steal_request.src, steal_request.nb_task_request);
 
@@ -705,7 +705,7 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
     assert(0 <= steal_request->src  && steal_request->src < nb_nodes);
     assert(0 <= steal_request->dst  && steal_request->dst < nb_nodes);
 
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->dst, steal_request, sizeof(steal_request_t));
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->dst, steal_request, STEAL_REQ_SIZE);
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p forwarded to rank %d from rank %d. #task requested %d",
                          steal_request, steal_request->dst, steal_request->src, steal_request->nb_task_request);
 
@@ -789,21 +789,21 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     int position = 0, length = msg_size, rc;
     parsec_remote_deps_t *deps = NULL;
 
-    assert( (msg_size % sizeof(remote_dep_wire_activate_t)) == 0); 
+    assert( (msg_size % ACTIVATE_MSG_SIZE) == 0); 
 
     while (position < length)
     {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
         assert( NULL != deps );
 
-        memcpy(&deps->msg, msg, sizeof(remote_dep_wire_activate_t));
+        memcpy(&deps->msg, msg, ACTIVATE_MSG_SIZE);
         deps->from = src;
         deps->eager_msg = NULL;
 
-        assert( deps->msg.length == sizeof(remote_dep_wire_activate_t));
+        assert( deps->msg.length == ACTIVATE_MSG_SIZE);
 
         /** Update position to manage the loop*/
-        position += sizeof(remote_dep_wire_activate_t);
+        position += ACTIVATE_MSG_SIZE;
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
         
