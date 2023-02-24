@@ -11,8 +11,6 @@
 #include <pthread.h> 
 #include "parsec/parsec_comm_engine.h"
 
-#define dep_count sizeof(remote_dep_wire_activate_t)
-#define dep_dtt parsec_datatype_int8_t
 
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 

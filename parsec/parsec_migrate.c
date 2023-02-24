@@ -199,10 +199,11 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
     srand(time(NULL));
 
-    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, dep_count * sizeof(char));
+    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, sizeof(remote_dep_wire_activate_t) * sizeof(char));
     if (PARSEC_SUCCESS != rc)
     {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -211,6 +212,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
     if (PARSEC_SUCCESS != rc)
     {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_STEAL_REQUEST_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -322,6 +324,8 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
     steal_request_t *steal_request, *recv_request;
     recv_request = (steal_request_t *)msg;
+
+    assert( sizeof(steal_request_t) == msg_size );
 
     steal_request = PARSEC_OBJ_NEW(steal_request_t);
     steal_request->nb_task_request = recv_request->nb_task_request;
@@ -538,10 +542,10 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     assert(deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
 
     /** We are only sneding one message.*/
-    deps->msg.length = dep_count;
+    deps->msg.length = sizeof(remote_dep_wire_activate_t);
     /** We only need to send the msg part of the deps. */
-    void *buf = malloc(dep_count);
-    memcpy( buf, &deps->msg, dep_count );
+    void *buf = malloc(sizeof(remote_dep_wire_activate_t));
+    memcpy( buf, &deps->msg, sizeof(remote_dep_wire_activate_t) );
 
     /** This will be decremented by remote_dep_complete_and_cleanup() which is called
      * in migrate_dep_mpi_put_end_cb after() each PUT.
@@ -549,7 +553,7 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     remote_dep_inc_flying_messages(deps->taskpool);
 
     rc = deps->taskpool->tdm.module->outgoing_message_start(deps->taskpool, dst_rank, deps);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, buf, dep_count);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, buf, sizeof(remote_dep_wire_activate_t));
     free(buf);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Migration reply send to rank %d using deps %p with pending ack %d",
@@ -785,21 +789,21 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     int position = 0, length = msg_size, rc;
     parsec_remote_deps_t *deps = NULL;
 
-    assert( (msg_size % dep_count) == 0); 
+    assert( (msg_size % sizeof(remote_dep_wire_activate_t)) == 0); 
 
     while (position < length)
     {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
         assert( NULL != deps );
 
-        memcpy(&deps->msg, msg, dep_count);
+        memcpy(&deps->msg, msg, sizeof(remote_dep_wire_activate_t));
         deps->from = src;
         deps->eager_msg = NULL;
 
-        assert( deps->msg.length == dep_count);
+        assert( deps->msg.length == sizeof(remote_dep_wire_activate_t));
 
         /** Update position to manage the loop*/
-        position += dep_count;
+        position += sizeof(remote_dep_wire_activate_t);
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
         
@@ -1018,9 +1022,10 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         assert(buf_size == sizeof(remote_dep_wire_get_t) + parsec_ce.get_mem_handle_size());
 
         void *buf = malloc(buf_size);
+        /** Copy the message to the buffer */
         memcpy(buf, &msg, sizeof(remote_dep_wire_get_t));
-        memcpy(((char *)buf) + sizeof(remote_dep_wire_get_t),
-               receiver_memory_handle, receiver_memory_handle_size);
+        /** Copy the handle to the rest of the buffer */
+        memcpy(((char *)buf) + sizeof(remote_dep_wire_get_t), receiver_memory_handle, receiver_memory_handle_size);
 
         /* Send AM */
         parsec_ce.send_am(&parsec_ce, PARSEC_MIG_DEP_GET_DATA_TAG, from, buf, buf_size);
@@ -1183,15 +1188,14 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
     item->cmd.activate.peer = src;
 
     task = &(item->cmd.activate.task);
-    /* copy the static part of the message, the part after this contains the memory_handle
-     * of the other side.
-     */
+
+    /* copy the static part of the message */
     memcpy(task, msg, sizeof(remote_dep_wire_get_t));
 
+    /** the part after this contains the memory_handle of the other side.*/
     item->cmd.activate.remote_memory_handle = malloc(ce->get_mem_handle_size());
-    memcpy(item->cmd.activate.remote_memory_handle,
-           ((char *)msg) + sizeof(remote_dep_wire_get_t),
-           ce->get_mem_handle_size());
+    memcpy(item->cmd.activate.remote_memory_handle, ((char *)msg) + sizeof(remote_dep_wire_get_t), 
+        ce->get_mem_handle_size());
 
     deps = (parsec_remote_deps_t *)(remote_dep_datakey_t)task->source_deps; /* get our deps back */
     assert(0 != deps->pending_ack);
@@ -1217,12 +1221,26 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
 int migrate_put_mpi_progress(parsec_execution_stream_t *es)
 {
     dep_cmd_item_t *item = NULL;
+    remote_dep_wire_get_t *msg = NULL;
+    parsec_remote_deps_t * deps = NULL;
 
     if (parsec_ce.can_serve(&parsec_ce))
     {
         item = (dep_cmd_item_t *)parsec_list_pop_front(&mig_dep_put_fifo);
         if (NULL != item)
         {
+            assert( item->action == DEP_GET_DATA );
+
+            msg = &(item->cmd.activate.task);
+            assert(msg != NULL);
+            assert(item->cmd.activate.remote_memory_handle != NULL);
+            assert(NULL != msg->source_deps);
+    
+
+            deps = (parsec_remote_deps_t *)(remote_dep_datakey_t)msg->source_deps; /* get our deps back */
+            assert(0 != deps->pending_ack);
+            assert(0 != deps->outgoing_mask);
+
             migrate_dep_mpi_put_start(es, item);
             return 1;
         }
