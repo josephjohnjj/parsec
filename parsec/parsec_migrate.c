@@ -392,6 +392,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         tasks_requested = steal_request->nb_task_request;
 
+        //#if 0
         for (d = 0; d < nb_cuda_devices; d++)
         {
             gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
@@ -470,6 +471,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                 break;
             }
         }
+        //#endif
 
         if (success_steals == 1)
         {
@@ -1151,6 +1153,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     /** Schedule the task on this node */
     parsec_list_item_singleton((parsec_list_item_t *)task);
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
+    task->chore_mask = PARSEC_DEV_ALL;
     __parsec_schedule(es, task, distance);
 
     if (parsec_runtime_node_migrate_stats)
