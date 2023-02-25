@@ -16,12 +16,12 @@ extern int parsec_runtime_chunk_size;
 extern int parsec_device_cuda_enabled;
 extern int parsec_runtime_node_migrate_stats;
 
-parsec_list_t mig_task_details_fifo; /* fifo of migrated task details*/
-parsec_list_t mig_dep_put_fifo;      /* fifo of deps of migrated tasks */
-parsec_list_t mig_noobj_fifo;        /* fifo of mig task details with taskpools not actually known */
-parsec_list_t mig_steal_req_fifo;    /* queues to hold steal request to progress */
-parsec_list_t steal_req_fifo;        /** list of all steal request received */
-parsec_list_t selected_task_fifo;    /** list of all task selected for migration */
+parsec_list_t mig_task_details_fifo;        /* fifo of migrated task details*/
+parsec_list_t mig_dep_put_fifo;             /* fifo of deps of migrated tasks */
+parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
+parsec_list_t steal_req_progress_fifo;      /* queues to hold steal request to progress */
+parsec_list_t steal_req_fifo;               /** list of all steal request received */
+parsec_list_t selected_task_fifo;           /** list of all task selected for migration */
 
 /**
  * parsec_migration_engine_up == 0 : there is no node level task migration
@@ -213,7 +213,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
     PARSEC_OBJ_CONSTRUCT(&mig_task_details_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_dep_put_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&mig_steal_req_fifo, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&steal_req_progress_fifo, parsec_list_t);
 
     return 0;
 }
@@ -280,12 +280,14 @@ int parsec_node_migrate_fini()
 
     while ((item = parsec_list_pop_front(&steal_req_fifo)) != NULL)
         free(item);
+    while ((item = parsec_list_pop_front(&steal_req_progress_fifo)) != NULL)
+        free(item);
     PARSEC_OBJ_DESTRUCT(&steal_req_fifo);
     PARSEC_OBJ_DESTRUCT(&selected_task_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_task_details_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_dep_put_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
-    PARSEC_OBJ_DESTRUCT(&mig_steal_req_fifo);
+    PARSEC_OBJ_DESTRUCT(&steal_req_progress_fifo);
 
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
@@ -466,9 +468,16 @@ int process_steal_request(parsec_execution_stream_t *es)
             PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
             mig_task->task = gpu_task->ec;
             mig_task->root = steal_request->root;
-            parsec_list_push_front(&selected_task_fifo, (parsec_list_item_t*)mig_task);
-            
-            send_selected_task_details(es, gpu_task->ec, steal_request->root);
+            parsec_list_push_back(&selected_task_fifo, (parsec_list_item_t*)mig_task);
+        }
+    }
+
+    while( parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&selected_task_fifo))
+    {
+        mig_task = parsec_list_pop_front(&selected_task_fifo);
+        if( NULL != mig_task)
+        {
+            send_selected_task_details(es, mig_task->task, mig_task->root);
         }
     }
 
@@ -483,7 +492,7 @@ int process_steal_request(parsec_execution_stream_t *es)
         }
         else
         {
-            parsec_list_push_back(&mig_steal_req_fifo, (parsec_list_item_t*)steal_request);
+            parsec_list_push_back(&steal_req_progress_fifo, (parsec_list_item_t*)steal_request);
         }
     }
 
@@ -610,7 +619,7 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
 
         if (NULL != this_task->data[i].data_in)
         {
-            PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
+            //PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
         }
     }
 
@@ -1147,6 +1156,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
         task->data[flow_index].data_in = origin->output[flow_index].data.data;
         task->data[flow_index].data_out = origin->output[flow_index].data.data;
+        origin->output[flow_index].data.data->readers = 0;
         PARSEC_OBJ_RETAIN(task->data[flow_index].data_in);
 
         // task->repo_entry->data[flow_index] = task->data[flow_index].data_in;
