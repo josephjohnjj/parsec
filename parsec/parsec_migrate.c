@@ -19,6 +19,9 @@ extern int parsec_runtime_node_migrate_stats;
 parsec_list_t mig_task_details_fifo; /* fifo of migrated task details*/
 parsec_list_t mig_dep_put_fifo;      /* fifo of deps of migrated tasks */
 parsec_list_t mig_noobj_fifo;        /* fifo of mig task details with taskpools not actually known */
+parsec_list_t mig_steal_req_fifo;    /* queues to hold steal request to progress */
+parsec_list_t steal_req_fifo;        /** list of all steal request received */
+parsec_list_t selected_task_fifo;    /** list of all task selected for migration */
 
 /**
  * parsec_migration_engine_up == 0 : there is no node level task migration
@@ -38,34 +41,15 @@ volatile int32_t active_steal_request_mutex = 0;
  **/
 volatile int32_t process_steal_request_mutex = 0;
 
-/**
- * @brief Keep track of the currect active requests in this node;
- *
- */
-volatile int32_t nb_steal_request_received = 0;
+/** Keep track of the currect active requests in this node */
+volatile int32_t nb_steal_request_received = 0; 
+/** Keep track of the total tasks recieved for the current active steal request*/
+volatile int32_t nb_tasks_received = 0; 
 
-/**
- * @brief Keep track of the total tasks recieved for the current active steal request;
- *
- */
-volatile int32_t nb_tasks_received = 0;
 
-/**
- * @brief list of all steal request received.
- **/
-parsec_list_t steal_req_fifo;
-
-/**
- * @brief list of all task selected for migration.
- **/
-parsec_list_t selected_task_fifo;
-
-/**
- *  * @brief stats on migration in a node.
- *   */
-parsec_node_info_t *node_info;
-
+parsec_node_info_t *node_info; /** stats on migration in a node */
 static int my_rank, nb_nodes;
+PARSEC_OBJ_CLASS_INSTANCE(migrated_node_level_task_t, migrated_node_level_task_t, NULL, NULL);
 
 void *migrate_engine_main(parsec_taskpool_t *tp);
 static int recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
@@ -91,10 +75,8 @@ static void migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_ite
 static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_reg_handle_t lreg, ptrdiff_t ldispl,
                                       parsec_ce_mem_reg_handle_t rreg, ptrdiff_t rdispl, size_t size,
                                       int remote, void *cb_data);
-int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, 
-    steal_request_t *steal_request);
-int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
-    int selected_tasks);
+int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, int root);
+int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -191,9 +173,6 @@ int parsec_node_migrate_init(parsec_context_t *context)
 {
     int rc;
 
-    PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&selected_task_fifo, parsec_list_t);
-
     my_rank = context->my_rank;
     nb_nodes = context->nb_nodes;
 
@@ -229,9 +208,12 @@ int parsec_node_migrate_init(parsec_context_t *context)
     if (parsec_communication_engine_up > 0)
         parsec_migration_engine_up = 1;
 
+    PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&selected_task_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_task_details_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_dep_put_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&mig_steal_req_fifo, parsec_list_t);
 
     return 0;
 }
@@ -303,6 +285,7 @@ int parsec_node_migrate_fini()
     PARSEC_OBJ_DESTRUCT(&mig_task_details_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_dep_put_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
+    PARSEC_OBJ_DESTRUCT(&mig_steal_req_fifo);
 
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
@@ -362,7 +345,7 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
 int process_steal_request(parsec_execution_stream_t *es)
 {
-    int d = 0, rc = 0, selected = 0;
+    int d = 0, rc = 0, total_selected = 0, device_selected;
     int tasks_requested = 0;
     steal_request_t *steal_request = NULL;
     parsec_device_gpu_module_t *gpu_device = NULL;
@@ -372,6 +355,7 @@ int process_steal_request(parsec_execution_stream_t *es)
     parsec_list_item_t *item = NULL;
     int success_steals = 0;
     int nb_cuda_devices = parsec_device_cuda_enabled;
+    migrated_node_level_task_t *mig_task = NULL;
 
     steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
 
@@ -395,6 +379,7 @@ int process_steal_request(parsec_execution_stream_t *es)
         //#if 0
         for (d = 0; d < nb_cuda_devices; d++)
         {
+            device_selected = 0;
             gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
             if (gpu_device->mutex > 0)
@@ -435,17 +420,19 @@ int process_steal_request(parsec_execution_stream_t *es)
                         parsec_list_push_back(ring, (parsec_list_item_t *)gpu_task);
 
                         parsec_node_mig_inc_selected();
-                        selected++;
+                        total_selected++;
+                        device_selected++;
+
                         success_steals = 1;
 
-                        if (selected == tasks_requested)
+                        if (total_selected == tasks_requested)
                         {
                             break;
                         }
                     }
                 }
                 
-                rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * selected));
+                rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
 
                 parsec_list_unlock(list);
             }
@@ -453,17 +440,7 @@ int process_steal_request(parsec_execution_stream_t *es)
             if (parsec_runtime_node_migrate_stats)
                 parsec_node_mig_inc_searches();
 
-            while (!parsec_list_nolock_is_empty(ring))
-            {
-                gpu_task = (parsec_gpu_task_t *)parsec_list_pop_front(ring);
-
-                if (NULL != gpu_task)
-                {
-                    send_selected_task_details(es, gpu_task->ec, steal_request);
-                }
-            }
-
-            if (selected == tasks_requested)
+            if (total_selected == tasks_requested)
             {
                 if (parsec_runtime_node_migrate_stats)
                     parsec_node_mig_inc_full_yield();
@@ -477,9 +454,37 @@ int process_steal_request(parsec_execution_stream_t *es)
         {
             parsec_node_mig_inc_success_steals();
         }
+    }
 
-        progress_steal_request(es, steal_request, selected);
-        PARSEC_OBJ_RELEASE(steal_request);
+    while (!parsec_list_nolock_is_empty(ring))
+    {
+        gpu_task = (parsec_gpu_task_t *)parsec_list_pop_front(ring);
+
+        if (NULL != gpu_task)
+        {
+            mig_task = (migrated_node_level_task_t *)calloc(1, sizeof(migrated_node_level_task_t));
+            PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
+            mig_task->task = gpu_task->ec;
+            mig_task->root = steal_request->root;
+            parsec_list_push_front(&selected_task_fifo, (parsec_list_item_t*)mig_task);
+            
+            send_selected_task_details(es, gpu_task->ec, steal_request->root);
+        }
+    }
+
+    if( NULL != steal_request)
+    {
+        steal_request->nb_task_request -= total_selected;
+
+        if (parsec_ce.can_serve(&parsec_ce))
+        {
+            progress_steal_request(es, steal_request);
+            PARSEC_OBJ_RELEASE(steal_request);
+        }
+        else
+        {
+            parsec_list_push_back(&mig_steal_req_fifo, (parsec_list_item_t*)steal_request);
+        }
     }
 
     PARSEC_OBJ_RELEASE(ring);
@@ -513,11 +518,12 @@ int migrate_single_task(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_ta
             parsec_node_mig_inc_req_processed();
         }
 
-        send_selected_task_details(es, gpu_task->ec, steal_request);
+        send_selected_task_details(es, gpu_task->ec, steal_request->root);
 
         parsec_node_mig_inc_success_steals();
         
-        progress_steal_request(es, steal_request, 1);
+        steal_request->nb_task_request--;
+        progress_steal_request(es, steal_request);
 
         PARSEC_OBJ_RELEASE(steal_request);
 
@@ -528,7 +534,7 @@ int migrate_single_task(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_ta
 }
 
 
-int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, steal_request_t *steal_request)
+int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, int root)
 {
     parsec_remote_deps_t *deps = NULL;
     int src_rank = 0, dst_rank = 0;
@@ -537,7 +543,7 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Task %p selected for migration", this_task);
 
     /** deps will be send to the node that initiated the request */
-    dst_rank = steal_request->root;
+    dst_rank = root;
     src_rank = my_rank;
 
     deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
@@ -657,6 +663,9 @@ int send_steal_request(parsec_execution_stream_t *es)
     int i, rc;
     steal_request_t steal_request;
 
+     if (!parsec_ce.can_serve(&parsec_ce))
+        return 0;
+
     if (parsec_migration_engine_up == 0 || active_steal_request_mutex != 0)
         return PARSEC_HOOK_RETURN_ASYNC;
 
@@ -670,12 +679,10 @@ int send_steal_request(parsec_execution_stream_t *es)
     return PARSEC_HOOK_RETURN_ASYNC;
 }
 
-int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request,
-                           int selected_tasks)
+int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request)
 {
     int victim_rank = 0;
 
-    steal_request->nb_task_request -= selected_tasks;
     steal_request->src = my_rank;
 
     if (0 == steal_request->nb_task_request)

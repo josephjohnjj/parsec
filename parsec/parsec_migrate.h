@@ -50,6 +50,13 @@ typedef struct parsec_node_info_s
     
 } parsec_node_info_t;
 
+typedef struct migrated_node_level_task_s
+{
+    parsec_list_item_t list_item;
+    parsec_task_t *task;
+    int root;
+} migrated_node_level_task_t;
+
 int parsec_node_migrate_init(parsec_context_t* context );
 int parsec_node_migrate_fini();
 int send_steal_request(parsec_execution_stream_t* es);
