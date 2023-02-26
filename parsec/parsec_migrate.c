@@ -139,10 +139,10 @@ int parsec_node_mig_inc_req_processed()
     return node_info->nb_req_processed;
 }
 
-int parsec_node_mig_inc_success_steals()
+int parsec_node_mig_inc_success_req_processed()
 {
-    parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_req));
-    return node_info->nb_succesfull_req;
+    parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_req_processed));
+    return node_info->nb_succesfull_req_processed;
 }
 
 int parsec_node_mig_inc_task_migrated()
@@ -155,6 +155,20 @@ int parsec_node_mig_inc_task_recvd()
 {
     parsec_atomic_fetch_inc_int32(&(node_info->nb_task_recvd));
     return node_info->nb_task_recvd;
+}
+
+int parsec_node_mig_inc_success_steals()
+{
+    parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_steals));
+    return node_info->nb_succesfull_steals;
+
+}
+
+int parsec_node_mig_inc_success_full_steals()
+{
+    parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_full_steals));
+    return node_info->nb_succesfull_full_steals;
+
 }
 
 int parsec_node_mig_inc_searches()
@@ -224,19 +238,21 @@ int parsec_node_stats_init(parsec_context_t *context)
     nb_nodes = context->nb_nodes;
     
     node_info = (parsec_node_info_t *)calloc(1, sizeof(parsec_node_info_t));
-    node_info->nb_gpu_tasks_executed = 0;
-    node_info->nb_task_recvd         = 0;
-    node_info->nb_task_migrated      = 0;
-    node_info->nb_req_recvd          = 0;
-    node_info->nb_req_send           = 0; 
-    node_info->nb_req_send           = 0;
-    node_info->nb_req_processed      = 0;
-    node_info->nb_succesfull_req     = 0;
-    node_info->nb_searches           = 0;
-    node_info->nb_req_forwarded      = 0;
-    node_info->full_yield            = 0;
-    node_info->nb_release            = 0;
-    node_info->nb_selected           = 0;
+    node_info->nb_gpu_tasks_executed            = 0;
+    node_info->nb_task_recvd                    = 0;
+    node_info->nb_task_migrated                 = 0;
+    node_info->nb_req_recvd                     = 0;
+    node_info->nb_req_send                      = 0; 
+    node_info->nb_req_send                      = 0;
+    node_info->nb_req_processed                 = 0;
+    node_info->nb_succesfull_req_processed      = 0;
+    node_info->nb_searches                      = 0;
+    node_info->nb_req_forwarded                 = 0;
+    node_info->full_yield                       = 0;
+    node_info->nb_release                       = 0;
+    node_info->nb_selected                      = 0;
+    node_info->nb_succesfull_steals             = 0;
+    node_info->nb_succesfull_full_steals        = 0;
     
     return 0;
 }
@@ -244,28 +260,40 @@ int parsec_node_stats_init(parsec_context_t *context)
 int parsec_node_stats_fini()
 {
     printf("\n*********** NODES %d/%d *********** \n", my_rank + 1, nb_nodes);
-    printf("GPU Tasks executed        : %d \n", node_info->nb_gpu_tasks_executed);
-    printf("CPU Tasks executed        : %d \n", node_info->nb_cpu_tasks_executed);
-    printf("Tasks released            : %d \n", node_info->nb_release );
-    printf("Task recvd                : %d \n", node_info->nb_task_recvd);
-    printf("Tasks migrated            : %d \n", node_info->nb_task_migrated);
-    printf("Tasks selected            : %d \n", node_info->nb_task_migrated);
-    printf("Steal req send            : %d \n", node_info->nb_req_send);
-    printf("Steal req received        : %d \n", node_info->nb_req_recvd);
-    printf("Steal req processed       : %d \n", node_info->nb_req_processed);
-    printf("Successful steal requests : %d \n", node_info->nb_succesfull_req);
-    printf("Perc successful steals    : %lf \n", ((double)node_info->nb_succesfull_req / (double)node_info->nb_req_recvd) * 100);
-    printf("Total searches            : %d \n", node_info->nb_searches);
-    printf("Total full yield          : %d \n", node_info->full_yield);
-    printf("Chunk size                : %d \n", parsec_runtime_chunk_size);
+    printf("GPU Tasks executed              : %d \n", node_info->nb_gpu_tasks_executed);
+    printf("CPU Tasks executed              : %d \n", node_info->nb_cpu_tasks_executed);
+    printf("Tasks released                  : %d \n", node_info->nb_release );
+    printf("\n");
+
+    printf("Steal req received              : %d \n", node_info->nb_req_recvd);
+    printf("Steal req processed             : %d \n", node_info->nb_req_processed);
+    printf("Successful req processed        : %d \n", node_info->nb_succesfull_req_processed);
+    //printf("Total searches                  : %d \n", node_info->nb_searches);
+    printf("Total full yield                : %d \n", node_info->full_yield);
+    printf("Perc successful req processed   : %lf \n", ((double)node_info->nb_succesfull_req_processed / (double)node_info->nb_req_recvd) * 100);
+    printf("Perc successful full yield      : %lf \n", ((double)node_info->full_yield / (double)node_info->nb_req_recvd) * 100);
+    printf("Tasks migrated                  : %d \n", node_info->nb_task_migrated);
+    printf("\n");
+
+    printf("Steal req send                  : %d \n", node_info->nb_req_send);
+    printf("Successfull steals              : %d \n", node_info->nb_succesfull_steals);
+    printf("Successfull full steals         : %d \n", node_info->nb_succesfull_full_steals);
+    printf("Perc successful steals          : %lf \n", ((double)node_info->nb_succesfull_steals / (double)node_info->nb_req_send) * 100);
+    printf("Perc successful full steals     : %lf \n", ((double)node_info->nb_succesfull_full_steals / (double)node_info->nb_req_send) * 100);
+    printf("Task recvd                      : %d \n", node_info->nb_task_recvd);
+    printf("\n");
+
+
+    //printf("Tasks selected                  : %d \n", node_info->nb_task_migrated);
+    printf("Chunk size                      : %d \n", parsec_runtime_chunk_size);
     
     if (0 == parsec_runtime_steal_request_policy)
     {
-        printf("Steal req policy          : Ring \n");
+        printf("Steal req policy                : Ring \n");
     }
     else
     {
-        printf("Steal req policy          : Random \n");
+        printf("Steal req policy                : Random \n");
     }
     free(node_info);
 
@@ -324,7 +352,15 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
     if (steal_request->root == my_rank) /** request initiated from this node */
     {
-        int unsuccesfull_steals = steal_request->nb_task_request;
+        if(steal_request->nb_task_request < parsec_runtime_chunk_size)
+        {
+            if(0 == steal_request->nb_task_request)
+            {
+                parsec_node_mig_inc_success_full_steals();
+            }
+            parsec_node_mig_inc_success_steals();
+
+        }
 
         parsec_atomic_fetch_dec_int32(&active_steal_request_mutex);
         PARSEC_OBJ_RELEASE(steal_request);
@@ -454,7 +490,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         if (success_steals == 1)
         {
-            parsec_node_mig_inc_success_steals();
+            parsec_node_mig_inc_success_req_processed();
         }
     }
 
@@ -529,7 +565,7 @@ int migrate_single_task(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_ta
 
         send_selected_task_details(es, gpu_task->ec, steal_request->root);
 
-        parsec_node_mig_inc_success_steals();
+        parsec_node_mig_inc_success_req_processed();
         
         steal_request->nb_task_request--;
         progress_steal_request(es, steal_request);

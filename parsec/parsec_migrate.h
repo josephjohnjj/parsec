@@ -47,6 +47,9 @@ typedef struct parsec_node_info_s
     int full_yield;
     int nb_release;
     int nb_selected;
+    int nb_succesfull_req_processed;
+    int nb_succesfull_steals;
+    int nb_succesfull_full_steals;
     
 } parsec_node_info_t;
 
