@@ -161,13 +161,14 @@ static int parsec_runtime_bind_threads        = 1;
 
 int parsec_runtime_keep_highest_priority_task = 1;
 
-int parsec_runtime_node_migrate_tasks    = 0;
-int parsec_runtime_node_migrate_stats    = 0;
-int parsec_runtime_gdb_attach            = 0;
-int parsec_runtime_steal_request_policy  = 0;
-int parsec_runtime_chunk_size            = 0;
-int parsec_runtime_starvation_policy     = 0;
-int parsec_runtime_skew_distribution     = 0;
+int parsec_runtime_node_migrate_tasks     = 0;
+int parsec_runtime_node_migrate_stats     = 0;
+int parsec_runtime_gdb_attach             = 0;
+int parsec_runtime_steal_request_policy   = 0;
+int parsec_runtime_chunk_size             = 0;
+int parsec_runtime_starvation_policy      = 0;
+int parsec_runtime_skew_distribution      = 0;
+int parsec_runtime_print_completion_stats = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -947,6 +948,8 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_starvation_policy);
     parsec_mca_param_reg_int_name("runtime", "skew_distribution", "Skew the data distribution",
                                 false, false, 0, &parsec_runtime_skew_distribution);
+    parsec_mca_param_reg_int_name("runtime", "print_completion_stats", "Print stats during completion of a task",
+                                false, false, 0, &parsec_runtime_print_completion_stats);
 
     if( parsec_runtime_gdb_attach > 0 )
     {

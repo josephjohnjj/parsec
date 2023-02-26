@@ -89,7 +89,7 @@ int parsec_node_mig_inc_gpu_task_executed()
 
 int print_stats()
 {
-    printf("Node %d:# GPU tasks exec %d CPU task exec %d Migrated tasks %d Recvd task %d active %d \n", 
+    printf("Node %d: GPU tasks exec %d CPU task exec %d Migrated tasks %d Recvd task %d active %d \n", 
         my_rank, node_info->nb_gpu_tasks_executed, node_info->nb_cpu_tasks_executed, 
         node_info->nb_task_migrated, node_info->nb_task_recvd, active_steal_request_mutex);
         

@@ -129,6 +129,7 @@ int __parsec_context_wait_task( parsec_execution_stream_t* es,
 extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_migration_engine_up;
 extern int parsec_runtime_node_migrate_stats;
+extern int parsec_runtime_print_completion_stats;
 
 int __parsec_execute( parsec_execution_stream_t* es,
                       parsec_task_t* task )
@@ -452,7 +453,8 @@ int __parsec_complete_execution( parsec_execution_stream_t *es,
 {
     int rc = 0;
 
-    print_stats();
+    if(parsec_runtime_print_completion_stats)
+        print_stats();
 
     /* complete execution PINS event includes the preparation of the
      * output and the and the call to complete_execution.
