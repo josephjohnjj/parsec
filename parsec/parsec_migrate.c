@@ -608,6 +608,7 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
     rc = deps->taskpool->tdm.module->outgoing_message_start(deps->taskpool, dst_rank, deps);
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_TASK_DETAILS_TAG, dst_rank, buf, ACTIVATE_MSG_SIZE);
     free(buf);
+    remote_dep_complete_and_cleanup(&deps, 1);
 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Migration reply send to rank %d using deps %p with pending ack %d",
                          dst_rank, deps, deps->pending_ack);
@@ -664,8 +665,6 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
      * 2. decrement the task count
      * */
     this_task->task_class->release_task(es, this_task);
-
-    remote_dep_complete_and_cleanup(&deps, 1);
     return 0;
 }
 
@@ -1018,8 +1017,6 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         callback_data->k = k;
 
         deps->output[k].data.data = migrated_copy_allocate(&deps->output[k].data.remote);
-        // dtt   = deps->output[k].data.remote.dst_datatype;
-        // nbdtt = deps->output[k].data.remote.dst_count;
         dtt = deps->output[k].data.remote.src_datatype;
         nbdtt = deps->output[k].data.remote.src_count;
 
