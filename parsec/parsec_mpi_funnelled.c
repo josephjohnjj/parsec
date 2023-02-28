@@ -805,7 +805,7 @@ mpi_no_thread_put(parsec_comm_engine_t *ce,
                   parsec_ce_onesided_callback_t l_cb, void *l_cb_data,
                   parsec_ce_tag_t r_tag, void *r_cb_data, size_t r_cb_data_size)
 {
-    assert(mpi_funnelled_last_active_req < size_of_total_reqs);
+    assert(mpi_funnelled_last_active_req <= size_of_total_reqs);
 
     (void)r_cb_data; (void) size;
 
