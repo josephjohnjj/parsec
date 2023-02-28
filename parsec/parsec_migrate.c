@@ -15,6 +15,7 @@ extern int parsec_runtime_starvation_policy;
 extern int parsec_runtime_chunk_size;
 extern int parsec_device_cuda_enabled;
 extern int parsec_runtime_node_migrate_stats;
+extern int parsec_runtime_skew_distribution;
 
 parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
@@ -288,6 +289,15 @@ int parsec_node_stats_fini()
         printf("Steal req policy                : Random \n");
     }
     free(node_info);
+
+    if (0 == parsec_runtime_skew_distribution)
+    {
+        printf("Data distrbution                : Normal \n");
+    }
+    else
+    {
+        printf("Data distrbution                : Skewed \n");
+    }
 
     return 0;
 }
