@@ -27,7 +27,7 @@ typedef struct steal_request_msg_s{
 
 typedef struct steal_request_s{
     parsec_list_item_t  super;
-    steal_request_msg_t msg
+    steal_request_msg_t msg;
 } steal_request_t;
 
 typedef struct parsec_node_info_s 
@@ -63,7 +63,6 @@ int parsec_node_migrate_fini();
 int send_steal_request(parsec_execution_stream_t* es);
 int process_steal_request(parsec_execution_stream_t* es);
 int process_mig_request(parsec_task_t* this_task);
-int process_mig_task_details(parsec_execution_stream_t* es);
 int parsec_node_stats_init();
 int parsec_node_stats_fini();
 int parsec_node_mig_inc_released();

@@ -640,16 +640,9 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         misses_in_a_row++;  /* assume we fail to extract a task */
 
         /**
-         * @brief Progress any PUT related to task migration.
-         */
-        if(parsec_migration_engine_up ==  1)
-            migrate_put_mpi_progress(es);
-        /**
          * @brief This function will processes any migrated task
          * recieved from another node.
          */
-        if(parsec_migration_engine_up ==  1)
-            process_mig_task_details(es);
 
         if(parsec_migration_engine_up ==  1)
             process_steal_request(es);

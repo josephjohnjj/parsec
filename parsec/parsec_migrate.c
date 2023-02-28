@@ -16,12 +16,9 @@ extern int parsec_runtime_chunk_size;
 extern int parsec_device_cuda_enabled;
 extern int parsec_runtime_node_migrate_stats;
 
-parsec_list_t mig_task_details_fifo;        /* fifo of migrated task details*/
-parsec_list_t mig_dep_put_fifo;             /* fifo of deps of migrated tasks */
 parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
-parsec_list_t steal_req_progress_fifo;      /* queues to hold steal request to progress */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
-parsec_list_t selected_task_fifo;           /** list of all task selected for migration */
+
 
 /**
  * parsec_migration_engine_up == 0 : there is no node level task migration
@@ -223,12 +220,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_migration_engine_up = 1;
 
     PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&selected_task_fifo, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&mig_task_details_fifo, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&mig_dep_put_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
-    PARSEC_OBJ_CONSTRUCT(&steal_req_progress_fifo, parsec_list_t);
-
     return 0;
 }
 
@@ -308,14 +300,8 @@ int parsec_node_migrate_fini()
 
     while ((item = parsec_list_pop_front(&steal_req_fifo)) != NULL)
         free(item);
-    while ((item = parsec_list_pop_front(&steal_req_progress_fifo)) != NULL)
-        free(item);
     PARSEC_OBJ_DESTRUCT(&steal_req_fifo);
-    PARSEC_OBJ_DESTRUCT(&selected_task_fifo);
-    PARSEC_OBJ_DESTRUCT(&mig_task_details_fifo);
-    PARSEC_OBJ_DESTRUCT(&mig_dep_put_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
-    PARSEC_OBJ_DESTRUCT(&steal_req_progress_fifo);
 
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
@@ -500,21 +486,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         if (NULL != gpu_task)
         {
-            mig_task = (migrated_node_level_task_t *)calloc(1, sizeof(migrated_node_level_task_t));
-            PARSEC_OBJ_CONSTRUCT(mig_task, parsec_list_item_t);
-            mig_task->task = gpu_task->ec;
-            mig_task->root = steal_request->msg.root;
-            parsec_list_push_back(&selected_task_fifo, (parsec_list_item_t*)mig_task);
-        }
-    }
-
-    while( parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&selected_task_fifo))
-    {
-        mig_task = NULL;
-        mig_task = parsec_list_pop_front(&selected_task_fifo);
-        if( NULL != mig_task)
-        {
-            send_selected_task_details(es, mig_task->task, mig_task->root);
+            send_selected_task_details(es, gpu_task->ec, steal_request->msg.root);
         }
     }
 
@@ -522,15 +494,8 @@ int process_steal_request(parsec_execution_stream_t *es)
     {
         steal_request->msg.nb_task_request -= total_selected;
 
-        if (parsec_ce.can_serve(&parsec_ce))
-        {
-            progress_steal_request(es, steal_request);
-            PARSEC_OBJ_RELEASE(steal_request);
-        }
-        else
-        {
-            parsec_list_push_back(&steal_req_progress_fifo, (parsec_list_item_t*)steal_request);
-        }
+        progress_steal_request(es, steal_request);
+        PARSEC_OBJ_RELEASE(steal_request);
     }
 
     PARSEC_OBJ_RELEASE(ring);
@@ -872,7 +837,7 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         }
         else
         {
-            parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)deps);
+            get_mig_task_data(es, deps);
         }
     }
 
@@ -905,34 +870,11 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             assert(deps->taskpool != NULL);
         
             item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
-            PARSEC_LIST_ITEM_SINGLETON(item);
-            parsec_list_push_back(&mig_task_details_fifo, (parsec_list_item_t *)item);
+            get_mig_task_data(es, deps);
         }
     }
 
     parsec_list_unlock(&mig_noobj_fifo);
-}
-
-int process_mig_task_details(parsec_execution_stream_t *es)
-{
-    parsec_remote_deps_t *deps = NULL;
-    int rc;
-
-    if (parsec_ce.can_serve(&parsec_ce))
-    {
-        parsec_remote_deps_t *deps = (parsec_remote_deps_t *)parsec_list_pop_front(&mig_task_details_fifo);
-
-        if (NULL != deps)
-        {
-            rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, NULL /*not imp today*/,
-                                                                0 /*not imp today*/, deps);
-
-            get_mig_task_data(es, deps);
-            return 1;
-        }
-    }
-
-    return 0;
 }
 
 static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
@@ -1000,6 +942,9 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
     int from = deps->from, k, nbdtt;
     remote_dep_wire_get_t msg;
     MPI_Datatype dtt;
+
+    int rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, NULL /*not imp today*/,
+                                                                0 /*not imp today*/, deps);
 
     assert(deps->msg.output_mask != 0);
     deps->incoming_mask = deps->msg.output_mask; /** This is important as we are changing deps->msg.output_mask soon */
@@ -1265,48 +1210,13 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
                          remote_dep_cmd_to_string(&deps->msg, tmp, MAX_TASK_STRLEN), item->cmd.activate.peer,
                          -1, task->output_mask, (void *)deps);
 
-    if (parsec_ce.can_serve(&parsec_ce))
-    {
-        migrate_dep_mpi_put_start(es, item);
-    }
-    else
-    {
-        parsec_list_push_back(&mig_dep_put_fifo, (parsec_list_item_t *)item);
-    }
-
+   
+    migrate_dep_mpi_put_start(es, item);
+    
     return 1;
 }
 
-int migrate_put_mpi_progress(parsec_execution_stream_t *es)
-{
-    dep_cmd_item_t *item = NULL;
-    remote_dep_wire_get_t *msg = NULL;
-    parsec_remote_deps_t * deps = NULL;
 
-    if (parsec_ce.can_serve(&parsec_ce))
-    {
-        item = (dep_cmd_item_t *)parsec_list_pop_front(&mig_dep_put_fifo);
-        if (NULL != item)
-        {
-            assert( item->action == DEP_GET_DATA );
-
-            msg = &(item->cmd.activate.task);
-            assert(msg != NULL);
-            assert(item->cmd.activate.remote_memory_handle != NULL);
-            assert(NULL != msg->source_deps);
-    
-
-            deps = (parsec_remote_deps_t *)(remote_dep_datakey_t)msg->source_deps; /* get our deps back */
-            assert(0 != deps->pending_ack);
-            assert(0 != deps->outgoing_mask);
-
-            migrate_dep_mpi_put_start(es, item);
-            return 1;
-        }
-    }
-
-    return 0;
-}
 
 static void
 migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
