@@ -12,25 +12,23 @@
 #include "parsec/parsec_comm_engine.h"
 
 #define ACTIVATE_MSG_SIZE sizeof(remote_dep_wire_activate_t)
-#define STEAL_REQ_SIZE    sizeof(steal_request_t)
+#define STEAL_REQ_MSG_SIZE    sizeof(steal_request_msg_t)
 
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
 
 
-typedef struct steal_request_s{
-    parsec_list_item_t super;
+typedef struct steal_request_msg_s{
     int root;
     int src;
     int dst;
     int nb_task_request;
-} steal_request_t;
+} steal_request_msg_t;
 
-typedef struct deps_details_renamee_s
-{
-    int key;
-    int deps_mask;
-} deps_details_renamee_t;
+typedef struct steal_request_s{
+    parsec_list_item_t  super;
+    steal_request_msg_t msg
+} steal_request_t;
 
 typedef struct parsec_node_info_s 
 {
