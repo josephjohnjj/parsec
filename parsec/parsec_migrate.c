@@ -275,8 +275,7 @@ int parsec_node_stats_fini()
     printf("Perc successful full steals     : %lf \n", ((double)node_info->nb_succesfull_full_steals / (double)node_info->nb_req_send) * 100);
     printf("Task recvd                      : %d \n", node_info->nb_task_recvd);
     printf("\n");
-
-
+    
     //printf("Tasks selected                  : %d \n", node_info->nb_task_migrated);
     printf("Chunk size                      : %d \n", parsec_runtime_chunk_size);
     
@@ -298,6 +297,7 @@ int parsec_node_stats_fini()
     {
         printf("Data distrbution                : Skewed \n");
     }
+    printf("Total Nodes                     : %d \n", nb_nodes);
 
     return 0;
 }
