@@ -150,6 +150,7 @@ struct parsec_device_gpu_module_s {
                                                    *   the index of the set bit device.
                                                    */
     volatile int32_t           mutex;
+    volatile int32_t           wt_tasks;
     volatile int32_t           complete_mutex; /* Count of task to be completed by the co-manager*/
     uint64_t                   data_avail_epoch;  /**< Identifies the epoch of the data status on the devide. It
                                                    *   is increased every time a new data is made available, so

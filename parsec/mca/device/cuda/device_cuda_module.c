@@ -380,6 +380,7 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
     if(-1 == len) { gpu_device->super.name = NULL; goto release_device; }
     gpu_device->data_avail_epoch = 0;
     gpu_device->mutex = 0;
+    gpu_device->wt_tasks = 0;
     gpu_device->complete_mutex = 0;
     gpu_device->co_manager_mutex = 0;
 
@@ -2975,6 +2976,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
+        parsec_atomic_fetch_inc_int32( &(gpu_device->wt_tasks) );
+        
 
         /**
          * @brief 
@@ -3128,6 +3131,8 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     }
     gpu_task = (parsec_gpu_task_t*)parsec_fifo_try_pop( &(gpu_device->pending) );
     if( NULL != gpu_task ) {
+
+        parsec_atomic_fetch_dec_int32( &(gpu_device->wt_tasks) );
 
         if((parsec_cuda_iterative == 1) && (gpu_task->migrate_status > TASK_NOT_MIGRATED)
             && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) )

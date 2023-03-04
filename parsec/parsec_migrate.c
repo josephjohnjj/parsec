@@ -75,6 +75,7 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
                                       int remote, void *cb_data);
 int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *this_task, int root);
 int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request);
+int get_wt_tasks(parsec_device_gpu_module_t * device);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -179,6 +180,11 @@ int parsec_node_mig_inc_full_yield()
 {
     parsec_atomic_fetch_inc_int32(&(node_info->full_yield));
     return node_info->full_yield;
+}
+
+int get_wt_tasks(parsec_device_gpu_module_t * device)
+{
+    return device->wt_tasks;
 }
 
 int parsec_node_migrate_init(parsec_context_t *context)
@@ -430,7 +436,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                      * @brief Assume starvation if the number of task available in the GPU
                      * is less than that provided by the user.
                      */
-                    if (gpu_device->mutex < (parsec_runtime_starvation_policy + 1) )
+                    if (get_wt_tasks(gpu_device) < (parsec_runtime_starvation_policy + 1) )
                     {
                         continue;
                     }
