@@ -187,6 +187,23 @@ int get_gpu_wt_tasks(parsec_device_gpu_module_t * device)
     return device->wt_tasks;
 }
 
+int nb_launched_task()
+{
+    int d = 0;
+    int total_tasks = 0 ;
+    parsec_device_gpu_module_t *gpu_device = NULL;
+
+    for (d = 0; d < parsec_device_cuda_enabled; d++)
+    {
+        gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
+
+        total_tasks += gpu_device->mutex;
+        //printf("NB_Tasks %d  WT %d \n", total_tasks, get_gpu_wt_tasks(gpu_device));
+    }
+
+    return total_tasks;
+}
+
 int parsec_node_migrate_init(parsec_context_t *context)
 {
     int rc;
@@ -472,6 +489,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                 }
                 
                 rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
+                parsec_atomic_fetch_add_int32( &(gpu_device->wt_tasks), (-1 * device_selected));
 
                 parsec_list_unlock(list);
             }
@@ -700,6 +718,9 @@ int send_steal_request(parsec_execution_stream_t *es)
     rc = active_steal_request_mutex;
 
     if (!parsec_atomic_cas_int32(&active_steal_request_mutex, 0, 1))
+        return PARSEC_HOOK_RETURN_ASYNC;
+
+    if( nb_launched_task() > (parsec_runtime_starvation_policy + 1))
         return PARSEC_HOOK_RETURN_ASYNC;
 
     initiate_steal_request(es);
