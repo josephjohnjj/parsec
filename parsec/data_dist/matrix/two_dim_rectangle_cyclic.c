@@ -149,10 +149,11 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t *dc,
      /** skew the data distribution. Map the lower half of the matrix to rank 0. */
     if (parsec_runtime_skew_distribution)
     {
+        float perc_skew = (double)parsec_runtime_skew_distribution / (double)100;
 
         /* Compute the number of rows handled by the local process */
         dc->nb_elem_r = 0;
-        int half = (tdesc->lmt + 1) / 2;
+        int half = (tdesc->lmt + 1) * perc_skew;
         temp = dc->grid.rrank * dc->grid.krows; /* row coordinate of the first tile to handle */
         
         /* Half the rows mapped normally */
@@ -352,7 +353,8 @@ static uint32_t twoDBC_rank_of(parsec_data_collection_t *desc, ...)
     if (parsec_runtime_skew_distribution) /** skew the data distribution*/
     {
 
-        int half = ((dc->super.lmt + 1) / 2);
+        float perc_skew = (double)parsec_runtime_skew_distribution / (double)100;
+        int half = (dc->super.lmt + 1) * perc_skew;
 
         /** half the rows are mapped  to rank 0. */
         if (m >= half)
@@ -436,7 +438,8 @@ static inline int twoDBC_coordinates_to_position(parsec_matrix_block_cyclic_t *d
 {
     int position, local_m, local_n;
 
-    int half = (dc->super.lmt + 1) / 2;
+    float perc_skew = (double)parsec_runtime_skew_distribution / (double)100;
+    int half = (dc->super.lmt + 1) * perc_skew;
 
     if (parsec_runtime_skew_distribution)
     {
