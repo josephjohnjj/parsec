@@ -128,6 +128,7 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t *dc,
     int nodes = P * Q;
     parsec_data_collection_t *o = &(dc->super.super);
     parsec_tiled_matrix_t *tdesc = &(dc->super);
+    int extra_rows = 0;
 
     /* Initialize the tiled_matrix descriptor */
     parsec_tiled_matrix_init(tdesc, mtype, storage, parsec_matrix_block_cyclic_type,
@@ -175,10 +176,12 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t *dc,
             break;
         }
 
-        /** The other half is mapped to tank 0. */
+        /** The other half is mapped to rank 0. */
         if (dc->grid.rrank == 0 && dc->grid.crank == 0)
         {
-            dc->nb_elem_r += tdesc->lmt - half;
+            /** Store the extra rows in rank 0 seperately */
+            extra_rows = tdesc->lmt - half;
+            //dc->nb_elem_r += tdesc->lmt - half;
 
             if (storage == PARSEC_MATRIX_LAPACK)
             {
@@ -246,8 +249,25 @@ void parsec_matrix_block_cyclic_init(parsec_matrix_block_cyclic_t *dc,
         dc->nb_elem_c = 0;
     if (dc->nb_elem_c == 0)
         dc->nb_elem_r = 0;
+
     /* Total number of tiles stored locally */
-    tdesc->nb_local_tiles = dc->nb_elem_r * dc->nb_elem_c;
+    if (parsec_runtime_skew_distribution)
+    {
+        tdesc->nb_local_tiles = dc->nb_elem_r * dc->nb_elem_c;
+
+        /** The other half is mapped to rank 0. */
+        if (dc->grid.rrank == 0 && dc->grid.crank == 0)
+        {
+            /** add the extra rows to the local tiles in rank 0 */
+            tdesc->nb_local_tiles += extra_rows * tdesc->lnt;
+            /** Update the rows handled by rank 0. */
+            dc->nb_elem_r += extra_rows;
+        }
+    }
+    else
+    {
+        tdesc->nb_local_tiles = dc->nb_elem_r * dc->nb_elem_c;
+    }
     tdesc->data_map = (parsec_data_t **)calloc(tdesc->nb_local_tiles, sizeof(parsec_data_t *));
 
     // printf(" Local tiles = %d \n", tdesc->nb_local_tiles);
@@ -441,9 +461,13 @@ static inline int twoDBC_coordinates_to_position(parsec_matrix_block_cyclic_t *d
     float perc_skew = (double)parsec_runtime_skew_distribution / (double)100;
     int half = (dc->super.lmt + 1) * perc_skew;
 
+    /** TODO: This is very bad way of districution. Figure out
+     * something better.
+    */
     if (parsec_runtime_skew_distribution)
     {
-        /** we will be using a row major allocation of position. Noemal method use column major allocation.*/
+        /** we will be using a row major allocation of position. 
+         * Normal method use column major allocation.*/
 
         if (m < half)
         {
@@ -481,6 +505,12 @@ static inline int twoDBC_coordinates_to_position(parsec_matrix_block_cyclic_t *d
             local_n = n ;
             
             position = offset + (local_m * dc->super.lnt +  local_n);
+
+            if(position >= dc->nb_elem_c * dc->nb_elem_r)
+            {
+                printf("(%d, %d) -> (%d, %d) \n", m, n, local_m, local_n);
+            }
+            assert(position < dc->super.nb_local_tiles);
 
         }
     }
