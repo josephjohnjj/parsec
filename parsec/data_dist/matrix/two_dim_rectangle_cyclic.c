@@ -505,11 +505,6 @@ static inline int twoDBC_coordinates_to_position(parsec_matrix_block_cyclic_t *d
             local_n = n ;
             
             position = offset + (local_m * dc->super.lnt +  local_n);
-
-            if(position >= dc->nb_elem_c * dc->nb_elem_r)
-            {
-                printf("(%d, %d) -> (%d, %d) \n", m, n, local_m, local_n);
-            }
             assert(position < dc->super.nb_local_tiles);
 
         }
