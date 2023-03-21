@@ -649,7 +649,7 @@ int remote_dep_bind_thread(parsec_context_t* context)
     char *str = NULL;
     if( context->comm_th_core >= 0 ) {
         /* Bind to the specified core */
-        if(parsec_bindthread(context->comm_th_core, -1) == context->comm_th_core) {
+        if(parsec_bindthread(context->comm_th_core, -1) > -1) {
 
             /* Check if this core is not used by a computation thread */
             if( hwloc_bitmap_isset(context->cpuset_free_mask, context->comm_th_core) ) {
