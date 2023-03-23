@@ -248,6 +248,14 @@ int parsec_node_migrate_init(parsec_context_t *context)
     return 0;
 }
 
+int parsec_node_task_count_start;
+int parsec_node_task_count_end;
+static void node_profiling_init()
+{
+    parsec_profiling_add_dictionary_keyword("NODE_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "ready_tasks{double};complete_time{double}",
+                                            &parsec_node_task_count_start, &parsec_node_task_count_end);
+}
+
 int parsec_node_stats_init(parsec_context_t *context)
 {
     my_rank = context->my_rank;
@@ -269,6 +277,10 @@ int parsec_node_stats_init(parsec_context_t *context)
     node_info->nb_selected                      = 0;
     node_info->nb_succesfull_steals             = 0;
     node_info->nb_succesfull_full_steals        = 0;
+
+#if defined(PARSEC_PROF_TRACE)
+    node_profiling_init();
+#endif
     
     return 0;
 }

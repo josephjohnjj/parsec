@@ -51,6 +51,12 @@ typedef struct parsec_node_info_s
     
 } parsec_node_info_t;
 
+typedef struct node_prof_s 
+{
+    double ready_tasks;
+    double complete_time;
+} node_prof_t;
+
 typedef struct migrated_node_level_task_s
 {
     parsec_list_item_t list_item;

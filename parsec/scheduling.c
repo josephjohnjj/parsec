@@ -130,6 +130,9 @@ extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_migration_engine_up;
 extern int parsec_runtime_node_migrate_stats;
 extern int parsec_runtime_print_completion_stats;
+extern int parsec_node_task_count_start;
+extern int parsec_node_task_count_end;
+extern int parsec_device_cuda_enabled;
 
 int __parsec_execute( parsec_execution_stream_t* es,
                       parsec_task_t* task )
@@ -478,6 +481,38 @@ int __parsec_complete_execution( parsec_execution_stream_t *es,
 
     /* Release the execution context */
     (void)task->task_class->release_task( es, task );
+
+#if defined(PARSEC_PROF_TRACE)
+
+    parsec_device_gpu_module_t *gpu_device = NULL;
+    node_prof_t prof;
+    double ready_tasks = 0;
+    int d = 0;
+
+    if( task != NULL)
+    {
+
+        parsec_profiling_trace_flags(es->es_profile,
+        parsec_node_task_count_start,
+        (uint64_t)task->task_class->key_functions->key_hash(task->task_class->make_key(task->taskpool, task->locals), NULL),
+        task->taskpool->taskpool_id, NULL, 0);
+
+
+        for (d = 0; d < parsec_device_cuda_enabled; d++)
+        {
+            gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));            
+            ready_tasks += gpu_device->mutex; 
+        }
+
+        prof.ready_tasks = ready_tasks;
+        prof.complete_time = time_stamp();
+        parsec_profiling_trace_flags(es->es_profile,
+            parsec_node_task_count_end,
+            (uint64_t)task->task_class->key_functions->key_hash(task->task_class->make_key(task->taskpool, task->locals), NULL),
+            task->taskpool->taskpool_id, &prof, 0);
+    }
+
+#endif 
     
     return rc;
 }

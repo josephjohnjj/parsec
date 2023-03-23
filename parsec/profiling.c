@@ -987,7 +987,7 @@ parsec_profiling_trace_flags(parsec_profiling_stream_t* context, int key,
         return PARSEC_ERR_NOT_SUPPORTED;
     }
 
-    assert( key >= 2 );
+    if( key < 2 ) return PARSEC_ERR_NOT_SUPPORTED;
 
     this_event_length = EVENT_LENGTH( key, (NULL != info) );
     assert( this_event_length < event_avail_space );
