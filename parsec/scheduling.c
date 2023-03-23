@@ -130,9 +130,11 @@ extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_migration_engine_up;
 extern int parsec_runtime_node_migrate_stats;
 extern int parsec_runtime_print_completion_stats;
+extern int parsec_device_cuda_enabled;
 extern int parsec_node_task_count_start;
 extern int parsec_node_task_count_end;
-extern int parsec_device_cuda_enabled;
+extern int parsec_all_task_count_start;
+extern int parsec_all_task_count_end;
 
 int __parsec_execute( parsec_execution_stream_t* es,
                       parsec_task_t* task )
@@ -525,6 +527,28 @@ int __parsec_task_progress( parsec_execution_stream_t* es,
 
 
     PARSEC_PINS(es, SELECT_END, task);
+
+#if defined(PARSEC_PROF_TRACE)
+
+    node_prof_t prof;
+    if( task != NULL)
+    {
+
+        parsec_profiling_trace_flags(es->es_profile,
+        parsec_all_task_count_start,
+        (uint64_t)task->task_class->key_functions->key_hash(task->task_class->make_key(task->taskpool, task->locals), NULL),
+        task->taskpool->taskpool_id, NULL, 0);
+
+        prof.ready_tasks = task->taskpool->nb_tasks;
+        prof.complete_time = time_stamp();
+
+        parsec_profiling_trace_flags(es->es_profile,
+            parsec_all_task_count_end,
+            (uint64_t)task->task_class->key_functions->key_hash(task->task_class->make_key(task->taskpool, task->locals), NULL),
+            task->taskpool->taskpool_id, &prof, 0);
+    }
+    
+#endif
 
     if(task->status <= PARSEC_TASK_STATUS_PREPARE_INPUT) {
         PARSEC_PINS(es, PREPARE_INPUT_BEGIN, task);

@@ -250,10 +250,16 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
 int parsec_node_task_count_start;
 int parsec_node_task_count_end;
+int parsec_all_task_count_start;
+int parsec_all_task_count_end;
+
 static void node_profiling_init()
 {
-    parsec_profiling_add_dictionary_keyword("NODE_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "ready_tasks{double};complete_time{double}",
+    parsec_profiling_add_dictionary_keyword("NODE_GPU_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "ready_tasks{double};complete_time{double}",
                                             &parsec_node_task_count_start, &parsec_node_task_count_end);
+    
+    parsec_profiling_add_dictionary_keyword("NODE_ALL_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "tp_nb_tasks{double};task_progress{double}",
+                                            &parsec_all_task_count_start, &parsec_all_task_count_end);
 }
 
 int parsec_node_stats_init(parsec_context_t *context)
