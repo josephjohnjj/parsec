@@ -52,6 +52,7 @@
 #include "parsec/papi_sde.h"
 
 #include "parsec/mca/mca_repository.h"
+#include "parsec/include/parsec/os-spec-timing.h"
 
 #ifdef PARSEC_PROF_TRACE
 #include "parsec/profiling.h"
@@ -104,6 +105,7 @@ int parsec_want_rusage = 0;
 #include <sys/resource.h>
 
 static struct rusage _parsec_rusage;
+parsec_time_t start;
 
 static void parsec_rusage(bool print)
 {
@@ -399,6 +401,7 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
     int slow_option_used = 0;
 #if defined(PARSEC_PROF_TRACE)
     int profiling_id = 0;
+    start = take_time();
 #endif
     int profiling_enabled = 0;
 

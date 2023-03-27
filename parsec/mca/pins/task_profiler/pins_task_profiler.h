@@ -12,6 +12,12 @@ typedef struct task_profiler_info_s {
     int th_id;
 } task_profiler_info_t;
 
+typedef struct node_prof_s 
+{
+    double ready_tasks;
+    double complete_time;
+} node_prof_t;
+
 BEGIN_C_DECLS
 
 /**

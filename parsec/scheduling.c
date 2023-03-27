@@ -25,6 +25,7 @@
 #include "parsec/utils/debug.h"
 #include "parsec/dictionary.h"
 #include "parsec/utils/backoff.h"
+#include "parsec/mca/pins/task_profiler/pins_task_profiler.h"
 
 #include <signal.h>
 #if defined(PARSEC_HAVE_STRING_H)
@@ -84,6 +85,19 @@ static void parsec_rusage_per_es(parsec_execution_stream_t* es, bool print)
 #else
 #define parsec_rusage_per_es(eu, b) do {} while(0)
 #endif /* defined(PARSEC_HAVE_GETRUSAGE) defined(PARSEC_PROF_RUSAGE_EU) */
+
+extern int parsec_device_cuda_enabled;
+extern int parsec_node_task_count_start;
+extern int parsec_node_task_count_end;
+extern parsec_time_t start;
+
+uint64_t time_stamp()
+{
+    parsec_time_t now;
+    now = take_time();
+    return diff_time(start, now);
+}
+
 
 #if 0
 /*
@@ -473,6 +487,38 @@ int __parsec_complete_execution( parsec_execution_stream_t *es,
     (void)task->task_class->release_task( es, task );
     
     PARSEC_PINS(es, COMPLETE_EXEC_END, task);
+
+#if defined(PARSEC_PROF_TRACE)
+
+    parsec_device_gpu_module_t *gpu_device = NULL;
+    node_prof_t prof;
+    double ready_tasks = 0;
+    int d = 0;
+
+    if( task != NULL)
+    {
+
+        parsec_profiling_trace_flags(es->es_profile,
+        parsec_node_task_count_start,
+        (uint64_t)task->task_class->key_functions->key_hash(task->task_class->make_key(task->taskpool, task->locals), NULL),
+        task->taskpool->taskpool_id, NULL, 0);
+
+
+        for (d = 0; d < parsec_device_cuda_enabled; d++)
+        {
+            gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get( (d + 2) );            
+            ready_tasks += gpu_device->mutex; 
+        }
+
+        prof.ready_tasks = ready_tasks;
+        prof.complete_time = time_stamp();
+        parsec_profiling_trace_flags(es->es_profile,
+            parsec_node_task_count_end,
+            (uint64_t)task->task_class->key_functions->key_hash(task->task_class->make_key(task->taskpool, task->locals), NULL),
+            task->taskpool->taskpool_id, &prof, 0);
+    }
+
+#endif
 
     return rc;
 }

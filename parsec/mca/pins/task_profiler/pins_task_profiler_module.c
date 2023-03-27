@@ -17,6 +17,8 @@
 #include "parsec/utils/mca_param.h"
 
 static int trace_keys[PARSEC_PINS_FLAG_COUNT] = {0};
+int parsec_node_task_count_start;
+int parsec_node_task_count_end;
 
 static char *mca_param_string;
 
@@ -166,6 +168,12 @@ static void pins_init_task_profiler(parsec_context_t *master_context)
                                                 &trace_keys[COMPLETE_EXEC_BEGIN],
                                                 &trace_keys[COMPLETE_EXEC_END]);
     }
+
+     parsec_profiling_add_dictionary_keyword("NODE_GPU_TASK_COUNT", "fill:#FF0000", 
+        sizeof(node_prof_t), 
+        "ready_tasks{double};complete_time{double}",
+        &parsec_node_task_count_start, 
+        &parsec_node_task_count_end);
 }
 
 static void pins_fini_task_profiler(parsec_context_t *master_context)
