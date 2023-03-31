@@ -1503,7 +1503,8 @@ parsec_check_IN_dependencies_with_counter( const parsec_taskpool_t *tp,
                         }
                     } else {
                         /* Complicated case: fall back to iterate_predecessors with a counter */
-                        task->task_class->iterate_predecessors(NULL, task, 1 << flow->flow_index,  count_deps_fct, &active);
+                        parsec_execution_stream_t *es = parsec_my_execution_stream();
+                        task->task_class->iterate_predecessors(es, task, 1 << flow->flow_index,  count_deps_fct, &active);
                     }
                 } else {
                     if( NULL == dep->ctl_gather_nb)
