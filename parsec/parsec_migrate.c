@@ -727,9 +727,6 @@ int send_steal_request(parsec_execution_stream_t *es)
     int i, rc;
     steal_request_t steal_request;
 
-     if (!parsec_ce.can_serve(&parsec_ce))
-        return 0;
-
     if (parsec_migration_engine_up == 0 || active_steal_request_mutex != 0)
         return PARSEC_HOOK_RETURN_ASYNC;
 
