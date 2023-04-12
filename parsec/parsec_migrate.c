@@ -198,10 +198,29 @@ int nb_launched_task()
         gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
         total_tasks += gpu_device->mutex;
-        //printf("NB_Tasks %d  WT %d \n", total_tasks, get_gpu_wt_tasks(gpu_device));
     }
 
     return total_tasks;
+}
+
+int if_starving_device()
+{
+    int d = 0;
+    int starving = 0 ;
+    parsec_device_gpu_module_t *gpu_device = NULL;
+
+    for (d = 0; d < parsec_device_cuda_enabled; d++)
+    {
+        gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
+
+        if( gpu_device->mutex < (parsec_runtime_starvation_policy + 1) )
+        {
+            starving = 1;
+            break;
+        }
+    }
+
+    return (starving == 1 ) ? 1: 0;
 }
 
 int parsec_node_migrate_init(parsec_context_t *context)
@@ -471,7 +490,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                      * @brief Assume starvation if the number of task available in the GPU
                      * is less than that provided by the user.
                      */
-                    if (get_gpu_wt_tasks(gpu_device) < (parsec_runtime_starvation_policy + 1) )
+                    //if (get_gpu_wt_tasks(gpu_device) < (parsec_runtime_starvation_policy + 1) )
+                    if (nb_launched_task() < (parsec_runtime_starvation_policy + 1) )
                     {
                         continue;
                     }
