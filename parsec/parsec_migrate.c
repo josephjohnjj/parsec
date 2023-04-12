@@ -271,6 +271,8 @@ int parsec_node_task_count_start;
 int parsec_node_task_count_end;
 int parsec_all_task_count_start;
 int parsec_all_task_count_end;
+int parsec_steal_req_recv_start;
+int parsec_steal_req_recv_end;
 
 static void node_profiling_init()
 {
@@ -279,6 +281,9 @@ static void node_profiling_init()
     
     parsec_profiling_add_dictionary_keyword("NODE_ALL_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "tp_nb_tasks{double};task_progress{double}",
                                             &parsec_all_task_count_start, &parsec_all_task_count_end);
+
+    parsec_profiling_add_dictionary_keyword("REQ_RECVD", "fill:#FF0000", sizeof(steal_req_prof_t), "gpu_tasks{double};recv_time{double}",
+                                            &parsec_steal_req_recv_start, &parsec_steal_req_recv_end);
 }
 
 int parsec_node_stats_init(parsec_context_t *context)
@@ -460,6 +465,34 @@ int process_steal_request(parsec_execution_stream_t *es)
         assert(0 <= steal_request->msg.root && steal_request->msg.root < nb_nodes);
         assert(0 <= steal_request->msg.src  && steal_request->msg.src < nb_nodes);
         assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
+
+    
+    #if defined(PARSEC_PROF_TRACE)
+
+        steal_req_prof_t steal_prof;
+        double ready_tasks = 0;
+
+        parsec_profiling_trace_flags(es->es_profile,
+        parsec_steal_req_recv_start,
+        (uint64_t)steal_request,
+        parsec_device_cuda_enabled, &steal_prof, 0);
+
+
+        for (d = 0; d < parsec_device_cuda_enabled; d++)
+        {
+            gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));            
+            ready_tasks += gpu_device->mutex; 
+        }
+
+        steal_prof.gpu_tasks = ready_tasks;
+        steal_prof.recv_time = time_stamp();
+
+        parsec_profiling_trace_flags(es->es_profile,
+            parsec_steal_req_recv_end,
+            (uint64_t)steal_request,
+            parsec_device_cuda_enabled, &steal_prof, 0);
+
+    #endif
 
         parsec_atomic_fetch_add_int32(&nb_steal_request_received, -1);
         if (parsec_runtime_node_migrate_stats)

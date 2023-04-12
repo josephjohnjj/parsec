@@ -57,6 +57,12 @@ typedef struct node_prof_s
     double complete_time;
 } node_prof_t;
 
+typedef struct steal_req_prof_s 
+{
+    double gpu_tasks;
+    double recv_time;
+} steal_req_prof_t;
+
 typedef struct migrated_node_level_task_s
 {
     parsec_list_item_t list_item;
