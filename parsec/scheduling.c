@@ -135,6 +135,7 @@ extern int parsec_node_task_count_start;
 extern int parsec_node_task_count_end;
 extern int parsec_all_task_count_start;
 extern int parsec_all_task_count_end;
+extern int parsec_runtime_starving_devices;
 
 int __parsec_execute( parsec_execution_stream_t* es,
                       parsec_task_t* task )
@@ -720,10 +721,10 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
 
             nbiterations++;
         }
-        else
+
+        if( (parsec_migration_engine_up ==  1) && (nb_starving_device(es) >= parsec_runtime_starving_devices) )
         {
-            if(parsec_migration_engine_up ==  1)
-                send_steal_request(es);
+            send_steal_request(es);
         }
     }
 
