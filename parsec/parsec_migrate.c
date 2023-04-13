@@ -273,6 +273,10 @@ int parsec_all_task_count_start;
 int parsec_all_task_count_end;
 int parsec_steal_req_recv_start;
 int parsec_steal_req_recv_end;
+int parsec_steal_req_send_start;
+int parsec_steal_req_send_end;
+int parsec_steal_req_init_start;
+int parsec_steal_req_init_end;
 
 static void node_profiling_init()
 {
@@ -282,8 +286,14 @@ static void node_profiling_init()
     parsec_profiling_add_dictionary_keyword("NODE_ALL_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "tp_nb_tasks{double};task_progress{double}",
                                             &parsec_all_task_count_start, &parsec_all_task_count_end);
 
-    parsec_profiling_add_dictionary_keyword("REQ_RECVD", "fill:#FF0000", sizeof(steal_req_prof_t), "gpu_tasks{double};recv_time{double}",
+    parsec_profiling_add_dictionary_keyword("REQ_RECVD", "fill:#FF0000", sizeof(steal_req_prof_t), "gpu_tasks{double};req_recv_time{double}",
                                             &parsec_steal_req_recv_start, &parsec_steal_req_recv_end);
+
+    parsec_profiling_add_dictionary_keyword("REQ_SEND", "fill:#FF0000", sizeof(steal_req_prof_t), "launched_tasks{double};req_send_time{double}",
+                                            &parsec_steal_req_send_start, &parsec_steal_req_send_end);
+
+    parsec_profiling_add_dictionary_keyword("REQ_INIT", "fill:#FF0000", sizeof(steal_req_prof_t), "req_mutex{double};req_init_time{double}",
+                                            &parsec_steal_req_init_start, &parsec_steal_req_init_end);
 }
 
 int parsec_node_stats_init(parsec_context_t *context)
@@ -475,7 +485,7 @@ int process_steal_request(parsec_execution_stream_t *es)
         parsec_profiling_trace_flags(es->es_profile,
         parsec_steal_req_recv_start,
         (uint64_t)steal_request,
-        parsec_device_cuda_enabled, &steal_prof, 0);
+        parsec_device_cuda_enabled, NULL, 0);
 
 
         for (d = 0; d < parsec_device_cuda_enabled; d++)
@@ -765,6 +775,26 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         steal_request_msg.dst = victim_rank;
     }
 
+#if defined(PARSEC_PROF_TRACE)
+
+    steal_req_prof_t steal_prof;
+
+    parsec_profiling_trace_flags(es->es_profile,
+    parsec_steal_req_send_start,
+    (uint64_t)(&steal_request_msg),
+    parsec_device_cuda_enabled, NULL, 0);
+
+
+    steal_prof.gpu_tasks = nb_launched_task();
+    steal_prof.recv_time = time_stamp();
+
+    parsec_profiling_trace_flags(es->es_profile,
+        parsec_steal_req_send_end,
+        (uint64_t)(&steal_request_msg),
+        parsec_device_cuda_enabled, &steal_prof, 0);
+
+#endif
+
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request_msg.dst, &steal_request_msg, STEAL_REQ_MSG_SIZE);
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request message %p send to rank %d from rank %d. #task requested %d",
                          &steal_request_msg, steal_request_msg.dst, steal_request_msg.src, steal_request_msg.nb_task_request);
@@ -779,6 +809,26 @@ int send_steal_request(parsec_execution_stream_t *es)
 {
     int i, rc;
     steal_request_t steal_request;
+
+#if defined(PARSEC_PROF_TRACE)
+
+    steal_req_prof_t steal_prof;
+
+    parsec_profiling_trace_flags(es->es_profile,
+    parsec_steal_req_init_start,
+    (uint64_t)(&steal_request),
+    parsec_device_cuda_enabled, NULL, 0);
+
+
+    steal_prof.gpu_tasks = active_steal_request_mutex;
+    steal_prof.recv_time = time_stamp();
+
+    parsec_profiling_trace_flags(es->es_profile,
+        parsec_steal_req_init_end,
+        (uint64_t)(&steal_request),
+        parsec_device_cuda_enabled, &steal_prof, 0);
+
+#endif
 
     if (parsec_migration_engine_up == 0 || active_steal_request_mutex != 0)
         return PARSEC_HOOK_RETURN_ASYNC;
