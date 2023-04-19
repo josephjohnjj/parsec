@@ -721,7 +721,7 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
 
         if (NULL != this_task->data[i].data_in)
         {
-            //PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
+            PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
         }
     }
 
@@ -1294,7 +1294,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         task->data[flow_index].data_in = origin->output[flow_index].data.data;
         task->data[flow_index].data_out = origin->output[flow_index].data.data;
         origin->output[flow_index].data.data->readers = 0;
-        PARSEC_OBJ_RETAIN(task->data[flow_index].data_in);
+        //PARSEC_OBJ_RETAIN(task->data[flow_index].data_in);
 
         // task->repo_entry->data[flow_index] = task->data[flow_index].data_in;
     }
