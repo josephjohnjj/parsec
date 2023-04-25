@@ -16,6 +16,7 @@ extern int parsec_runtime_chunk_size;
 extern int parsec_device_cuda_enabled;
 extern int parsec_runtime_node_migrate_stats;
 extern int parsec_runtime_skew_distribution;
+extern int parsec_runtime_starving_devices;
 
 parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
@@ -333,8 +334,9 @@ int parsec_node_stats_fini()
     printf("Task recvd                      : %d \n", node_info->nb_task_recvd);
     printf("\n");
     
-    //printf("Tasks selected                  : %d \n", node_info->nb_task_migrated);
-    printf("Chunk size                      : %d \n", parsec_runtime_chunk_size);
+    printf("Chunk size                      : %d \n", parsec_runtime_chunk_size); 
+    printf("Starving policy (#device)       : %d \n", parsec_runtime_starving_devices); 
+    printf("Starvation policy (#tasks)      : %d \n", parsec_runtime_starvation_policy);
     
     if (0 == parsec_runtime_steal_request_policy)
     {
