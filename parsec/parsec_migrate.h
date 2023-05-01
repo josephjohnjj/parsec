@@ -17,12 +17,19 @@
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
 
+#define MAX_NODES           ((uint32_t)1024)
+#define RANKS_PER_INDEX     (sizeof(uint32_t))
+#define MAX_NODES_INDEX     (MAX_NODES/RANKS_PER_INDEX)
+
+
 
 typedef struct steal_request_msg_s{
     int root;
     int src;
     int dst;
     int nb_task_request;
+    uint32_t successful_victims[MAX_NODES_INDEX];
+    uint32_t failed_victims[MAX_NODES_INDEX];
 } steal_request_msg_t;
 
 typedef struct steal_request_s{

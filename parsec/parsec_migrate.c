@@ -45,6 +45,9 @@ volatile int32_t nb_steal_request_received = 0;
 /** Keep track of the total tasks recieved for the current active steal request*/
 volatile int32_t nb_tasks_received = 0; 
 
+/** Keep track of the last victim to which the steal req was send*/
+volatile int last_victim = -1;
+
 
 parsec_node_info_t *node_info; /** stats on migration in a node */
 static int my_rank, nb_nodes;
@@ -393,6 +396,10 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     steal_request_t *steal_request = NULL;
     steal_request_msg_t* req_msg = NULL;
 
+    int array_pos = 0;
+    int array_mask = 0;
+    int current_mask = 0;
+   
     req_msg = (steal_request_msg_t *)msg;
 
     assert( STEAL_REQ_MSG_SIZE == msg_size );
@@ -415,6 +422,22 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             parsec_node_mig_inc_success_steals();
 
         }
+
+        if (2 == parsec_runtime_steal_request_policy)
+        {
+            assert(last_victim != -1);
+
+            array_pos = last_victim / MAX_NODES_INDEX;
+            current_mask = steal_request->msg.failed_victims[array_pos];
+            array_mask  = 0;
+            array_mask |= 1 << (last_victim % RANKS_PER_INDEX);
+
+            if( (current_mask & array_mask) > 0)
+            {
+                last_victim = -1;
+            }
+        }
+
 
         parsec_atomic_fetch_dec_int32(&active_steal_request_mutex);
         PARSEC_OBJ_RELEASE(steal_request);
@@ -448,6 +471,8 @@ int process_steal_request(parsec_execution_stream_t *es)
     int success_steals = 0;
     int nb_cuda_devices = parsec_device_cuda_enabled;
     migrated_node_level_task_t *mig_task = NULL;
+    int array_pos = 0;
+    int array_mask = 0;
 
     steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
     
@@ -591,7 +616,32 @@ int process_steal_request(parsec_execution_stream_t *es)
 
     if( NULL != steal_request)
     {
-        steal_request->msg.nb_task_request -= total_selected;
+        if( total_selected > 0)
+        {
+            steal_request->msg.nb_task_request -= total_selected;
+
+            if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM */
+            {
+                array_pos = my_rank / MAX_NODES_INDEX;
+                array_mask = 1 << (my_rank % RANKS_PER_INDEX);
+
+                /** mark this node a successfull s*/
+                steal_request->msg.successful_victims[array_pos] |= array_mask;
+            }
+
+        }
+        else
+        {
+            if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM */
+            {
+                array_pos = my_rank / MAX_NODES_INDEX;
+                array_mask = 1 << (my_rank % RANKS_PER_INDEX);
+
+                /** mark this node as failure */
+                steal_request->msg.failed_victims[array_pos] |= array_mask;
+            }
+
+        }
 
         progress_steal_request(es, steal_request);
         PARSEC_OBJ_RELEASE(steal_request);
@@ -737,18 +787,26 @@ int send_selected_task_details(parsec_execution_stream_t *es, parsec_task_t *thi
 
 int initiate_steal_request(parsec_execution_stream_t *es)
 {
+    int i = 0;
     int victim_rank = 0;
+
     steal_request_msg_t steal_request_msg;
 
     steal_request_msg.nb_task_request = parsec_runtime_chunk_size;
     steal_request_msg.root = my_rank;
     steal_request_msg.src = my_rank;
+    for( i = 0; i < MAX_NODES_INDEX; i++)
+    {
+        steal_request_msg.failed_victims[i] = 0;
+        steal_request_msg.successful_victims[i] = 0;
+    }
+
 
     if (0 == parsec_runtime_steal_request_policy) /* RING */
     {
         steal_request_msg.dst = (my_rank + 1) % nb_nodes;
     }
-    else /* RANDOM */
+    else if (1 == parsec_runtime_steal_request_policy) /* RANDOM */
     {
         victim_rank = rand() % nb_nodes;
 
@@ -756,7 +814,35 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         {
             victim_rank = (victim_rank + 1) % nb_nodes;
         }
+
         steal_request_msg.dst = victim_rank;
+    }
+    else if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM */
+    {
+        if( -1 == last_victim )
+        {
+            victim_rank = rand() % nb_nodes;
+
+            if (victim_rank == my_rank)
+            {
+                victim_rank = (victim_rank + 1) % nb_nodes;
+            }
+            steal_request_msg.dst = victim_rank;
+
+            /* Store the the current victim as the last victim*/
+            last_victim = victim_rank; 
+
+        }
+        else
+        {
+            steal_request_msg.dst = last_victim;
+        }
+
+    }
+    else
+    {
+        printf("Wrong steal policy option \n");
+        exit(0);
     }
 
 #if defined(PARSEC_PROF_TRACE)
@@ -849,6 +935,10 @@ int nb_starving_device(parsec_execution_stream_t *es)
 int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request)
 {
     int victim_rank = 0;
+    int array_pos  = 0;
+    int array_mask = 0;
+    int current_mask = 0;
+    int try = 0;
 
     steal_request->msg.src = my_rank;
 
@@ -863,17 +953,41 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
         {
             steal_request->msg.dst = (my_rank + 1) % nb_nodes;
         }
-        else
+        else if (1 == parsec_runtime_steal_request_policy) /* RANDOM */
         {
-
-            victim_rank = rand() % nb_nodes;
-
-            if (victim_rank == my_rank)
+            steal_request->msg.dst = steal_request->msg.root;
+        }
+        else if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM*/
+        {
+            do
             {
-                victim_rank = (victim_rank + 1) % nb_nodes;
-            }
+                victim_rank = rand() % nb_nodes;
 
-            steal_request->msg.dst = victim_rank;
+                if (victim_rank == my_rank)
+                {
+                    victim_rank = (victim_rank + 1) % nb_nodes;
+                }
+
+                array_pos = victim_rank / MAX_NODES_INDEX;
+                current_mask = steal_request->msg.failed_victims[array_pos];
+                array_mask  = 0;
+                array_mask |= 1 << (victim_rank % RANKS_PER_INDEX);
+                
+
+                /** In the past this node was a failure */
+                if( (current_mask & array_mask) > 0)
+                {
+                    steal_request->msg.dst = steal_request->msg.root;
+                }
+                /** In the past this node was not a failure or it was never visited*/
+                else
+                {
+                    steal_request->msg.dst = victim_rank;
+                    break;
+                }
+
+            } while (try < 5);
+            
         }
     }
 
