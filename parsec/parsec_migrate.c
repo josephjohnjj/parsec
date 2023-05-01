@@ -345,9 +345,13 @@ int parsec_node_stats_fini()
     {
         printf("Steal req policy                : Ring \n");
     }
-    else
+    else if (1 == parsec_runtime_steal_request_policy)
     {
         printf("Steal req policy                : Random \n");
+    }
+    else if (2 == parsec_runtime_steal_request_policy)
+    {
+        printf("Steal req policy                : LastVictim \n");
     }
     free(node_info);
 
