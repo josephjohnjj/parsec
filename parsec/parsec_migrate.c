@@ -965,8 +965,9 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
         {
             do
             {
-                victim_rank = rand() % nb_nodes;
+                try++;
 
+                victim_rank = rand() % nb_nodes;
                 if (victim_rank == my_rank)
                 {
                     victim_rank = (victim_rank + 1) % nb_nodes;
