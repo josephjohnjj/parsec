@@ -28,6 +28,7 @@ typedef struct steal_request_msg_s{
     int src;
     int dst;
     int nb_task_request;
+    int hop_count;
     uint32_t successful_victims[MAX_NODES_INDEX];
     uint32_t failed_victims[MAX_NODES_INDEX];
 } steal_request_msg_t;
@@ -55,6 +56,8 @@ typedef struct parsec_node_info_s
     int nb_succesfull_req_processed;
     int nb_succesfull_steals;
     int nb_succesfull_full_steals;
+    int hops_succesfull_steals;
+    int hops_succesfull_full_steals;
     
 } parsec_node_info_t;
 

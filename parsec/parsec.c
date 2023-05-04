@@ -170,6 +170,7 @@ int parsec_runtime_starving_devices       = 0;
 int parsec_runtime_starvation_policy      = 0;
 int parsec_runtime_skew_distribution      = 0;
 int parsec_runtime_print_completion_stats = 0;
+int parsec_runtime_hop_count              = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -953,6 +954,8 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_skew_distribution);
     parsec_mca_param_reg_int_name("runtime", "print_completion_stats", "Print stats during completion of a task",
                                 false, false, 0, &parsec_runtime_print_completion_stats);
+    parsec_mca_param_reg_int_name("runtime", "hop_count", "Hop count for steal requests",
+                                false, false, 0, &parsec_runtime_hop_count);
 
     if( parsec_runtime_gdb_attach > 0 )
     {

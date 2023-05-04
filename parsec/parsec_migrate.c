@@ -17,6 +17,9 @@ extern int parsec_device_cuda_enabled;
 extern int parsec_runtime_node_migrate_stats;
 extern int parsec_runtime_skew_distribution;
 extern int parsec_runtime_starving_devices;
+extern int parsec_runtime_hop_count;
+
+int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 
 parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
@@ -160,16 +163,34 @@ int parsec_node_mig_inc_task_recvd()
     return node_info->nb_task_recvd;
 }
 
-int parsec_node_mig_inc_success_steals()
+int parsec_node_mig_inc_success_steals(steal_request_t *steal_request)
 {
+    int hops_completed = 0;
+
     parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_steals));
+
+    if ((3 == parsec_runtime_steal_request_policy) /* RING HOPS */ || (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */) 
+    {
+        hops_completed = finalised_hop_count - steal_request->msg.hop_count;
+        parsec_atomic_fetch_add_int32(&(node_info->hops_succesfull_steals), hops_completed);
+    }
+
     return node_info->nb_succesfull_steals;
 
 }
 
-int parsec_node_mig_inc_success_full_steals()
+int parsec_node_mig_inc_success_full_steals(steal_request_t *steal_request)
 {
+    int hops_completed = 0;
+
     parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_full_steals));
+
+    if ((3 == parsec_runtime_steal_request_policy) /* RING HOPS */ || (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */)  
+    {
+        hops_completed = finalised_hop_count - steal_request->msg.hop_count;
+        parsec_atomic_fetch_add_int32(&(node_info->hops_succesfull_full_steals), hops_completed);
+    }
+
     return node_info->nb_succesfull_full_steals;
 
 }
@@ -244,6 +265,8 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
+    finalised_hop_count = ((0 == parsec_runtime_hop_count) || (parsec_runtime_hop_count >= nb_nodes) ) ? (nb_nodes - 1) : parsec_runtime_hop_count;
 
     if (parsec_communication_engine_up > 0)
         parsec_migration_engine_up = 1;
@@ -353,6 +376,18 @@ int parsec_node_stats_fini()
     {
         printf("Steal req policy                : LastVictim \n");
     }
+    else if (3 == parsec_runtime_steal_request_policy) 
+    {
+        printf("Steal req policy                : RingHops \n");
+    }
+    else if (4 == parsec_runtime_steal_request_policy) 
+    {
+        printf("Steal req policy                : RandomHops \n");
+    }
+
+    printf("Finalised hopcount              : %d \n", finalised_hop_count);
+    printf("Avg. hop per success. steal     : %lf \n", ((double)node_info->hops_succesfull_steals / (double)node_info->nb_succesfull_steals) );
+    printf("Avg. hop per full success. steal: %lf \n", ((double)node_info->hops_succesfull_full_steals / (double)node_info->nb_succesfull_full_steals) );
     free(node_info);
 
     if (0 == parsec_runtime_skew_distribution)
@@ -421,9 +456,9 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         {
             if(0 == steal_request->msg.nb_task_request)
             {
-                parsec_node_mig_inc_success_full_steals();
+                parsec_node_mig_inc_success_full_steals(steal_request);
             }
-            parsec_node_mig_inc_success_steals();
+            parsec_node_mig_inc_success_steals(steal_request);
 
         }
 
@@ -797,8 +832,9 @@ int initiate_steal_request(parsec_execution_stream_t *es)
     steal_request_msg_t steal_request_msg;
 
     steal_request_msg.nb_task_request = parsec_runtime_chunk_size;
-    steal_request_msg.root = my_rank;
-    steal_request_msg.src = my_rank;
+    steal_request_msg.root            = my_rank;
+    steal_request_msg.src             = my_rank;
+    steal_request_msg.hop_count       = finalised_hop_count;
     for( i = 0; i < MAX_NODES_INDEX; i++)
     {
         steal_request_msg.failed_victims[i] = 0;
@@ -842,6 +878,22 @@ int initiate_steal_request(parsec_execution_stream_t *es)
             steal_request_msg.dst = last_victim;
         }
 
+    }
+    else if (3 == parsec_runtime_steal_request_policy) /* RING HOPS */
+    {
+        steal_request_msg.dst = (my_rank + 1) % nb_nodes;
+        steal_request_msg.hop_count -= 1;
+    }
+    else if (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */
+    {
+        victim_rank = rand() % nb_nodes;
+
+        if (victim_rank == my_rank)
+        {
+            victim_rank = (victim_rank + 1) % nb_nodes;
+        }
+
+        steal_request_msg.hop_count -= 1;
     }
     else
     {
@@ -993,6 +1045,37 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
 
             } while (try < 5);
             
+        }
+        else if (3 == parsec_runtime_steal_request_policy) /* RING HOPS */
+        {
+            steal_request->msg.hop_count -= 1;
+
+            if (0 == steal_request->msg.hop_count)
+            {
+                steal_request->msg.dst = steal_request->msg.root;
+            }
+            else
+            {
+                steal_request->msg.dst = (my_rank + 1) % nb_nodes;
+            }
+        }
+        else if (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */
+        {
+            steal_request->msg.hop_count -= 1;
+
+            if (0 == steal_request->msg.hop_count)
+            {
+                steal_request->msg.dst = steal_request->msg.root;
+            }
+            else
+            {
+                victim_rank = rand() % nb_nodes;
+
+                if (victim_rank == my_rank)
+                {
+                    victim_rank = (victim_rank + 1) % nb_nodes;
+                }
+            }
         }
     }
 
