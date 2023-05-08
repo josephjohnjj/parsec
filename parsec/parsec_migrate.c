@@ -893,6 +893,7 @@ int initiate_steal_request(parsec_execution_stream_t *es)
             victim_rank = (victim_rank + 1) % nb_nodes;
         }
 
+        steal_request_msg.dst = victim_rank;
         steal_request_msg.hop_count -= 1;
     }
     else
@@ -1075,6 +1076,7 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
                 {
                     victim_rank = (victim_rank + 1) % nb_nodes;
                 }
+                steal_request->msg.dst = victim_rank;
             }
         }
     }
