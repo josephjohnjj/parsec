@@ -566,28 +566,8 @@ int process_steal_request(parsec_execution_stream_t *es)
             device_selected = 0;
             gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-            if (gpu_device->mutex > 0)
+            if (gpu_device->mutex > (parsec_runtime_starvation_policy + 1))
             {
-                if (parsec_runtime_starvation_policy == 0)
-                {
-                    /**
-                     * @brief As long as there is task available we can migrate the tasks.
-                     *
-                     */
-                }
-                else 
-                {
-                    /**
-                     * @brief Assume starvation if the number of task available in the GPU
-                     * is less than that provided by the user.
-                     */
-                    //if (get_gpu_wt_tasks(gpu_device) < (parsec_runtime_starvation_policy + 1) )
-                    if (nb_launched_task() < (parsec_runtime_starvation_policy + 1) )
-                    {
-                        continue;
-                    }
-                }
-
                 list = &(gpu_device->pending);
                 parsec_list_lock(list);
 
