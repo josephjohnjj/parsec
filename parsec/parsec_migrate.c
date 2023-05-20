@@ -561,11 +561,22 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         tasks_requested = steal_request->msg.nb_task_request;
 
-        can_migrate = 0;
-        if (parsec_atomic_cas_int32(&process_steal_request_mutex, 0, 1))
-        {  
-            can_migrate  = 1;
+        if(1 == process_steal_request_mutex)
+        {
+            can_migrate = 0;
         }
+        else
+        {
+            if (parsec_atomic_cas_int32(&process_steal_request_mutex, 0, 1))
+            {  
+                can_migrate = 1;
+            }
+            else
+            {
+                can_migrate = 0;
+            }
+        }
+        
 
         if( 1 == can_migrate)
         {
