@@ -512,6 +512,7 @@ int process_steal_request(parsec_execution_stream_t *es)
     migrated_node_level_task_t *mig_task = NULL;
     int array_pos = 0;
     int array_mask = 0;
+    int can_migrate = 0;
 
     steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
     
@@ -560,66 +561,73 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         tasks_requested = steal_request->msg.nb_task_request;
 
-        //#if 0
-        for (d = 0; d < nb_cuda_devices; d++)
+        can_migrate = 0;
+        if (parsec_atomic_cas_int32(&process_steal_request_mutex, 0, 1))
+        {  
+            can_migrate  = 1;
+        }
+
+        if( 1 == can_migrate)
         {
-            device_selected = 0;
-            gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
-
-            if (gpu_device->mutex > (parsec_runtime_starvation_policy + 1))
+            for (d = 0; d < nb_cuda_devices; d++)
             {
-                list = &(gpu_device->pending);
-                parsec_list_lock(list);
+                device_selected = 0;
+                gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-                for (item = PARSEC_LIST_ITERATOR_FIRST(list);
-                     (PARSEC_LIST_ITERATOR_END(list) != item);
-                     item = PARSEC_LIST_ITERATOR_NEXT(item))
+                if (gpu_device->mutex > (parsec_runtime_starvation_policy + 1))
                 {
+                    list = &(gpu_device->pending);
+                    parsec_list_lock(list);
 
-                    gpu_task = (parsec_gpu_task_t *)item;
-                    if ((gpu_task != NULL) && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) &&
-                        (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK))
+                    for (item = PARSEC_LIST_ITERATOR_FIRST(list);
+                         (PARSEC_LIST_ITERATOR_END(list) != item);
+                         item = PARSEC_LIST_ITERATOR_NEXT(item))
                     {
-                        item = parsec_list_nolock_remove(list, item);
-                        PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
-                        parsec_list_push_back(ring, (parsec_list_item_t *)gpu_task);
 
-                        parsec_node_mig_inc_selected();
-                        total_selected++;
-                        device_selected++;
-
-                        success_steals = 1;
-
-                        if (total_selected == tasks_requested)
+                        gpu_task = (parsec_gpu_task_t *)item;
+                        if ((gpu_task != NULL) && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) &&
+                            (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK))
                         {
-                            break;
+                            item = parsec_list_nolock_remove(list, item);
+                            PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
+                            parsec_list_push_back(ring, (parsec_list_item_t *)gpu_task);
+
+                            parsec_node_mig_inc_selected();
+                            total_selected++;
+                            device_selected++;
+
+                            success_steals = 1;
+
+                            if (total_selected == tasks_requested)
+                            {
+                                break;
+                            }
                         }
                     }
-                }
                 
-                rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
-                parsec_atomic_fetch_add_int32( &(gpu_device->wt_tasks), (-1 * device_selected));
+                    rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
+                    parsec_atomic_fetch_add_int32( &(gpu_device->wt_tasks), (-1 * device_selected));
 
-                parsec_list_unlock(list);
-            }
+                    parsec_list_unlock(list);
+                }
 
-            if (parsec_runtime_node_migrate_stats)
-                parsec_node_mig_inc_searches();
-
-            if (total_selected == tasks_requested)
-            {
                 if (parsec_runtime_node_migrate_stats)
-                    parsec_node_mig_inc_full_yield();
+                    parsec_node_mig_inc_searches();
 
-                break;
+                if (total_selected == tasks_requested)
+                {
+                    if (parsec_runtime_node_migrate_stats)
+                        parsec_node_mig_inc_full_yield();
+
+                    break;
+                }
             }
-        }
-        //#endif
 
-        if (success_steals == 1)
-        {
-            parsec_node_mig_inc_success_req_processed();
-        }
+            if (success_steals == 1)
+            {
+                parsec_node_mig_inc_success_req_processed();
+            }
+        } 
     }
 
     while (!parsec_list_nolock_is_empty(ring))
@@ -664,6 +672,11 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         progress_steal_request(es, steal_request);
         PARSEC_OBJ_RELEASE(steal_request);
+    }
+
+    if( 1 == can_migrate)
+    {
+        process_steal_request_mutex  = 0;
     }
 
     PARSEC_OBJ_RELEASE(ring);
