@@ -527,7 +527,7 @@ int process_steal_request(parsec_execution_stream_t *es)
     {
         steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
 
-        if(NULL != steal_request)
+        if(NULL == steal_request)
         {
             break;
         }
@@ -686,8 +686,7 @@ int process_steal_request(parsec_execution_stream_t *es)
         }
 
         PARSEC_OBJ_RELEASE(ring);
-    }
-    while( (1 == parsec_migration_engine_up) && (total_selected == tasks_requested) );
+    } while( (1 == parsec_migration_engine_up) && (total_selected == tasks_requested) );
 
     process_steal_request_mutex = 0;
     return 1;
