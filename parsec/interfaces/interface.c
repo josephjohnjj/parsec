@@ -14,6 +14,8 @@
 #include <limits.h>
 #endif  /* defined(HAVE_LIMITS_H) */
 
+extern int parsec_runtime_node_migrate_stats;
+
 /* Functions to return tasks to their mempool once their execution is
  * completed. The fist one should be used when counting the tasks is
  * not necessary, while the second one contains the task counting.
@@ -31,7 +33,8 @@ parsec_hook_return_t
 parsec_release_task_to_mempool_update_nbtasks(parsec_execution_stream_t *es,
                                              parsec_task_t *this_task)
 {
-    parsec_node_mig_inc_released();
+    if (parsec_runtime_node_migrate_stats)
+        parsec_node_mig_inc_released();
     
     parsec_taskpool_t *tp = this_task->taskpool;
     (void)es;

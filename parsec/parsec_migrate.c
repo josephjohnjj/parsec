@@ -531,10 +531,8 @@ int process_steal_request(parsec_execution_stream_t *es)
         steal_req_prof_t steal_prof;
         double ready_tasks = 0;
 
-        parsec_profiling_trace_flags(es->es_profile,
-        parsec_steal_req_recv_start,
-        (uint64_t)steal_request,
-        parsec_device_cuda_enabled, NULL, 0);
+        parsec_profiling_trace_flags(es->es_profile,parsec_steal_req_recv_start,
+            (uint64_t)steal_request, parsec_device_cuda_enabled, NULL, 0);
 
 
         for (d = 0; d < parsec_device_cuda_enabled; d++)
@@ -546,10 +544,8 @@ int process_steal_request(parsec_execution_stream_t *es)
         steal_prof.gpu_tasks = ready_tasks;
         steal_prof.recv_time = time_stamp();
 
-        parsec_profiling_trace_flags(es->es_profile,
-            parsec_steal_req_recv_end,
-            (uint64_t)steal_request,
-            parsec_device_cuda_enabled, &steal_prof, 0);
+        parsec_profiling_trace_flags(es->es_profile,bparsec_steal_req_recv_end,
+            (uint64_t)steal_request, parsec_device_cuda_enabled, &steal_prof, 0);
 
     #endif
 
@@ -561,7 +557,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         tasks_requested = steal_request->msg.nb_task_request;
 
-        if(1 == process_steal_request_mutex)
+        if (1 == process_steal_request_mutex)
         {
             can_migrate = 0;
         }
@@ -578,7 +574,8 @@ int process_steal_request(parsec_execution_stream_t *es)
         }
         
 
-        if( 1 == can_migrate)
+        can_migrate = 0;
+        if(1 == can_migrate)
         {
             for (d = 0; d < nb_cuda_devices; d++)
             {
@@ -613,6 +610,10 @@ int process_steal_request(parsec_execution_stream_t *es)
                             {
                                 break;
                             }
+                        }
+                        else
+                        {
+                            break;
                         }
                     }
                 
@@ -685,9 +686,9 @@ int process_steal_request(parsec_execution_stream_t *es)
         PARSEC_OBJ_RELEASE(steal_request);
     }
 
-    if( 1 == can_migrate)
+    if(1 == can_migrate)
     {
-        process_steal_request_mutex  = 0;
+        process_steal_request_mutex = 0;
     }
 
     PARSEC_OBJ_RELEASE(ring);
@@ -936,6 +937,8 @@ int initiate_steal_request(parsec_execution_stream_t *es)
     return 0;
 }
 
+//int nb_starving_detected  = 0;
+
 int send_steal_request(parsec_execution_stream_t *es)
 {
     int i, rc;
@@ -964,11 +967,18 @@ int send_steal_request(parsec_execution_stream_t *es)
     if (parsec_migration_engine_up == 0 || active_steal_request_mutex != 0)
         return PARSEC_HOOK_RETURN_ASYNC;
 
+    //parsec_atomic_fetch_inc_int32(&nb_starving_detected);
+    //if(nb_starving_detected < 48)
+    //    return PARSEC_HOOK_RETURN_ASYNC;
+    //nb_starving_detected  = 0;
+
     rc = active_steal_request_mutex;
 
     if (!parsec_atomic_cas_int32(&active_steal_request_mutex, 0, 1))
         return PARSEC_HOOK_RETURN_ASYNC;
 
+    assert(1 == active_steal_request_mutex);
+    
     initiate_steal_request(es);
 
     return PARSEC_HOOK_RETURN_ASYNC;
@@ -984,7 +994,7 @@ int nb_starving_device(parsec_execution_stream_t *es)
     {
         gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-        if( gpu_device->mutex < (parsec_runtime_starvation_policy + 1) )
+        if( gpu_device->mutex < 1 )
         {
             starving++;
         }
