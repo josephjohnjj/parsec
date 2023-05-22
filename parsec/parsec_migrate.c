@@ -512,8 +512,10 @@ int process_steal_request(parsec_execution_stream_t *es)
     int can_migrate = 0;
 
     
-
-    if (0 != process_steal_request_mutex || parsec_list_nolock_is_empty(&steal_req_fifo) )
+    if (0 != process_steal_request_mutex /* someone already processing*/
+        || parsec_list_nolock_is_empty(&steal_req_fifo) /* no steal request*/
+        || 0 != active_steal_request_mutex /* I am a thief */
+    )
     {
         return PARSEC_HOOK_RETURN_ASYNC;
     }
@@ -892,7 +894,7 @@ int initiate_steal_request(parsec_execution_stream_t *es)
     return 0;
 }
 
-//int nb_starving_detected  = 0;
+int nb_starving_detected  = 0;
 
 int send_steal_request(parsec_execution_stream_t *es)
 {
@@ -922,10 +924,10 @@ int send_steal_request(parsec_execution_stream_t *es)
     if (parsec_migration_engine_up == 0 || active_steal_request_mutex != 0)
         return PARSEC_HOOK_RETURN_ASYNC;
 
-    //parsec_atomic_fetch_inc_int32(&nb_starving_detected);
-    //if(nb_starving_detected < 48)
-    //    return PARSEC_HOOK_RETURN_ASYNC;
-    //nb_starving_detected  = 0;
+    parsec_atomic_fetch_inc_int32(&nb_starving_detected);
+    if(nb_starving_detected < 48)
+        return PARSEC_HOOK_RETURN_ASYNC;
+    nb_starving_detected  = 0;
 
     rc = active_steal_request_mutex;
 
