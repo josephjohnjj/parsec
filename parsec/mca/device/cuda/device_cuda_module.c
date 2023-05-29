@@ -3134,6 +3134,11 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
         parsec_atomic_fetch_dec_int32( &(gpu_device->wt_tasks) );
 
+        if(parsec_migration_engine_up ==  1)
+        {
+            increment_progress_counter( CUDA_DEVICE_NUM(gpu_device->super.device_index));
+        }
+
         if((parsec_cuda_iterative == 1) && (gpu_task->migrate_status > TASK_NOT_MIGRATED)
             && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) )
         {

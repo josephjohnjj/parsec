@@ -95,4 +95,8 @@ int print_stats();
 void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_item);
 int migrate_put_mpi_progress(parsec_execution_stream_t* es);
 int nb_starving_device(parsec_execution_stream_t *es);
+int progress_migrated_task(parsec_execution_stream_t* es);
+int increment_progress_counter(int device_num);
+int unset_progress_counter(int device_num);
+int get_progress_counter(int device_num);
 #endif

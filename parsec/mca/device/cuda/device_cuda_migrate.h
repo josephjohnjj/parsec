@@ -154,5 +154,4 @@ int inc_manager_complete_count(int device_index);
 int inc_co_manager_complete_count(int device_index);
 int inc_iterative_mapped_count(int device_index);
 int inc_thrashing_count(int device_index);
-
 #endif

@@ -697,9 +697,21 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
          * when compared to a new task. 
          */
         parsec_cuda_mig_task_dequeue(es);
+
+        /**
+         * Progress migrated task received from another node.
+        */
+        if(parsec_migration_engine_up ==  1)
+        {
+            progress_migrated_task(es);
+        }
         
         if( NULL == (task = es->next_task) ) {
-            task = parsec_current_scheduler->module.select(es, &distance);
+            
+            if(NULL == task)
+            {
+                task = parsec_current_scheduler->module.select(es, &distance);
+            }
         } else {
             es->next_task = NULL;
             distance = 1;

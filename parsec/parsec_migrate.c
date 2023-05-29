@@ -23,6 +23,7 @@ int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 
 parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
+parsec_list_t received_task_fifo;           /** list of all tasks received */
 
 
 /**
@@ -43,13 +44,16 @@ volatile int32_t active_steal_request_mutex = 0;
  **/
 volatile int32_t process_steal_request_mutex = 0;
 
-/** Keep track of the currect active requests in this node */
-volatile int32_t nb_steal_request_received = 0; 
 /** Keep track of the total tasks recieved for the current active steal request*/
 volatile int32_t nb_tasks_received = 0; 
 
 /** Keep track of the last victim to which the steal req was send*/
 volatile int last_victim = -1;
+
+/** counts the number of tasks progressed in a device after it
+ * migrated the task.
+*/
+int* device_progress_counter = NULL;
 
 
 parsec_node_info_t *node_info; /** stats on migration in a node */
@@ -169,7 +173,8 @@ int parsec_node_mig_inc_success_steals(steal_request_t *steal_request)
 
     parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_steals));
 
-    if ((3 == parsec_runtime_steal_request_policy) /* RING HOPS */ || (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */) 
+    if ((3 == parsec_runtime_steal_request_policy) /* RING HOPS */ || (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */
+            || (2 == parsec_runtime_steal_request_policy) /* LastVictim */)  
     {
         hops_completed = finalised_hop_count - steal_request->msg.hop_count;
         parsec_atomic_fetch_add_int32(&(node_info->hops_succesfull_steals), hops_completed);
@@ -185,7 +190,8 @@ int parsec_node_mig_inc_success_full_steals(steal_request_t *steal_request)
 
     parsec_atomic_fetch_inc_int32(&(node_info->nb_succesfull_full_steals));
 
-    if ((3 == parsec_runtime_steal_request_policy) /* RING HOPS */ || (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */)  
+    if ((3 == parsec_runtime_steal_request_policy) /* RING HOPS */ || (4 == parsec_runtime_steal_request_policy) /* RANDOM HOPS */
+            || (2 == parsec_runtime_steal_request_policy) /* LastVictim */)  
     {
         hops_completed = finalised_hop_count - steal_request->msg.hop_count;
         parsec_atomic_fetch_add_int32(&(node_info->hops_succesfull_full_steals), hops_completed);
@@ -271,8 +277,12 @@ int parsec_node_migrate_init(parsec_context_t *context)
     if (parsec_communication_engine_up > 0)
         parsec_migration_engine_up = 1;
 
+    device_progress_counter = (int *)calloc(parsec_device_cuda_enabled, sizeof(int));
+
     PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&received_task_fifo, parsec_list_t);
+    
     return 0;
 }
 
@@ -413,12 +423,60 @@ int parsec_node_migrate_fini()
         free(item);
     PARSEC_OBJ_DESTRUCT(&steal_req_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
+    PARSEC_OBJ_DESTRUCT(&received_task_fifo);
+    
 
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
+    free(device_progress_counter);
 
     return parsec_migration_engine_up;
+}
+
+int increment_progress_counter(int device_num)
+{
+    device_progress_counter[device_num]++;
+}
+
+int unset_progress_counter(int device_num)
+{
+    device_progress_counter[device_num] = 0;
+}
+
+int get_progress_counter(int device_num)
+{
+    return device_progress_counter[device_num];
+}
+
+int schedule_migrated_task(parsec_execution_stream_t* es, parsec_task_t *task)
+{
+    parsec_list_push_back(&received_task_fifo, (parsec_list_item_t *)task);
+    return 1;
+}
+
+parsec_task_t* select_migrated_task(parsec_execution_stream_t* es)
+{
+    parsec_task_t *task = NULL;
+
+    task = (parsec_task_t *)parsec_list_pop_front(&received_task_fifo);
+    return task;
+}
+
+int progress_migrated_task(parsec_execution_stream_t* es)
+{
+    parsec_task_t *task = NULL;
+
+    task = (parsec_task_t *)select_migrated_task(&received_task_fifo);
+
+    if(NULL != task)
+    {
+        __parsec_task_progress(es, task, 1);
+        return 1;
+    }
+
+    return 0;
+    
 }
 
 static int
@@ -438,6 +496,8 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     int array_pos = 0;
     int array_mask = 0;
     int current_mask = 0;
+    int k = 0;
+    int max_index = 0;
    
     req_msg = (steal_request_msg_t *)msg;
 
@@ -475,6 +535,28 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             {
                 last_victim = -1;
             }
+
+            /** Find if there is a successfull node in the neighbourhood
+             * of the last victim. Ideally we should search for the successfull
+             * node. But if the total nodes are large, this may be a costly operation.
+            */
+            max_index = (array_pos == (nb_nodes / MAX_NODES_INDEX) )   /** last victim is the same index as the nb_nodes*/
+                        ? (nb_nodes % RANKS_PER_INDEX) /** Index is limited to the index of the nb_nodes  */
+                        : MAX_NODES_INDEX; /** use the max index*/
+            array_pos = last_victim / MAX_NODES_INDEX;
+
+            for(k = 0;  k < max_index; k++)
+            {
+                array_mask = 0;
+                array_mask |= (1 << k);
+                current_mask = steal_request->msg.successful_victims[array_pos];
+
+                if( (current_mask & array_mask) > 0)
+                {
+                    last_victim = (array_pos * RANKS_PER_INDEX) + k;
+                    break;
+                }
+            }
         }
 
 
@@ -484,7 +566,6 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     else
     {
         parsec_list_push_back(&steal_req_fifo, (parsec_list_item_t *)steal_request);
-        parsec_atomic_fetch_inc_int32(&nb_steal_request_received);
 
         if (parsec_runtime_node_migrate_stats)
             parsec_node_mig_inc_req_recvd();
@@ -512,80 +593,84 @@ int process_steal_request(parsec_execution_stream_t *es)
     migrated_node_level_task_t *mig_task = NULL;
     int array_pos = 0;
     int array_mask = 0;
-    int can_migrate = 0;
-
-    steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
     
-    parsec_list_t *ring = PARSEC_OBJ_NEW(parsec_list_t);
-    PARSEC_OBJ_RETAIN(ring);
-
-    if (NULL != steal_request)
+    if (0 != process_steal_request_mutex /* someone already processing*/
+        || parsec_list_nolock_is_empty(&steal_req_fifo) /* no steal request*/
+    )
     {
-        assert(0 <= steal_request->msg.root && steal_request->msg.root < nb_nodes);
-        assert(0 <= steal_request->msg.src  && steal_request->msg.src < nb_nodes);
-        assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
-
+        return PARSEC_HOOK_RETURN_ASYNC;
+    }
     
-    #if defined(PARSEC_PROF_TRACE)
+    if (!parsec_atomic_cas_int32(&process_steal_request_mutex, 0, 1))
+    {  
+        return PARSEC_HOOK_RETURN_ASYNC;
+    }
+    
+    do
+    {
+        steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
 
-        steal_req_prof_t steal_prof;
-        double ready_tasks = 0;
-
-        parsec_profiling_trace_flags(es->es_profile,parsec_steal_req_recv_start,
-            (uint64_t)steal_request, parsec_device_cuda_enabled, NULL, 0);
-
-
-        for (d = 0; d < parsec_device_cuda_enabled; d++)
+        if(NULL == steal_request)
         {
-            gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));            
-            ready_tasks += gpu_device->mutex; 
+            break;
         }
+    
+        parsec_list_t *ring = PARSEC_OBJ_NEW(parsec_list_t);
+        PARSEC_OBJ_RETAIN(ring);
 
-        steal_prof.gpu_tasks = ready_tasks;
-        steal_prof.recv_time = time_stamp();
-
-        parsec_profiling_trace_flags(es->es_profile,bparsec_steal_req_recv_end,
-            (uint64_t)steal_request, parsec_device_cuda_enabled, &steal_prof, 0);
-
-    #endif
-
-        parsec_atomic_fetch_add_int32(&nb_steal_request_received, -1);
-        if (parsec_runtime_node_migrate_stats)
+        if (NULL != steal_request)
         {
-            parsec_node_mig_inc_req_processed();
-        }
+            assert(0 <= steal_request->msg.root && steal_request->msg.root < nb_nodes);
+            assert(0 <= steal_request->msg.src  && steal_request->msg.src < nb_nodes);
+            assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
 
-        tasks_requested = steal_request->msg.nb_task_request;
+            tasks_requested = steal_request->msg.nb_task_request;
 
-        if (1 == process_steal_request_mutex)
-        {
-            can_migrate = 0;
-        }
-        else
-        {
-            if (parsec_atomic_cas_int32(&process_steal_request_mutex, 0, 1))
-            {  
-                can_migrate = 1;
-            }
-            else
+        #if defined(PARSEC_PROF_TRACE)
+
+            steal_req_prof_t steal_prof;
+            double ready_tasks = 0;
+
+            parsec_profiling_trace_flags(es->es_profile,parsec_steal_req_recv_start,
+                (uint64_t)steal_request, parsec_device_cuda_enabled, NULL, 0);
+
+
+            for (d = 0; d < parsec_device_cuda_enabled; d++)
             {
-                can_migrate = 0;
+                gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));            
+                ready_tasks += gpu_device->mutex; 
             }
-        }
-        
 
-        can_migrate = 0;
-        if(1 == can_migrate)
-        {
+            steal_prof.gpu_tasks = ready_tasks;
+            steal_prof.recv_time = time_stamp();
+
+            parsec_profiling_trace_flags(es->es_profile,bparsec_steal_req_recv_end,
+                (uint64_t)steal_request, parsec_device_cuda_enabled, &steal_prof, 0);
+
+        #endif
+
+            if (parsec_runtime_node_migrate_stats)
+            {
+                parsec_node_mig_inc_req_processed();
+            }
+        
+        
             for (d = 0; d < nb_cuda_devices; d++)
             {
+                if( 0 != active_steal_request_mutex /* I am a thief */)
+                    break;
+                    
                 device_selected = 0;
                 gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-                if (gpu_device->mutex > (parsec_runtime_starvation_policy + 1))
+                if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > (6 * parsec_runtime_starvation_policy) ) )
                 {
                     list = &(gpu_device->pending);
-                    parsec_list_lock(list);
+                    //parsec_list_lock(list);
+                    if( !parsec_atomic_trylock( &list->atomic_lock ) ) 
+                    {
+                        continue;
+                    }
 
                     for (item = PARSEC_LIST_ITERATOR_FIRST(list);
                          (PARSEC_LIST_ITERATOR_END(list) != item);
@@ -598,7 +683,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                         {
                             item = parsec_list_nolock_remove(list, item);
                             PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
-                            parsec_list_push_back(ring, (parsec_list_item_t *)gpu_task);
+                            parsec_list_nolock_push_back(ring, (parsec_list_item_t *)gpu_task);
 
                             parsec_node_mig_inc_selected();
                             total_selected++;
@@ -611,25 +696,31 @@ int process_steal_request(parsec_execution_stream_t *es)
                                 break;
                             }
                         }
-                        else
-                        {
-                            break;
-                        }
                     }
                 
                     rc = parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
                     parsec_atomic_fetch_add_int32( &(gpu_device->wt_tasks), (-1 * device_selected));
 
-                    parsec_list_unlock(list);
+                    if(device_selected > 0)
+                    {
+                        unset_progress_counter(d);
+                    }
+
+                    //parsec_list_unlock(list);
+                    parsec_atomic_unlock( &list->atomic_lock );
                 }
 
                 if (parsec_runtime_node_migrate_stats)
+                {
                     parsec_node_mig_inc_searches();
+                }
 
                 if (total_selected == tasks_requested)
                 {
                     if (parsec_runtime_node_migrate_stats)
+                    {
                         parsec_node_mig_inc_full_yield();
+                    }
 
                     break;
                 }
@@ -639,102 +730,50 @@ int process_steal_request(parsec_execution_stream_t *es)
             {
                 parsec_node_mig_inc_success_req_processed();
             }
-        } 
-    }
-
-    while (!parsec_list_nolock_is_empty(ring))
-    {
-        gpu_task = NULL;
-        gpu_task = (parsec_gpu_task_t *)parsec_list_pop_front(ring);
-
-        if (NULL != gpu_task)
-        {
-            send_selected_task_details(es, gpu_task->ec, steal_request->msg.root);
+         
         }
-    }
 
-    if( NULL != steal_request)
-    {
-        if( total_selected > 0)
+        while (!parsec_list_nolock_is_empty(ring))
         {
+            gpu_task = NULL;
+            gpu_task = (parsec_gpu_task_t *)parsec_list_nolock_pop_front(ring);
+
+            if (NULL != gpu_task)
+            {
+                send_selected_task_details(es, gpu_task->ec, steal_request->msg.root);
+            }
+        }
+
+        if( NULL != steal_request)
+        {
+            if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM */
+            {
+                array_pos = my_rank / MAX_NODES_INDEX;
+                array_mask = 1 << (my_rank % RANKS_PER_INDEX);
+
+                if( total_selected == tasks_requested)
+                {
+                    /** mark this node a successfull s*/
+                    steal_request->msg.successful_victims[array_pos] |= array_mask;
+                }
+                else if( 0 == total_selected)
+                {
+                    /** mark this node as failure */
+                    steal_request->msg.failed_victims[array_pos] |= array_mask;
+                }
+            }
+
             steal_request->msg.nb_task_request -= total_selected;
 
-            if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM */
-            {
-                array_pos = my_rank / MAX_NODES_INDEX;
-                array_mask = 1 << (my_rank % RANKS_PER_INDEX);
-
-                /** mark this node a successfull s*/
-                steal_request->msg.successful_victims[array_pos] |= array_mask;
-            }
-
-        }
-        else
-        {
-            if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM */
-            {
-                array_pos = my_rank / MAX_NODES_INDEX;
-                array_mask = 1 << (my_rank % RANKS_PER_INDEX);
-
-                /** mark this node as failure */
-                steal_request->msg.failed_victims[array_pos] |= array_mask;
-            }
-
+            progress_steal_request(es, steal_request);
+            PARSEC_OBJ_RELEASE(steal_request);
         }
 
-        progress_steal_request(es, steal_request);
-        PARSEC_OBJ_RELEASE(steal_request);
-    }
+        PARSEC_OBJ_RELEASE(ring);
+    } while( (1 == parsec_migration_engine_up) );
 
-    if(1 == can_migrate)
-    {
-        process_steal_request_mutex = 0;
-    }
-
-    PARSEC_OBJ_RELEASE(ring);
+    process_steal_request_mutex = 0;
     return 1;
-}
-
-int migrate_single_task(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_task)
-{
-    steal_request_t *steal_request = NULL;
-    parsec_task_t *task = NULL;
-
-    if ( (gpu_task->task_type != PARSEC_GPU_TASK_TYPE_KERNEL) || 
-         (gpu_task->ec->mig_status == PARSEC_MIGRATED_TASK) || 
-        (node_info->nb_task_migrated > 1) 
-    )
-    {
-        return 0;
-    }
-
-    steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
-
-    if (NULL != steal_request)
-    {
-        assert(0 <= steal_request->msg.root && steal_request->msg.root < nb_nodes);
-        assert(0 <= steal_request->msg.src  && steal_request->msg.src < nb_nodes);
-        assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
-
-        parsec_atomic_fetch_add_int32(&nb_steal_request_received, -1);
-        if (parsec_runtime_node_migrate_stats)
-        {
-            parsec_node_mig_inc_req_processed();
-        }
-
-        send_selected_task_details(es, gpu_task->ec, steal_request->msg.root);
-
-        parsec_node_mig_inc_success_req_processed();
-        
-        steal_request->msg.nb_task_request--;
-        progress_steal_request(es, steal_request);
-
-        PARSEC_OBJ_RELEASE(steal_request);
-
-        return 1;
-    }
-
-    return 0;
 }
 
 
@@ -882,6 +921,7 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         {
             steal_request_msg.dst = last_victim;
         }
+        steal_request_msg.hop_count -= 1;
 
     }
     else if (3 == parsec_runtime_steal_request_policy) /* RING HOPS */
@@ -937,8 +977,6 @@ int initiate_steal_request(parsec_execution_stream_t *es)
     return 0;
 }
 
-//int nb_starving_detected  = 0;
-
 int send_steal_request(parsec_execution_stream_t *es)
 {
     int i, rc;
@@ -964,13 +1002,13 @@ int send_steal_request(parsec_execution_stream_t *es)
 
 #endif
 
-    if (parsec_migration_engine_up == 0 || active_steal_request_mutex != 0)
+    if (parsec_migration_engine_up == 0 
+        || active_steal_request_mutex != 0 /** steal request already sent */
+        || !parsec_list_nolock_is_empty(&received_task_fifo) /** there are migrated task to process */
+    )
+    {
         return PARSEC_HOOK_RETURN_ASYNC;
-
-    //parsec_atomic_fetch_inc_int32(&nb_starving_detected);
-    //if(nb_starving_detected < 48)
-    //    return PARSEC_HOOK_RETURN_ASYNC;
-    //nb_starving_detected  = 0;
+    }
 
     rc = active_steal_request_mutex;
 
@@ -1030,36 +1068,22 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
         }
         else if (2 == parsec_runtime_steal_request_policy) /* LAST VICTIM*/
         {
-            do
-            {
-                try++;
+            
+            steal_request->msg.hop_count -= 1;
 
+            if (0 == steal_request->msg.hop_count)
+            {
+                steal_request->msg.dst = steal_request->msg.root;
+            }
+            else
+            {
                 victim_rank = rand() % nb_nodes;
                 if (victim_rank == my_rank)
                 {
                     victim_rank = (victim_rank + 1) % nb_nodes;
                 }
 
-                array_pos = victim_rank / MAX_NODES_INDEX;
-                current_mask = steal_request->msg.failed_victims[array_pos];
-                array_mask  = 0;
-                array_mask |= 1 << (victim_rank % RANKS_PER_INDEX);
-                
-
-                /** In the past this node was a failure */
-                if( (current_mask & array_mask) > 0)
-                {
-                    steal_request->msg.dst = steal_request->msg.root;
-                }
-                /** In the past this node was not a failure or it was never visited*/
-                else
-                {
-                    steal_request->msg.dst = victim_rank;
-                    break;
-                }
-
-            } while (try < 5);
-            
+            }
         }
         else if (3 == parsec_runtime_steal_request_policy) /* RING HOPS */
         {
@@ -1528,7 +1552,9 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     parsec_list_item_singleton((parsec_list_item_t *)task);
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
     task->chore_mask = PARSEC_DEV_ALL;
-    __parsec_schedule(es, task, distance);
+
+    //__parsec_schedule(es, task, distance);
+    schedule_migrated_task(es, task);
 
     if (parsec_runtime_node_migrate_stats)
         parsec_node_mig_inc_task_recvd();
