@@ -11,8 +11,11 @@
 #include <pthread.h> 
 #include "parsec/parsec_comm_engine.h"
 
-#define ACTIVATE_MSG_SIZE sizeof(remote_dep_wire_activate_t)
-#define STEAL_REQ_MSG_SIZE    sizeof(steal_request_msg_t)
+#define SINGLE_ACTIVATE_MSG_SIZE sizeof(remote_dep_wire_activate_t)
+#define MAX_CHUNK_SIZE           20
+#define MAX_ACTIVATE_MSG_SIZE    (MAX_CHUNK_SIZE * SINGLE_ACTIVATE_MSG_SIZE)
+#define STEAL_REQ_MSG_SIZE       sizeof(steal_request_msg_t)
+
 
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
