@@ -18,6 +18,7 @@ extern int parsec_runtime_node_migrate_stats;
 extern int parsec_runtime_skew_distribution;
 extern int parsec_runtime_starving_devices;
 extern int parsec_runtime_hop_count;
+extern int parsec_runtime_progress_count;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 
@@ -669,7 +670,7 @@ int process_steal_request(parsec_execution_stream_t *es)
             device_selected = 0; /** reset for each device */
             gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-            if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > (6 * parsec_runtime_starvation_policy) ) )
+            if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > parsec_runtime_progress_count ) )
             {
                 list = &(gpu_device->pending);
                 if( !parsec_atomic_trylock( &list->atomic_lock ) ) 
