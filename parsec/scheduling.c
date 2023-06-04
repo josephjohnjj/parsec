@@ -615,6 +615,7 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
     parsec_task_t* task;
     int nbiterations = 0, distance, rc;
     struct timespec rqtp;
+    int did_some_work = 0;
 
     rqtp.tv_sec = 0;
     misses_in_a_row = 1;
@@ -689,6 +690,7 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
             nanosleep(&rqtp, NULL);
         }
         misses_in_a_row++;  /* assume we fail to extract a task */
+        did_some_work  = 0;
 
         /**
          * @brief This function will force a thread to be a manager thread,
@@ -696,14 +698,22 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
          * This will also ensure that a migrated task gets priority in execution
          * when compared to a new task. 
          */
-        parsec_cuda_mig_task_dequeue(es);
+        rc = parsec_cuda_mig_task_dequeue(es);
+        if(1 == rc)
+        {
+            did_some_work++; 
+        }
 
         /**
          * Progress migrated task received from another node.
         */
         if(parsec_migration_engine_up ==  1)
         {
-            progress_migrated_task(es);
+            rc = progress_migrated_task(es);
+            if(1 == rc)
+            {
+                did_some_work++; 
+            }
         }
         
         if( NULL == (task = es->next_task) ) {
@@ -718,12 +728,18 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         }
 
         if( task != NULL ) {
-            misses_in_a_row = 0;  /* reset the misses counter */
-
             rc = __parsec_task_progress(es, task, distance);
-            (void)rc;  /* for now ignore the return value */
+            if(1 == rc)
+            {
+                did_some_work++; 
+            }
 
             nbiterations++;
+        }
+
+        if( did_some_work > 0 )
+        {
+            misses_in_a_row = 0;  /* reset the misses counter */
         }
 
         /**
