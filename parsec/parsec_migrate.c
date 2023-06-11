@@ -376,6 +376,8 @@ int parsec_node_stats_fini()
     printf("Chunk size                      : %d \n", parsec_runtime_chunk_size); 
     printf("Starving policy (#device)       : %d \n", parsec_runtime_starving_devices); 
     printf("Starvation policy (#tasks)      : %d \n", parsec_runtime_starvation_policy);
+    printf("Progress count (#tasks)         : %d \n", parsec_runtime_progress_count);
+    printf("\n");
     
     if (0 == parsec_runtime_steal_request_policy) {
         printf("Steal req policy                : Ring \n");
@@ -1492,13 +1494,14 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
     task->chore_mask = PARSEC_DEV_ALL;
 
+    /** increment task count in this node */
+    parsec_atomic_fetch_add_int32(&nb_tasks_received, 1);
+
     schedule_migrated_task(es, task);
 
     if (parsec_runtime_node_migrate_stats) {
         parsec_node_mig_inc_task_recvd();
     }
-
-    parsec_atomic_fetch_add_int32(&nb_tasks_received, 1);
 
     remote_deps_free(origin);
 
