@@ -959,7 +959,7 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_hop_count);
     parsec_mca_param_reg_int_name("runtime", "hop_count", "Hop count for steal requests",
                                 false, false, 0, &parsec_runtime_hop_count);
-    parsec_mca_param_reg_int_name("runtime", "hprogress_count", "Progress count per device",
+    parsec_mca_param_reg_int_name("runtime", "progress_count", "Progress count per device",
                                 false, false, 10, &parsec_runtime_progress_count);
                                 
 
