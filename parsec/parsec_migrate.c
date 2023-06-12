@@ -45,9 +45,6 @@ volatile int32_t active_steal_request_mutex = 0;
  **/
 volatile int32_t process_steal_request_mutex = 0;
 
-/** Keep track of the total tasks recieved for the current active steal request*/
-volatile int32_t nb_tasks_received = 0; 
-
 /** Keep track of the last victim to which the steal req was send*/
 volatile int last_victim = -1;
 
@@ -1494,17 +1491,14 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
     task->chore_mask = PARSEC_DEV_ALL;
 
-    /** increment task count in this node */
-    parsec_atomic_fetch_add_int32(&nb_tasks_received, 1);
-
-    schedule_migrated_task(es, task);
-
     if (parsec_runtime_node_migrate_stats) {
         parsec_node_mig_inc_task_recvd();
     }
 
-    remote_deps_free(origin);
+    /** schedule the migrated tasks */
+    schedule_migrated_task(es, task);
 
+    remote_deps_free(origin);
     return 0;
 }
 
