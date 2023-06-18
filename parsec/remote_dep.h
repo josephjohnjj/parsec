@@ -46,6 +46,7 @@ typedef struct remote_dep_wire_activate_s {
     uint32_t             length;
     parsec_assignment_t  locals[MAX_LOCAL_COUNT];
     uint32_t             root;
+    parsec_dependency_t  sources;
 } remote_dep_wire_activate_t;
 
 typedef struct remote_dep_wire_get_s {

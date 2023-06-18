@@ -804,6 +804,9 @@ parsec_remote_deps_t* prepare_task_details_msg(parsec_execution_stream_t *es, pa
     /** one task details  size. It is important to set this here, so as to be used on the receiver */
     deps->msg.length = dsize; 
 
+    /** copy the flow sources of this task*/
+    deps->msg.sources = this_task->sources;
+
     if( (length - saved_position) < dsize ) {
         printf("There is something wrong with the buffer allocation length = %d, position %d, dsize = %d \n", 
         length, *position, dsize);
@@ -1484,6 +1487,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     task->repo_entry = NULL;
     task->mig_status = PARSEC_MIGRATED_TASK;
     task->status = PARSEC_TASK_STATUS_EVAL; /** Skip the prepare input step */
+    task->sources = origin->msg.sources;
 
     for (flow_index = 0; flow_index < task->task_class->nb_flows; flow_index++) {
         task->data[flow_index].source_repo = NULL;
@@ -1769,27 +1773,21 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     return 0;
 }
 
-parsec_ontask_iterate_t
-send_task_mapping_info(parsec_execution_stream_t *eu,
-                                 const parsec_task_t *newcontext,
-                                 const parsec_task_t *oldcontext,
-                                 const parsec_dep_t* dep,
-                                 parsec_dep_data_description_t* out_data,
-                                 int my_rank, int predecessor_rank, int dst_vpid,
-                                 data_repo_t *successor_repo, parsec_key_t successor_repo_key,
-                                 void *param)
-{
-    mig_task_mapping_info_t *mapping_info = (mig_task_mapping_info_t *)param;
 
-    oldcontext->taskpool->tdm.module->outgoing_message_start(oldcontext->taskpool, mapping_info->mig_rank, NULL);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, predecessor_rank, mapping_info, MAPPING_INFO_SIZE);
+int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
+    mig_task_mapping_info_t *mapping_info, int src)
+                                 
+{
+    task->taskpool->tdm.module->outgoing_message_start(task->taskpool, mapping_info->mig_rank, NULL);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, src, mapping_info, MAPPING_INFO_SIZE);
 
     return 0;
 }
 
 int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_task_t *task)
 {
-    int local_mask = 0;
+    int src_rank = 0;
+    int32_t source_mask = task->sources;
     mig_task_mapping_info_t mapping_info;
 
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
@@ -1797,14 +1795,13 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     mapping_info.task_class_id  = task->task_class->task_class_id;
     mapping_info.taskpool_id    = task->taskpool->taskpool_id;
 
-    int flow_index = 0;
-    for (flow_index = 0; flow_index < task->task_class->nb_flows; flow_index++)
-    {
-        local_mask = (1U << task->task_class->in[flow_index]->flow_index) | 0x80000000U;
+    for (src_rank = 0; source_mask >> src_rank; src_rank++) {
+
+        if (!((1U << src_rank) & source_mask)) {
+            continue;
+        }
+        send_task_mapping_info(es, task, &mapping_info, src_rank);
     }
 
-    task->task_class->iterate_predecessors(es, (parsec_task_t *)task,
-        local_mask, send_task_mapping_info, &mapping_info);
-
-    return PARSEC_ITERATE_CONTINUE;
+    return 0;
 }
