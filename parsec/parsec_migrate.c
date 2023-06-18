@@ -57,6 +57,10 @@ int* device_progress_counter = NULL;
 /** hashtable for storing task mapping */
 static parsec_hash_table_t *task_map_ht = NULL; 
 
+/** hashtable for storing details of received tasks */
+static parsec_hash_table_t *received_task_ht = NULL; 
+
+
 static parsec_key_fn_t node_task_mapping_table_generic_key_fn = {
     .key_equal = parsec_hash_table_generic_64bits_key_equal,
     .key_hash = parsec_hash_table_generic_64bits_key_hash,
@@ -302,6 +306,10 @@ int parsec_node_migrate_init(parsec_context_t *context)
     task_map_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
     parsec_hash_table_init(task_map_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
         node_task_mapping_table_generic_key_fn, NULL);
+
+    received_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+    parsec_hash_table_init(received_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
+        node_task_mapping_table_generic_key_fn, NULL);
     
     return 0;
 }
@@ -450,6 +458,12 @@ int parsec_node_migrate_fini()
     parsec_hash_table_fini(task_map_ht);
     PARSEC_OBJ_RELEASE(task_map_ht);
     task_map_ht = NULL;
+
+    parsec_hash_table_for_all(received_task_ht, task_mapping_free_elt, 
+        received_task_ht);
+    parsec_hash_table_fini(received_task_ht);
+    PARSEC_OBJ_RELEASE(received_task_ht);
+    received_task_ht = NULL;
 
     return parsec_migration_engine_up;
 }
@@ -1528,6 +1542,9 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         send_task_mapping_info_to_predecessor(es, task);
     }
 
+    /** add migrated task details to the hash table */
+    insert_received_tasks_details(task);
+
     /** schedule the migrated tasks */
     schedule_migrated_task(es, task);
 
@@ -1810,4 +1827,39 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     }
 
     return 0;
+}
+
+int insert_received_tasks_details(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+
+    /**
+     * @brief Entry NULL imples that this task has never been received
+     * till now in any of the iteration. So we start a new entry.
+     */
+    if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key)))
+    {
+        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
+        item->ht_item.key = key;
+        parsec_hash_table_lock_bucket(received_task_ht, key);
+        parsec_hash_table_nolock_insert(received_task_ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(received_task_ht, key);
+    }
+    return 1;
+}
+
+int find_received_tasks_details(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key))) {
+        return 0;
+    }
+
+    return 1;
 }

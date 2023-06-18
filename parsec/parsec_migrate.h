@@ -118,4 +118,5 @@ int increment_progress_counter(int device_num);
 int unset_progress_counter(int device_num);
 int get_progress_counter(int device_num);
 int get_task_mapping(parsec_task_t *task);
+int find_received_tasks_details(parsec_task_t *task);
 #endif

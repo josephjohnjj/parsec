@@ -736,8 +736,12 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 {
     (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
     (void)successor_repo; (void) successor_repo_key;
-    if( dst_rank != eu->virtual_process->parsec_context->my_rank )
-        return PARSEC_ITERATE_CONTINUE;
+
+    if( dst_rank != eu->virtual_process->parsec_context->my_rank ) {
+        if(!find_received_tasks_details(newcontext)){
+            return PARSEC_ITERATE_CONTINUE;
+        }
+    }
 
     parsec_remote_deps_t *deps               = (parsec_remote_deps_t*)param;
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
@@ -780,6 +784,11 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     deps->incoming_mask |= (1U << dep->dep_datatype_index);
     //assert(deps->root == src_rank);
     //deps->root           = src_rank;
+
+    if( dst_rank != eu->virtual_process->parsec_context->my_rank ) {
+        //return PARSEC_ITERATE_CONTINUE;
+        printf("This task was migrated %d \n", deps->incoming_mask);
+    }
 
     if(output->data.remote.dst_count == 0){
         /* control dep */
