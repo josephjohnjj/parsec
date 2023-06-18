@@ -19,6 +19,7 @@ extern int parsec_runtime_skew_distribution;
 extern int parsec_runtime_starving_devices;
 extern int parsec_runtime_hop_count;
 extern int parsec_runtime_progress_count;
+extern int parsec_runtime_task_mapping;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 
@@ -53,6 +54,17 @@ volatile int last_victim = -1;
 */
 int* device_progress_counter = NULL;
 
+/** hashtable for storing task mapping */
+static parsec_hash_table_t *task_map_ht = NULL; 
+
+static parsec_key_fn_t node_task_mapping_table_generic_key_fn = {
+    .key_equal = parsec_hash_table_generic_64bits_key_equal,
+    .key_hash = parsec_hash_table_generic_64bits_key_hash,
+    .key_print = parsec_hash_table_generic_64bits_key_print};
+
+int get_task_mapping(parsec_task_t *task);
+int update_task_mapping(parsec_key_t key, int new_rank);
+static void task_mapping_free_elt(void *_item, void *table);
 
 parsec_node_info_t *node_info; /** stats on migration in a node */
 static int my_rank, nb_nodes;
@@ -87,6 +99,8 @@ parsec_remote_deps_t*  prepare_task_details_msg(parsec_execution_stream_t *es, p
 int  migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_task);
 int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request);
 int get_gpu_wt_tasks(parsec_device_gpu_module_t * device);
+static int update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+                         void *msg, size_t msg_size, int src, void *cb_data);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -94,15 +108,6 @@ PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
 int parsec_node_mig_inc_gpu_task_executed()
 {
     parsec_atomic_fetch_inc_int32(&(node_info->nb_gpu_tasks_executed));
-    return node_info->nb_gpu_tasks_executed;
-}
-
-int print_stats()
-{
-    printf("Node %d: GPU tasks exec %d CPU task exec %d Migrated tasks %d Recvd task %d active %d \n", 
-        my_rank, node_info->nb_gpu_tasks_executed, node_info->nb_cpu_tasks_executed, 
-        node_info->nb_task_migrated, node_info->nb_task_recvd, active_steal_request_mutex);
-        
     return node_info->nb_gpu_tasks_executed;
 }
 
@@ -255,6 +260,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
     rc = parsec_ce.tag_register(PARSEC_MIG_STEAL_REQUEST_TAG, recieve_steal_request, context,
                                 STEAL_REQ_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
@@ -263,11 +269,20 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
     rc = parsec_ce.tag_register(PARSEC_MIG_DEP_GET_DATA_TAG, migrate_dep_mpi_save_put_cb, context,
                                 4096);
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_GET_DATA_TAG (error %d)\n", rc);
         parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_INFORM_PREDECESSOR_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -283,6 +298,10 @@ int parsec_node_migrate_init(parsec_context_t *context)
     PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&received_task_fifo, parsec_list_t);
+
+    task_map_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+    parsec_hash_table_init(task_map_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
+        node_task_mapping_table_generic_key_fn, NULL);
     
     return 0;
 }
@@ -298,6 +317,7 @@ int parsec_steal_req_send_end;
 int parsec_steal_req_init_start;
 int parsec_steal_req_init_end;
 
+#if defined(PARSEC_PROF_TRACE)
 static void node_profiling_init()
 {
     parsec_profiling_add_dictionary_keyword("NODE_GPU_TASK_COUNT", "fill:#FF0000", sizeof(node_prof_t), "ready_tasks{double};complete_time{double}",
@@ -315,6 +335,7 @@ static void node_profiling_init()
     parsec_profiling_add_dictionary_keyword("REQ_INIT", "fill:#FF0000", sizeof(steal_req_prof_t), "req_mutex{double};req_init_time{double}",
                                             &parsec_steal_req_init_start, &parsec_steal_req_init_end);
 }
+#endif
 
 int parsec_node_stats_init(parsec_context_t *context)
 {
@@ -424,17 +445,25 @@ int parsec_node_migrate_fini()
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
     free(device_progress_counter);
 
+    parsec_hash_table_for_all(task_map_ht, task_mapping_free_elt, 
+        task_map_ht);
+    parsec_hash_table_fini(task_map_ht);
+    PARSEC_OBJ_RELEASE(task_map_ht);
+    task_map_ht = NULL;
+
     return parsec_migration_engine_up;
 }
 
 int increment_progress_counter(int device_num)
 {
     device_progress_counter[device_num]++;
+    return device_progress_counter[device_num];
 }
 
 int unset_progress_counter(int device_num)
 {
     device_progress_counter[device_num] = 0;
+    return 0;
 }
 
 int get_progress_counter(int device_num)
@@ -1387,12 +1416,8 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
 }
 
 static int
-get_mig_task_data_cb(parsec_comm_engine_t *ce,
-                     parsec_ce_tag_t tag,
-                     void *msg,
-                     size_t msg_size,
-                     int src,
-                     void *cb_data)
+get_mig_task_data_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+                     void *msg, size_t msg_size, int src, void *cb_data)
 {
 
     (void)ce;
@@ -1429,8 +1454,7 @@ get_mig_task_data_cb(parsec_comm_engine_t *ce,
 
 static parsec_remote_deps_t *
 get_mig_task_data_complete(parsec_execution_stream_t *es,
-                           int idx,
-                           parsec_remote_deps_t *origin)
+                        int idx, parsec_remote_deps_t *origin)
 {
     int i = 0, pidx = 0, flow_index = 0, distance = 0;
     remote_dep_datakey_t complete_mask = (1U << idx);
@@ -1493,6 +1517,11 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     if (parsec_runtime_node_migrate_stats) {
         parsec_node_mig_inc_task_recvd();
+    }
+
+    if(parsec_runtime_task_mapping)
+    {
+        send_task_mapping_info_to_predecessor(es, task);
     }
 
     /** schedule the migrated tasks */
@@ -1672,4 +1701,110 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
 
     parsec_comm_puts--;
     return 1;
+}
+
+static void task_mapping_free_elt(void *_item, void *table)
+{
+    mig_task_mapping_item_t *item = (mig_task_mapping_item_t *)_item;
+    parsec_key_t key = item->ht_item.key;
+    parsec_hash_table_nolock_remove(table, key);
+    free(item);
+}
+
+
+int update_task_mapping(parsec_key_t key, int new_rank)
+{
+    mig_task_mapping_item_t *item;
+
+
+    /**
+     * @brief Entry NULL imples that this task has never been migrated
+     * till now in any of the iteration. So we start a new entry.
+     */
+    if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key)))
+    {
+
+        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
+        item->rank = new_rank;
+        item->ht_item.key = key;
+        parsec_hash_table_lock_bucket(task_map_ht, key);
+        parsec_hash_table_nolock_insert(task_map_ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(task_map_ht, key);
+
+        return 1;
+    }
+    else
+        item->ht_item.key = key;
+
+    return 0;
+}
+
+int get_task_mapping(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key)))
+        return -1;
+
+    return item->rank;
+}
+
+static int
+update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+                         void *msg, size_t msg_size, int src,
+                         void *cb_data)
+{
+   
+
+    mig_task_mapping_info_t *mapping_info = (mig_task_mapping_info_t *)msg;
+    assert( MAPPING_INFO_SIZE == msg_size );
+    parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info->taskpool_id);
+
+    taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
+    update_task_mapping(mapping_info->key, mapping_info->mig_rank);
+    taskpool->tdm.module->incoming_message_end(taskpool, NULL);
+    
+    return 0;
+}
+
+parsec_ontask_iterate_t
+send_task_mapping_info(parsec_execution_stream_t *eu,
+                                 const parsec_task_t *newcontext,
+                                 const parsec_task_t *oldcontext,
+                                 const parsec_dep_t* dep,
+                                 parsec_dep_data_description_t* out_data,
+                                 int my_rank, int predecessor_rank, int dst_vpid,
+                                 data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                                 void *param)
+{
+    mig_task_mapping_info_t *mapping_info = (mig_task_mapping_info_t *)param;
+
+    oldcontext->taskpool->tdm.module->outgoing_message_start(oldcontext->taskpool, mapping_info->mig_rank, NULL);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, predecessor_rank, mapping_info, MAPPING_INFO_SIZE);
+
+    return 0;
+}
+
+int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_task_t *task)
+{
+    int local_mask = 0;
+    mig_task_mapping_info_t mapping_info;
+
+    mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
+    mapping_info.mig_rank       = my_rank;
+    mapping_info.task_class_id  = task->task_class->task_class_id;
+    mapping_info.taskpool_id    = task->taskpool->taskpool_id;
+
+    int flow_index = 0;
+    for (flow_index = 0; flow_index < task->task_class->nb_flows; flow_index++)
+    {
+        local_mask = (1U << task->task_class->in[flow_index]->flow_index) | 0x80000000U;
+    }
+
+    task->task_class->iterate_predecessors(es, (parsec_task_t *)task,
+        local_mask, send_task_mapping_info, &mapping_info);
+
+    return PARSEC_ITERATE_CONTINUE;
 }

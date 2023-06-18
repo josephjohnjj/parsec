@@ -156,6 +156,8 @@ struct parsec_taskpool_s {
     parsec_update_ref_t         update_nb_runtime_task;
     void**                      dependencies_array; /**< Array of multidimensional dependencies
                                                      *   Indexed on the same index as task_classes_array */
+    void**                      sources_array;   /**< Array of predecessor ranks
+                                                     *   Indexed on the same index as task_classes_array */
     data_repo_t**               repo_array; /**< Array of data repositories
                                              *   Indexed on the same index as functions array */
 };
@@ -227,6 +229,13 @@ struct parsec_hashable_dependency_s {
     parsec_dependency_t       dependency;
 };
 typedef struct parsec_hashable_dependency_s parsec_hashable_dependency_t;
+
+
+struct parsec_hashable_sources_s {
+    parsec_hash_table_item_t  ht_item;
+    parsec_dependency_t       sources;
+};
+typedef struct parsec_hashable_sources_s parsec_hashable_sources_t;
 
 /**
  * Functions for DAG manipulation.
@@ -513,6 +522,7 @@ struct parsec_task_s {
 #endif
     parsec_data_pair_t         data[MAX_PARAM_COUNT];
     int                        mig_status;
+    parsec_dependency_t        sources;
 };
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(parsec_task_t);
 
@@ -647,15 +657,17 @@ void parsec_dependencies_mark_task_as_startup(parsec_task_t* task, parsec_execut
 
 int
 parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
-                                      const parsec_task_t* origin,
-                                      const parsec_flow_t* origin_flow,
-                                      const parsec_task_t* task,
-                                      const parsec_flow_t* dest_flow,
+                                      const parsec_task_t* restrict origin,
+                                      const parsec_flow_t* restrict origin_flow,
+                                      const parsec_task_t* restrict task,
+                                      const parsec_flow_t* restrict dest_flow,
                                       parsec_dep_data_description_t* data,
-                                      parsec_task_t** pready_ring,
+                                      parsec_release_dep_fct_arg_t *arg,
+                                      int dst_vpid,
                                       data_repo_t* target_repo,
                                       parsec_data_copy_t* target_dc,
-                                      data_repo_entry_t* target_repo_entry);
+                                      data_repo_entry_t* target_repo_entry,
+                                      int src_rank);
 
 /* Set internal TLS variable parsec_tls_execution_stream */
 void parsec_set_my_execution_stream(parsec_execution_stream_t *es);

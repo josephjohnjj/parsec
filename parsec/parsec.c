@@ -172,6 +172,7 @@ int parsec_runtime_skew_distribution      = 0;
 int parsec_runtime_print_completion_stats = 0;
 int parsec_runtime_hop_count              = 0;
 int parsec_runtime_progress_count         = 0;
+int parsec_runtime_task_mapping           = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -953,14 +954,14 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 1, &parsec_runtime_starving_devices);
     parsec_mca_param_reg_int_name("runtime", "skew_distribution", "Skew the data distribution",
                                 false, false, 0, &parsec_runtime_skew_distribution);
-    parsec_mca_param_reg_int_name("runtime", "print_completion_stats", "Print stats during completion of a task",
-                                false, false, 0, &parsec_runtime_print_completion_stats);
     parsec_mca_param_reg_int_name("runtime", "hop_count", "Hop count for steal requests",
                                 false, false, 0, &parsec_runtime_hop_count);
     parsec_mca_param_reg_int_name("runtime", "hop_count", "Hop count for steal requests",
                                 false, false, 0, &parsec_runtime_hop_count);
     parsec_mca_param_reg_int_name("runtime", "progress_count", "Progress count per device",
                                 false, false, 10, &parsec_runtime_progress_count);
+    parsec_mca_param_reg_int_name("runtime", "task_mapping", "Use task mapping",
+                                false, false, 0, &parsec_runtime_task_mapping);
                                 
 
     if( parsec_runtime_gdb_attach > 0 )
@@ -1605,6 +1606,46 @@ parsec_hash_find_deps(const parsec_taskpool_t *tp,
     return &hd->dependency;
 }
 
+parsec_dependency_t*
+parsec_hash_find_sources(const parsec_taskpool_t *tp,
+                      parsec_execution_stream_t *es,
+                      const parsec_task_t* restrict task)
+{
+    parsec_hashable_sources_t *hs;
+    parsec_key_handle_t kh;
+    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
+
+    parsec_key_t key = task->task_class->make_key(tp, task->locals);
+    assert(NULL != ht);
+    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
+    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
+    if( NULL == hs ) {
+        hs = (parsec_hashable_sources_t *) malloc(sizeof(parsec_hashable_sources_t));
+        hs->sources = (parsec_dependency_t)0;
+        hs->ht_item.key = key;
+        parsec_hash_table_nolock_insert_handle(ht, &kh, &hs->ht_item);
+    }
+    parsec_hash_table_unlock_bucket_handle(ht, &kh);
+    return &(hs->sources);
+}
+
+parsec_dependency_t
+parsec_update_sources(parsec_taskpool_t *tp, parsec_dependency_t *sources, int src)
+{
+    parsec_dependency_t source_new_value;
+
+    assert(NULL != sources);
+
+    if ( 0 != (*sources & (1 << src)) ) {
+        /** this source has already been set */
+        return *sources;
+    }
+
+    source_new_value = (*sources | (1 << src));
+    parsec_atomic_fetch_or_int32( sources, source_new_value );
+    return *sources;
+}
+
 int
 parsec_update_deps_with_counter(parsec_taskpool_t *tp,
                                 const parsec_task_t* restrict task,
@@ -1752,13 +1793,19 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                                       const parsec_task_t* restrict task,
                                       const parsec_flow_t* restrict dest_flow,
                                       parsec_dep_data_description_t* data,
-                                      parsec_task_t** pready_ring,
+                                      parsec_release_dep_fct_arg_t *arg,
+                                      int dst_vpid,
                                       data_repo_t* target_repo,
                                       parsec_data_copy_t* target_dc,
-                                      data_repo_entry_t* target_repo_entry)
+                                      data_repo_entry_t* target_repo_entry,
+                                      int src_rank)
 {
     const parsec_task_class_t* tc = task->task_class;
-    parsec_dependency_t *deps;
+    parsec_task_t** pready_ring = &arg->ready_lists[dst_vpid];
+    parsec_dependency_t *deps = NULL;
+    parsec_dependency_t *sources = NULL;
+    int source = -1;
+
     int completed;
 #if defined(PARSEC_DEBUG_NOISIER)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
@@ -1769,6 +1816,15 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
     deps = tc->find_deps(origin->taskpool, es, task);
 
     completed = tc->update_deps(origin->taskpool, task, deps, origin, origin_flow, dest_flow);
+
+    /** Find the sources of dataflow of the task */
+    sources = parsec_hash_find_sources(origin->taskpool, es, task);
+    assert(NULL != sources);
+    source = (NULL != arg->remote_deps) ?
+                arg->remote_deps->root : /** remote activation*/
+                src_rank; /** local activation */
+    /** Update the sources of dataflow of the task */
+    parsec_update_sources(origin->taskpool, sources, source);
 
 #if defined(PARSEC_PROF_GRAPHER)
     parsec_prof_grapher_dep(origin, task, completed, origin_flow, dest_flow);
@@ -1808,6 +1864,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             (void)data;
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
+            new_context->sources = *sources;
 
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
                 PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "  Task %s is immediate and will be executed ASAP", tmp1);
@@ -1901,7 +1958,9 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             PARSEC_ALLOCATE_REMOTE_DEPS_IF_NULL(arg->remote_deps, oldcontext, MAX_PARAM_COUNT);
             output = &arg->remote_deps->output[dep->dep_datatype_index];
             assert( (-1 == arg->remote_deps->root) || (arg->remote_deps->root == src_rank) );
-            arg->remote_deps->root = src_rank;
+            if(-1 == arg->remote_deps->root) {
+                arg->remote_deps->root = src_rank;
+            }
             arg->remote_deps->outgoing_mask |= (1 << dep->dep_datatype_index);
             if( !(output->rank_bits[_array_pos] & _array_mask) ) {
                 output->rank_bits[_array_pos] |= _array_mask;
@@ -1969,8 +2028,10 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
                                               newcontext,
                                               dep->flow,
                                               data,
-                                              &arg->ready_lists[dst_vpid],
-                                              target_repo, target_dc, target_repo_entry);
+                                              arg,
+                                              dst_vpid,
+                                              target_repo, target_dc, target_repo_entry,
+                                              src_rank);
     }
 
     return PARSEC_ITERATE_CONTINUE;
