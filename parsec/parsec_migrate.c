@@ -1749,16 +1749,16 @@ int get_task_mapping(parsec_task_t *task)
     mig_task_mapping_item_t *item;
 
     key = task->task_class->make_key(task->taskpool, task->locals);
-    if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key)))
+    if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key))) {
         return -1;
+    }
 
     return item->rank;
 }
 
 static int
 update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-                         void *msg, size_t msg_size, int src,
-                         void *cb_data)
+    void *msg, size_t msg_size, int src, void *cb_data)
 {
    
 
@@ -1800,7 +1800,13 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
         if (!((1U << src_rank) & source_mask)) {
             continue;
         }
-        send_task_mapping_info(es, task, &mapping_info, src_rank);
+
+        if(src_rank == my_rank){
+            update_task_mapping(mapping_info.key, mapping_info.mig_rank);          
+        }
+        else{
+            send_task_mapping_info(es, task, &mapping_info, src_rank);
+        }
     }
 
     return 0;

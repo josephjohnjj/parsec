@@ -1906,7 +1906,11 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     const parsec_flow_t* src_flow = dep->belongs_to;
     const parsec_flow_t* dst_flow = dep->flow;
 
-
+    int new_task_mapping = get_task_mapping(newcontext);
+    if( -1 != new_task_mapping) {
+        dst_rank = new_task_mapping;
+    }
+    
     data_repo_t        *target_repo = arg->output_repo;
     data_repo_entry_t  *target_repo_entry = arg->output_entry;
     parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];

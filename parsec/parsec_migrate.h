@@ -117,4 +117,5 @@ int progress_migrated_task(parsec_execution_stream_t* es);
 int increment_progress_counter(int device_num);
 int unset_progress_counter(int device_num);
 int get_progress_counter(int device_num);
+int get_task_mapping(parsec_task_t *task);
 #endif
