@@ -1842,6 +1842,10 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
 
+            if(parsec_runtime_task_mapping) {
+                new_context->sources = *sources;
+            }
+
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
                 PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "  Task %s is immediate and will be executed ASAP", tmp1);
                 __parsec_execute(es, new_context);

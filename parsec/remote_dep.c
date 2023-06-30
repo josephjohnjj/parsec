@@ -181,6 +181,7 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
     assert(NULL == remote_deps->taskpool);
     remote_deps->max_priority    = 0xffffffff;
     remote_deps->root            = -1;
+    remote_deps->from            = -1;
     remote_deps->pending_ack     = 0;
     remote_deps->incoming_mask   = 0;
     remote_deps->outgoing_mask   = 0;

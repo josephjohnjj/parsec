@@ -15,7 +15,7 @@
 #define MAX_CHUNK_SIZE           20
 #define MAX_ACTIVATE_MSG_SIZE    (MAX_CHUNK_SIZE * SINGLE_ACTIVATE_MSG_SIZE)
 #define STEAL_REQ_MSG_SIZE       sizeof(steal_request_msg_t)
-
+#define MAPPING_INFO_SIZE        sizeof(mig_task_mapping_info_t)
 
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
@@ -88,6 +88,14 @@ typedef struct mig_task_mapping_item_s
     parsec_hash_table_item_t ht_item;
     int rank;
 } mig_task_mapping_item_t;
+
+typedef struct mig_task_mapping_info_s
+{
+    parsec_key_t key;
+    int task_class_id;
+    int mig_rank;
+    int taskpool_id;
+} mig_task_mapping_info_t;
 
 int parsec_node_migrate_init(parsec_context_t* context );
 int parsec_node_migrate_fini();
