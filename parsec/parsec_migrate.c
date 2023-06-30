@@ -19,6 +19,7 @@ extern int parsec_runtime_skew_distribution;
 extern int parsec_runtime_starving_devices;
 extern int parsec_runtime_hop_count;
 extern int parsec_runtime_progress_count;
+extern int parsec_runtime_task_mapping;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 
@@ -53,11 +54,23 @@ volatile int last_victim = -1;
 */
 int* device_progress_counter = NULL;
 
-
 parsec_node_info_t *node_info; /** stats on migration in a node */
 static int my_rank, nb_nodes;
 PARSEC_OBJ_CLASS_INSTANCE(migrated_node_level_task_t, migrated_node_level_task_t, NULL, NULL);
 
+/** hashtable for storing task mapping */
+static parsec_hash_table_t *task_map_ht = NULL; 
+/** hashtable for storing details of received tasks */
+static parsec_hash_table_t *received_task_ht = NULL; 
+/** hashtable for storing details of migrated tasks */
+static parsec_hash_table_t *migrated_task_ht = NULL; 
+
+static parsec_key_fn_t node_task_mapping_table_generic_key_fn = {
+    .key_equal = parsec_hash_table_generic_64bits_key_equal,
+    .key_hash = parsec_hash_table_generic_64bits_key_hash,
+    .key_print = parsec_hash_table_generic_64bits_key_print};
+
+static void task_mapping_free_elt(void *_item, void *table);
 void *migrate_engine_main(parsec_taskpool_t *tp);
 static int recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
                                     void *msg, size_t msg_size, int src,
@@ -283,6 +296,20 @@ int parsec_node_migrate_init(parsec_context_t *context)
     PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&received_task_fifo, parsec_list_t);
+
+    if(parsec_runtime_task_mapping) {
+        task_map_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+        parsec_hash_table_init(task_map_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
+            node_task_mapping_table_generic_key_fn, NULL);
+
+        received_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+        parsec_hash_table_init(received_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
+            node_task_mapping_table_generic_key_fn, NULL);
+
+        migrated_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+        parsec_hash_table_init(migrated_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
+            node_task_mapping_table_generic_key_fn, NULL);
+    }
     
     return 0;
 }
@@ -423,6 +450,23 @@ int parsec_node_migrate_fini()
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
     free(device_progress_counter);
+
+    if(parsec_runtime_task_mapping) {
+        parsec_hash_table_for_all(task_map_ht, task_mapping_free_elt, task_map_ht);
+        parsec_hash_table_fini(task_map_ht);
+        PARSEC_OBJ_RELEASE(task_map_ht);
+        task_map_ht = NULL;
+
+        parsec_hash_table_for_all(received_task_ht, task_mapping_free_elt, received_task_ht);
+        parsec_hash_table_fini(received_task_ht);
+        PARSEC_OBJ_RELEASE(received_task_ht);
+        received_task_ht = NULL;
+
+        parsec_hash_table_for_all(migrated_task_ht, task_mapping_free_elt, migrated_task_ht);
+        parsec_hash_table_fini(migrated_task_ht);
+        PARSEC_OBJ_RELEASE(migrated_task_ht);
+        migrated_task_ht = NULL;
+    }
 
     return parsec_migration_engine_up;
 }
@@ -1712,4 +1756,12 @@ parsec_update_sources(parsec_taskpool_t *tp, parsec_dependency_t *sources, int s
     source_new_value = (*sources | (1 << src));
     parsec_atomic_fetch_or_int32( sources, source_new_value );
     return *sources;
+}
+
+static void task_mapping_free_elt(void *_item, void *table)
+{
+    mig_task_mapping_item_t *item = (mig_task_mapping_item_t *)_item;
+    parsec_key_t key = item->ht_item.key;
+    parsec_hash_table_nolock_remove(table, key);
+    free(item);
 }

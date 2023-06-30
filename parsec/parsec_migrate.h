@@ -83,6 +83,12 @@ typedef struct migrated_node_level_task_s
     int root;
 } migrated_node_level_task_t;
 
+typedef struct mig_task_mapping_item_s
+{
+    parsec_hash_table_item_t ht_item;
+    int rank;
+} mig_task_mapping_item_t;
+
 int parsec_node_migrate_init(parsec_context_t* context );
 int parsec_node_migrate_fini();
 int send_steal_request(parsec_execution_stream_t* es);
