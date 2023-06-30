@@ -1838,7 +1838,12 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             new_context->data[(int)dest_flow->flow_index].data_in   = target_dc;
             (void)data;
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
-            new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
+            if(-1 == find_received_tasks_details(new_context)) {
+                new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
+            }
+            else {
+               new_context->mig_status = PARSEC_MIGRATED_TASK; 
+            }
             new_context->sources = *sources;
 
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
