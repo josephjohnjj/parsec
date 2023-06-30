@@ -3756,6 +3756,9 @@ static void jdf_generate_internal_init(const jdf_t *jdf, const jdf_function_entr
             coutput("  __parsec_tp->super.super.dependencies_array[%d] = PARSEC_OBJ_NEW(parsec_hash_table_t);\n"
                     "  parsec_hash_table_init(__parsec_tp->super.super.dependencies_array[%d], offsetof(parsec_hashable_dependency_t, ht_item), 10, %s, this_task->taskpool);\n",
                     f->task_class_id, f->task_class_id, dep_key_fn_name);
+            coutput("  __parsec_tp->super.super.sources_array[%d] = PARSEC_OBJ_NEW(parsec_hash_table_t);\n"
+                    "  parsec_hash_table_init(__parsec_tp->super.super.sources_array[%d], offsetof(parsec_hashable_sources_t, ht_item), 10, %s, this_task->taskpool);\n",
+                    f->task_class_id, f->task_class_id, dep_key_fn_name);
             free(dep_key_fn_name);
             dep_key_fn_name = NULL;
         }
@@ -4511,18 +4514,31 @@ static void jdf_generate_destructor( const jdf_t *jdf )
                 coutput("  parsec_hash_table_fini( (parsec_hash_table_t*)__parsec_tp->super.super.dependencies_array[%d] );\n"
                         "  PARSEC_OBJ_RELEASE(__parsec_tp->super.super.dependencies_array[%d]);\n",
                         f->task_class_id, f->task_class_id);
+
+                coutput("  parsec_hash_table_fini( (parsec_hash_table_t*)__parsec_tp->super.super.sources_array[%d] );\n"
+                        "  PARSEC_OBJ_RELEASE(__parsec_tp->super.super.sources_array[%d]);\n",
+                        f->task_class_id, f->task_class_id);
             } 
         } else {
             coutput("  %s(__parsec_tp, __parsec_tp->super.super.dependencies_array[%d]);\n",
                     jdf_property_get_function(f->properties, JDF_PROP_UD_FREE_DEPS_FN_NAME, NULL),
                     f->task_class_id);
 
+            coutput("  %s(__parsec_tp, __parsec_tp->super.super.sources_array[%d]);\n",
+                    jdf_property_get_function(f->properties, JDF_PROP_UD_FREE_DEPS_FN_NAME, NULL),
+                    f->task_class_id);
+
         }
         coutput("  __parsec_tp->super.super.dependencies_array[%d] = NULL;\n",
+                f->task_class_id);
+        coutput("  __parsec_tp->super.super.sources_array[%d] = NULL;\n",
                 f->task_class_id);
     }
     coutput("  free( __parsec_tp->super.super.dependencies_array );\n"
             "  __parsec_tp->super.super.dependencies_array = NULL;\n");
+
+    coutput("  free( __parsec_tp->super.super.sources_array );\n"
+            "  __parsec_tp->super.super.sources_array = NULL;\n");
 
     if( JDF_COMPILER_GLOBAL_ARGS.dep_management == DEP_MANAGEMENT_INDEX_ARRAY ) {
         coutput("#if defined(PARSEC_PROF_TRACE)\n"
@@ -4591,6 +4607,8 @@ static void jdf_generate_constructor( const jdf_t* jdf )
             "                                                        parsec_taskpool_termination_detected);\n"
             "  __parsec_tp->super.super.update_nb_runtime_task = parsec_add_fetch_runtime_task;\n"
             "  __parsec_tp->super.super.dependencies_array = (void **)\n"
+            "              calloc(__parsec_tp->super.super.nb_task_classes, sizeof(void*));\n"
+            "  __parsec_tp->super.super.sources_array = (void **)\n"
             "              calloc(__parsec_tp->super.super.nb_task_classes, sizeof(void*));\n"
             "  /* Twice the size to hold the startup tasks function_t */\n"
             "  __parsec_tp->super.super.task_classes_array = (const parsec_task_class_t**)\n"

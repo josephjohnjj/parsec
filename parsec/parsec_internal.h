@@ -156,6 +156,8 @@ struct parsec_taskpool_s {
     parsec_update_ref_t         update_nb_runtime_task;
     void**                      dependencies_array; /**< Array of multidimensional dependencies
                                                      *   Indexed on the same index as task_classes_array */
+    void**                      sources_array;   /**< Array of predecessor ranks
+                                                     *   Indexed on the same index as task_classes_array */
     data_repo_t**               repo_array; /**< Array of data repositories
                                              *   Indexed on the same index as functions array */
 };
@@ -227,6 +229,12 @@ struct parsec_hashable_dependency_s {
     parsec_dependency_t       dependency;
 };
 typedef struct parsec_hashable_dependency_s parsec_hashable_dependency_t;
+
+struct parsec_hashable_sources_s {
+    parsec_hash_table_item_t  ht_item;
+    parsec_dependency_t       sources;
+};
+typedef struct parsec_hashable_sources_s parsec_hashable_sources_t;
 
 /**
  * Functions for DAG manipulation.
