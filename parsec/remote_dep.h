@@ -37,6 +37,7 @@ typedef unsigned long remote_dep_datakey_t;
 #define PARSEC_ACTION_RECV_INIT_REMOTE_DEPS      0x40000000
 #define PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE  0x80000000
 #define PARSEC_ACTION_RELEASE_REMOTE_DEPS        (PARSEC_ACTION_SEND_INIT_REMOTE_DEPS | PARSEC_ACTION_SEND_REMOTE_DEPS)
+#define PARSEC_ACTION_RELEASE_DIRECT_DEPS        0x100000000
 
 typedef struct remote_dep_wire_activate_s {
     remote_dep_datakey_t deps;         /**< a pointer to the dep structure on the source */
@@ -130,7 +131,9 @@ struct remote_dep_output_param_s {
                                                        depedencies indexes not flow indexes. */
     int32_t                              priority;    /**< the priority of the message */
     uint32_t                             count_bits;  /**< The number of participants */
+    uint32_t                             count_bits_direct;  /**< The number of direct participants */
     uint32_t*                            rank_bits;   /**< The array of bits representing the propagation path */
+    uint32_t*                            rank_bits_direct;   /**< The array of bits representing the direct propagation path */
 };
 
 struct parsec_remote_deps_s {
@@ -148,6 +151,8 @@ struct parsec_remote_deps_s {
     int32_t                          priority;
     uint32_t                        *remote_dep_fw_mask;  /**< list of peers already notified about
                                                            * the control sequence (only used for control messages) */
+    uint32_t                        *remote_dep_fw_mask_direct;  /**< list of peers already notified about
+                                                           * the direct messaged */
     struct data_repo_entry_s        *repo_entry;
     struct remote_dep_output_param_s output[1];
 };
@@ -454,5 +459,18 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
                                  int src_rank, int dst_rank, int dst_vpid,
                                  data_repo_t *successor_repo, parsec_key_t successor_repo_key,
                                  void *param);
+void
+remote_dep_mark_forwarded(parsec_execution_stream_t* es,
+                          parsec_remote_deps_t* rdeps,
+                          int rank);
+
+void
+remote_dep_reset_forwarded(parsec_execution_stream_t* es,
+                           parsec_remote_deps_t* rdeps);
+
+int
+remote_dep_is_forwarded(parsec_execution_stream_t* es,
+                        parsec_remote_deps_t* rdeps,
+                        int rank);
 
 #endif /* __USE_PARSEC_REMOTE_DEP_H__ */

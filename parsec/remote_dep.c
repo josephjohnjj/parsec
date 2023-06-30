@@ -14,6 +14,7 @@
 #include "parsec/interfaces/dtd/insert_function_internal.h"
 #include "parsec/utils/debug.h"
 #include <stdio.h>
+#include "parsec/parsec_migrate.h"
 
 /**
  * Indicator for the status of the communication engine. The following values are valid:
@@ -26,6 +27,8 @@
 int parsec_communication_engine_up = -1;
 int parsec_comm_output_stream = 0;
 int parsec_comm_verbose = 0;
+
+extern int parsec_runtime_task_mapping;
 
 #ifdef DISTRIBUTED
 
@@ -50,7 +53,7 @@ static int (*remote_dep_bcast_child)(int me, int him) = remote_dep_bcast_chainpi
 int remote_dep_bind_thread(parsec_context_t* context);
 
 /* Clear the already forwarded remote dependency matrix */
-static inline void
+void
 remote_dep_reset_forwarded(parsec_execution_stream_t* es,
                            parsec_remote_deps_t* rdeps)
 {
@@ -60,7 +63,7 @@ remote_dep_reset_forwarded(parsec_execution_stream_t* es,
 }
 
 /* Mark a rank as already forwarded the termination of the current task */
-static inline void
+void
 remote_dep_mark_forwarded(parsec_execution_stream_t* es,
                           parsec_remote_deps_t* rdeps,
                           int rank)
@@ -75,7 +78,7 @@ remote_dep_mark_forwarded(parsec_execution_stream_t* es,
 }
 
 /* Check if rank has already been forwarded the termination of the current task */
-static inline int
+int
 remote_dep_is_forwarded(parsec_execution_stream_t* es,
                         parsec_remote_deps_t* rdeps,
                         int rank)
@@ -150,7 +153,7 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
     uint32_t i, rank_bit_size;
 
     if( NULL == remote_deps ) {
-        char *ptr;
+        char *ptr, *ptr1;
         remote_deps = (parsec_remote_deps_t*)parsec_lifo_item_alloc( lifo, parsec_remote_dep_context.elem_size );
         PARSEC_VALGRIND_MEMPOOL_ALLOC(lifo,
                                       ((unsigned char *)remote_deps)+sizeof(parsec_list_item_t),
@@ -158,19 +161,26 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
         remote_deps->origin = lifo;
         remote_deps->taskpool = NULL;
         ptr = (char*)(&(remote_deps->output[parsec_remote_dep_context.max_dep_count]));
+        ptr1 = (char*)(&(remote_deps->output[parsec_remote_dep_context.max_dep_count]));
         rank_bit_size = sizeof(uint32_t) * ((parsec_remote_dep_context.max_nodes_number + 31) / 32);
         memset(ptr, 0, rank_bit_size * parsec_remote_dep_context.max_dep_count);
+        memset(ptr1, 0, rank_bit_size * parsec_remote_dep_context.max_dep_count);
         for( i = 0; i < parsec_remote_dep_context.max_dep_count; i++ ) {
             PARSEC_OBJ_CONSTRUCT(&remote_deps->output[i].super, parsec_list_item_t);
             remote_deps->output[i].parent     = remote_deps;
-            remote_deps->output[i].rank_bits  = (uint32_t*)ptr;
             remote_deps->output[i].deps_mask  = 0;
-            remote_deps->output[i].count_bits = 0;
             remote_deps->output[i].priority   = 0xffffffff;
+            remote_deps->output[i].rank_bits  = (uint32_t*)ptr;
+            remote_deps->output[i].count_bits = 0;
             ptr += rank_bit_size;
+            remote_deps->output[i].rank_bits_direct  = (uint32_t*)ptr1;
+            remote_deps->output[i].count_bits_direct = 0;
+            ptr1 += rank_bit_size;
         }
         /* fw_mask immediatly follows outputs */
         remote_deps->remote_dep_fw_mask = (uint32_t*) ptr;
+        remote_deps->remote_dep_fw_mask_direct = (uint32_t*) ptr1;
+        
         assert( (int)(ptr - (char*)remote_deps) ==
                 (int)(parsec_remote_dep_context.elem_size - rank_bit_size));
     } else {
@@ -392,17 +402,45 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
     (void)successor_repo; (void) successor_repo_key;
     parsec_remote_deps_t* deps = (parsec_remote_deps_t*)param;
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
-    const int _array_pos  = dst_rank / (8 * sizeof(uint32_t));
-    const int _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+    int _array_pos  = 0;
+    int _array_mask = 0;
+    int new_mapping = -1;
+
 
     if( dst_rank == es->virtual_process->parsec_context->my_rank )
         deps->outgoing_mask |= (1 << dep->dep_datatype_index);
 
-    if( !(output->rank_bits[_array_pos] & _array_mask) ) {  /* new participant */
-        output->rank_bits[_array_pos] |= _array_mask;
-        output->deps_mask |= (1 << dep->dep_index);
-        output->count_bits++;
+    if(parsec_runtime_task_mapping) {
+        new_mapping = find_task_mapping(newcontext);
+        assert(dst_rank != new_mapping);
     }
+
+    /** I have no information about this task being migrated */
+    if( -1 == new_mapping) {
+
+        _array_pos  = dst_rank / (8 * sizeof(uint32_t));
+        _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+
+        if( !(output->rank_bits[_array_pos] & _array_mask) ) {  /* new participant */
+            output->rank_bits[_array_pos] |= _array_mask;
+            output->deps_mask |= (1 << dep->dep_index);
+            output->count_bits++;
+        }
+    }
+    else { /** I have information about this task being migrated */
+
+        assert(0 <= new_mapping && new_mapping < get_nb_nodes());
+
+        _array_pos  = new_mapping / (8 * sizeof(uint32_t));
+        _array_mask = 1 << (new_mapping % (8 * sizeof(uint32_t)));
+
+        if( !(output->rank_bits_direct[_array_pos] & _array_mask) ) {  /* new participant */
+            output->rank_bits_direct[_array_pos] |= _array_mask;
+            output->deps_mask |= (1 << dep->dep_index);
+            output->count_bits_direct++;
+        }
+    }
+
     if(newcontext->priority > output->priority) {  /* select the priority */
         output->priority = newcontext->priority;
         if(newcontext->priority > deps->max_priority)
@@ -509,6 +547,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
             PARSEC_OBJ_RETAIN(output->data.data);
         }
 
+        /** Normal data propogation */
         for( array_index = count = 0; count < remote_deps->output[i].count_bits; array_index++ ) {
             current_mask = output->rank_bits[array_index];
             if( 0 == current_mask ) continue;  /* no bits here */
@@ -584,6 +623,52 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
                 }
                 assert(!remote_dep_is_forwarded(es, remote_deps, rank));
                 remote_dep_mark_forwarded(es, remote_deps, rank);
+            }
+        }
+
+        if(parsec_runtime_task_mapping) {
+            /** Direct data propogation for task that was migrated in the previous iteration */
+            remote_dep_mark_forwarded_direct(es, remote_deps, es->virtual_process->parsec_context->my_rank);
+            for( array_index = count = 0; count < remote_deps->output[i].count_bits_direct; array_index++ ) {
+                current_mask = output->rank_bits_direct[array_index];
+                if( 0 == current_mask ) continue;  /* no bits here */
+                for( bit_index = 0; current_mask != 0; bit_index++ ) {
+                    if( !(current_mask & (1 << bit_index)) ) continue;
+
+                    int rank = (array_index * sizeof(uint32_t) * 8) + bit_index;
+
+                    current_mask ^= (1 << bit_index);
+                    count++;
+
+                    if(remote_dep_is_forwarded_direct(es, remote_deps, rank)) {  /* already in the counting */
+                        PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "[%d:%d] task %s my_idx %d idx %d rank %d -- skip (already done)",
+                                remote_deps->root, i, tmp, my_idx, idx, rank);
+                        continue;
+                    }
+                
+                    PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "[%d:%d] task %s my_idx %d idx %d rank %d -- send (%x)",
+                            remote_deps->root, i, tmp, my_idx, idx, rank, remote_deps->outgoing_mask);
+                    assert(remote_deps->outgoing_mask & (1U<<i));
+
+                    assert(output->parent->taskpool == task->taskpool);
+                    if( 0 == parsec_atomic_fetch_inc_int32(&remote_deps->pending_ack) ) {
+                        keeper = 1;
+                        /* Let the engine know we're working to activate the dependencies remotely */
+                        remote_dep_inc_flying_messages(task->taskpool);
+                        /* We need to increase the pending_ack to make the deps persistant until the
+                         * end of this function.
+                         */
+                        (void)parsec_atomic_fetch_inc_int32(&remote_deps->pending_ack);
+                    }
+
+                    if( task->taskpool->tdm.module->outgoing_message_start(task->taskpool, rank, remote_deps) ) {
+                        assert(0 <= rank && rank < get_nb_nodes());
+                        mig_dep_direct_send(es, rank, remote_deps);
+                    }
+
+                    assert(!remote_dep_is_forwarded_direct(es, remote_deps, rank));
+                    remote_dep_mark_forwarded_direct(es, remote_deps, rank);
+                }
             }
         }
     }

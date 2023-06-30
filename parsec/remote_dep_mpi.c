@@ -738,9 +738,7 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     (void)successor_repo; (void) successor_repo_key;
 
     if( dst_rank != eu->virtual_process->parsec_context->my_rank ) {
-        if(!find_received_tasks_details(newcontext)){
-            return PARSEC_ITERATE_CONTINUE;
-        }
+        return PARSEC_ITERATE_CONTINUE;
     }
 
     parsec_remote_deps_t *deps               = (parsec_remote_deps_t*)param;
@@ -782,13 +780,6 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 
     if( deps->max_priority < newcontext->priority ) deps->max_priority = newcontext->priority;
     deps->incoming_mask |= (1U << dep->dep_datatype_index);
-    //assert(deps->root == src_rank);
-    //deps->root           = src_rank;
-
-    if( dst_rank != eu->virtual_process->parsec_context->my_rank ) {
-        //return PARSEC_ITERATE_CONTINUE;
-        printf("This task was migrated %d \n", deps->incoming_mask);
-    }
 
     if(output->data.remote.dst_count == 0){
         /* control dep */
@@ -1029,9 +1020,13 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     }
     PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MPI:\tTranslate mask from 0x%lx to 0x%x (remote_dep_release_incoming)",
             complete_mask, action_mask);
+
+    /** we have to pass the origin too. As only local tasks are activated, there is
+     * no operation on origin.
+    */
     (void)task.task_class->release_deps(es, &task,
                                         action_mask | PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
-                                        NULL);
+                                        origin);
     assert(0 == (origin->incoming_mask & complete_mask));
 
     if(0 != origin->incoming_mask)  /* not done receiving */
@@ -1862,6 +1857,7 @@ remote_dep_mpi_save_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
 
         ce->unpack(ce, msg, length, &position, &deps->msg, dep_count, dep_dtt);
+        /** this is very important. The intermediate source will be set from this */
         deps->from = src;
         deps->eager_msg = msg;
         deps->root = deps->msg.root;

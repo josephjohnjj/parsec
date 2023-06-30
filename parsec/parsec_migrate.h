@@ -11,6 +11,7 @@
 #include <pthread.h> 
 #include "parsec/parsec_comm_engine.h"
 
+
 #define SINGLE_ACTIVATE_MSG_SIZE sizeof(remote_dep_wire_activate_t)
 #define MAX_CHUNK_SIZE           20
 #define MAX_ACTIVATE_MSG_SIZE    (MAX_CHUNK_SIZE * SINGLE_ACTIVATE_MSG_SIZE)
@@ -117,6 +118,16 @@ int progress_migrated_task(parsec_execution_stream_t* es);
 int increment_progress_counter(int device_num);
 int unset_progress_counter(int device_num);
 int get_progress_counter(int device_num);
-int get_task_mapping(parsec_task_t *task);
+int find_task_mapping(parsec_task_t *task);
 int find_received_tasks_details(parsec_task_t *task);
+parsec_dependency_t* parsec_hash_find_sources(const parsec_taskpool_t *tp,
+    parsec_execution_stream_t *es, const parsec_task_t* restrict task);
+parsec_dependency_t parsec_update_sources(parsec_taskpool_t *tp, 
+    parsec_dependency_t *sources, int src);
+int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_deps_t *deps);
+int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
+    parsec_remote_deps_t* rdeps, int rank);
+void remote_dep_mark_forwarded_direct(parsec_execution_stream_t* es,
+    parsec_remote_deps_t* rdeps, int rank);
+int get_nb_nodes();
 #endif
