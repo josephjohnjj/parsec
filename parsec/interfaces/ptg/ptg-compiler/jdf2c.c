@@ -1378,6 +1378,7 @@ static inline char* jdf_generate_task_typedef(void **elt, void* arg)
                             "#endif\n"
                             "    struct __parsec_%s_%s_data_s data;\n"
                             "    int    mig_status;"
+                            "    parsec_dependency_t        sources; \n"
                             "} %s;\n\n",
                             parsec_get_name(NULL, f, "task_s"),
                             jdf_basename, f->fname,
