@@ -102,6 +102,8 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
 int get_gpu_wt_tasks(parsec_device_gpu_module_t * device);
 int insert_migrated_tasks_details(parsec_task_t *task, int rank);
 int find_migrated_tasks_details(parsec_task_t *task);
+int insert_received_tasks_details(parsec_task_t *task, int rank);
+int find_received_tasks_details(parsec_task_t *task);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -762,7 +764,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                     if(parsec_runtime_task_mapping) {
                         insert_migrated_tasks_details(gpu_task->ec, steal_request->msg.root);
                     }
-                    
+
                     /** release the resources held by the migrated task */
                     migrated_task_cleanup(es, gpu_task);
                     free(gpu_task); 
@@ -1546,6 +1548,11 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         parsec_node_mig_inc_task_recvd();
     }
 
+    /** add migrated task details to the hash table */
+    if(parsec_runtime_task_mapping) {
+        insert_received_tasks_details(task, origin->root);
+    }
+    
     /** schedule the migrated tasks */
     schedule_migrated_task(es, task);
 
@@ -1804,6 +1811,42 @@ int find_migrated_tasks_details(parsec_task_t *task)
     key = task->task_class->make_key(task->taskpool, task->locals);
     if (NULL == (item = parsec_hash_table_nolock_find(migrated_task_ht, key))) {
         return 0;
+    }
+
+    return item->rank;
+}
+
+int insert_received_tasks_details(parsec_task_t *task, int rank)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+
+    /**
+     * @brief Entry NULL imples that this task has never been received
+     * till now in any of the iteration. So we start a new entry.
+     */
+    if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key)))
+    {
+        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
+        item->ht_item.key = key;
+        item->rank = rank;
+        parsec_hash_table_lock_bucket(received_task_ht, key);
+        parsec_hash_table_nolock_insert(received_task_ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(received_task_ht, key);
+    }
+    return 1;
+}
+
+int find_received_tasks_details(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key))) {
+        return -1;
     }
 
     return item->rank;
