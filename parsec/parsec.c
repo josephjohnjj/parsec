@@ -172,6 +172,7 @@ int parsec_runtime_skew_distribution      = 0;
 int parsec_runtime_print_completion_stats = 0;
 int parsec_runtime_hop_count              = 0;
 int parsec_runtime_progress_count         = 0;
+int parsec_runtime_task_mapping           = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -961,6 +962,9 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_hop_count);
     parsec_mca_param_reg_int_name("runtime", "progress_count", "Progress count per device",
                                 false, false, 10, &parsec_runtime_progress_count);
+    parsec_mca_param_reg_int_name("runtime", "task_mapping", "Use task mapping",
+                                false, false, 0, &parsec_runtime_task_mapping);
+                                
                                 
 
     if( parsec_runtime_gdb_attach > 0 )
