@@ -1673,3 +1673,43 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
     parsec_comm_puts--;
     return 1;
 }
+
+parsec_dependency_t*
+parsec_hash_find_sources(const parsec_taskpool_t *tp,
+                      parsec_execution_stream_t *es,
+                      const parsec_task_t* restrict task)
+{
+    parsec_hashable_sources_t *hs;
+    parsec_key_handle_t kh;
+    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
+
+    parsec_key_t key = task->task_class->make_key(tp, task->locals);
+    assert(NULL != ht);
+    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
+    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
+    if( NULL == hs ) {
+        hs = (parsec_hashable_sources_t *) malloc(sizeof(parsec_hashable_sources_t));
+        hs->sources = (parsec_dependency_t)0;
+        hs->ht_item.key = key;
+        parsec_hash_table_nolock_insert_handle(ht, &kh, &hs->ht_item);
+    }
+    parsec_hash_table_unlock_bucket_handle(ht, &kh);
+    return &(hs->sources);
+}
+
+parsec_dependency_t
+parsec_update_sources(parsec_taskpool_t *tp, parsec_dependency_t *sources, int src)
+{
+    parsec_dependency_t source_new_value;
+
+    assert(NULL != sources);
+
+    if ( 0 != (*sources & (1 << src)) ) {
+        /** this source has already been set */
+        return *sources;
+    }
+
+    source_new_value = (*sources | (1 << src));
+    parsec_atomic_fetch_or_int32( sources, source_new_value );
+    return *sources;
+}

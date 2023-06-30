@@ -1756,14 +1756,19 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                                       const parsec_task_t* restrict task,
                                       const parsec_flow_t* restrict dest_flow,
                                       parsec_dep_data_description_t* data,
-                                      parsec_task_t** pready_ring,
+                                      parsec_release_dep_fct_arg_t *arg,
+                                      int dst_vpid,
                                       data_repo_t* target_repo,
                                       parsec_data_copy_t* target_dc,
-                                      data_repo_entry_t* target_repo_entry)
+                                      data_repo_entry_t* target_repo_entry,
+                                      int src_rank)
 {
     const parsec_task_class_t* tc = task->task_class;
+    parsec_task_t** pready_ring = &arg->ready_lists[dst_vpid];
     parsec_dependency_t *deps;
     int completed;
+    parsec_dependency_t *sources = NULL;
+    int source = -1;
 #if defined(PARSEC_DEBUG_NOISIER)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, task);
@@ -1773,6 +1778,30 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
     deps = tc->find_deps(origin->taskpool, es, task);
 
     completed = tc->update_deps(origin->taskpool, task, deps, origin, origin_flow, dest_flow);
+
+    if(parsec_runtime_task_mapping) {
+        /** Find the sources of dataflow of the task */
+        sources = parsec_hash_find_sources(origin->taskpool, es, task);
+        assert(NULL != sources);
+
+        if(NULL != arg->remote_deps) {
+            /** This flow has a remote deps */
+            if(-1 == arg->remote_deps->from) {
+                /** From has not been set which means the flow is from me */
+                source = src_rank;
+            }
+            else {
+                /** This flow is from an intermediate node */
+                source = arg->remote_deps->from;
+            }
+        }
+        else {
+            /** This flow has no remote deps till now, so it is from me. */
+            source = src_rank;
+        }
+        /** Update the sources of dataflow of the task */
+        parsec_update_sources(origin->taskpool, sources, source);
+    }
 
 #if defined(PARSEC_PROF_GRAPHER)
     parsec_prof_grapher_dep(origin, task, completed, origin_flow, dest_flow);
@@ -1973,8 +2002,10 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
                                               newcontext,
                                               dep->flow,
                                               data,
-                                              &arg->ready_lists[dst_vpid],
-                                              target_repo, target_dc, target_repo_entry);
+                                              arg,
+                                              dst_vpid,
+                                              target_repo, target_dc, target_repo_entry,
+                                              src_rank);
     }
 
     return PARSEC_ITERATE_CONTINUE;

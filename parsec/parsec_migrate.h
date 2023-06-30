@@ -102,4 +102,8 @@ int progress_migrated_task(parsec_execution_stream_t* es);
 int increment_progress_counter(int device_num);
 int unset_progress_counter(int device_num);
 int get_progress_counter(int device_num);
+parsec_dependency_t* parsec_hash_find_sources(const parsec_taskpool_t *tp,
+    parsec_execution_stream_t *es, const parsec_task_t* restrict task);
+parsec_dependency_t
+parsec_update_sources(parsec_taskpool_t *tp, parsec_dependency_t *sources, int src);
 #endif
