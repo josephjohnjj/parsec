@@ -781,7 +781,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
                     if(parsec_runtime_task_mapping) {
                         /** send the new task mapping to the predecessors*/
-                        send_task_mapping_info_to_predecessor(es, task, steal_request->msg.root);
+                        send_task_mapping_info_to_predecessor(es, gpu_task->ec, steal_request->msg.root);
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, steal_request->msg.root);
                     }
@@ -1882,16 +1882,15 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
 
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
     mapping_info.mig_rank       = rank;
-    assert(0 <= rank && rank < get_nb_nodes());
     mapping_info.task_class_id  = task->task_class->task_class_id;
     mapping_info.taskpool_id    = task->taskpool->taskpool_id;
+    assert(0 <= rank && rank < get_nb_nodes());
 
     for (src_rank = 0; source_mask >> src_rank; src_rank++) {
 
         if (!((1U << src_rank) & source_mask)) {
             continue;
         }
-
         assert(0 <= src_rank && src_rank < get_nb_nodes());
 
         if(src_rank == my_rank) {

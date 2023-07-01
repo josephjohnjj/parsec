@@ -129,7 +129,9 @@ struct remote_dep_output_param_s {
                                                        depedencies indexes not flow indexes. */
     int32_t                              priority;    /**< the priority of the message */
     uint32_t                             count_bits;  /**< The number of participants */
+    uint32_t                             count_bits_direct;  /**< The number of direct participants */
     uint32_t*                            rank_bits;   /**< The array of bits representing the propagation path */
+    uint32_t*                            rank_bits_direct;   /**< The array of bits representing the direct propagation path */
 };
 
 struct parsec_remote_deps_s {
@@ -147,6 +149,8 @@ struct parsec_remote_deps_s {
     int32_t                          priority;
     uint32_t                        *remote_dep_fw_mask;  /**< list of peers already notified about
                                                            * the control sequence (only used for control messages) */
+    uint32_t                        *remote_dep_fw_mask_direct;  /**< list of peers already notified about
+                                                           * the direct messaged */
     struct data_repo_entry_s        *repo_entry;
     struct remote_dep_output_param_s output[1];
 };

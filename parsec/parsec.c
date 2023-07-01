@@ -1789,17 +1789,21 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             if(-1 == arg->remote_deps->from) {
                 /** From has not been set which means the flow is from me */
                 source = src_rank;
+                assert(0 <= source && source < get_nb_nodes());
             }
             else {
                 /** This flow is from an intermediate node */
                 source = arg->remote_deps->from;
+                assert(0 <= source && source < get_nb_nodes());
             }
         }
         else {
             /** This flow has no remote deps till now, so it is from me. */
             source = src_rank;
+            assert(0 <= source && source < get_nb_nodes());
         }
         /** Update the sources of dataflow of the task */
+        assert(0 <= source && source < get_nb_nodes());
         parsec_update_sources(origin->taskpool, sources, source);
     }
 
