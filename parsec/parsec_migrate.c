@@ -2451,13 +2451,6 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
         task.data[target->flow_index].data_out  = origin->output[i].data.data;
     }
 
-#ifdef PARSEC_DIST_COLLECTIVES
-    /* Corresponding comment below on the propagation part */
-    if(0 == origin->incoming_mask && PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
-        remote_dep_inc_flying_messages(task.taskpool);
-        (void)parsec_atomic_fetch_inc_int32(&origin->pending_ack);
-    }
-#endif  /* PARSEC_DIST_COLLECTIVES */
 
     if(PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
         /* We need to convert from a dep_datatype_index mask into a dep_index mask */
@@ -2468,13 +2461,10 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
                 if(complete_mask & (1U << target->dep_out[j]->dep_datatype_index))
                     action_mask |= (1U << target->dep_out[j]->dep_index);
         }
-    } else if(PARSEC_TASKPOOL_TYPE_DTD == origin->taskpool->taskpool_type) {
-        action_mask = complete_mask;
     } else {
         assert(0);
     }
-    PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MPI:\tTranslate mask from 0x%lx to 0x%x (remote_dep_release_incoming)",
-            complete_mask, action_mask);
+
     (void)task.task_class->release_deps(es, &task,
                                         action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
                                         NULL);
