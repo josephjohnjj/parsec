@@ -327,7 +327,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
                                 SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
+        parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
