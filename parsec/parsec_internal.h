@@ -610,6 +610,16 @@ parsec_release_dep_fct(struct parsec_execution_stream_s *es,
                        data_repo_t *successor_repo, parsec_key_t successor_repo_key,
                        void *param);
 
+parsec_ontask_iterate_t
+parsec_release_dep_direct_fct(struct parsec_execution_stream_s *es,
+                       const parsec_task_t *newcontext,
+                       const parsec_task_t *oldcontext,
+                       const parsec_dep_t* dep,
+                       parsec_dep_data_description_t* data,
+                       int rank_src, int rank_dst, int vpid_dst,
+                       data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                       void *param);
+
 /**
  * Function to create reshaping promises during iterate_successors.
  */

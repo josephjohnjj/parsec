@@ -1889,6 +1889,200 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     parsec_release_dep_fct_arg_t *arg = (parsec_release_dep_fct_arg_t *)param;
     const parsec_flow_t* src_flow = dep->belongs_to;
     const parsec_flow_t* dst_flow = dep->flow;
+    int new_mapping = -1;
+    int was_migrated = -1;
+
+    if(parsec_runtime_task_mapping) {
+        new_mapping = find_task_mapping(newcontext);
+        assert(dst_rank != new_mapping);
+
+        /** if new_mapping is non-negative, that means I was one of the itermediate source of 
+        * data for the migrated task. 
+        */
+        if( -1 != new_mapping ) { /** But I am not normal deps  */
+            assert(0 <= new_mapping && new_mapping < get_nb_nodes());
+            return PARSEC_ITERATE_CONTINUE;
+        } 
+    }
+
+    data_repo_t        *target_repo = arg->output_repo;
+    data_repo_entry_t  *target_repo_entry = arg->output_entry;
+    parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];
+    data_repo_entry_t  *entry_for_reshapping =
+            data_repo_lookup_entry(successor_repo, successor_repo_key);
+    /* If the successor repo has been advanced with a reshape promise,
+     * that one is selected for release_deps, otherwise the one on the
+     * predecessor repo is selected.
+     * (On the predecessor repo there may be a fulfilled or unfulfilled future,
+     * on the successor repo is always unfulfilled).
+     */
+    if( (entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL) ){
+        target_repo = successor_repo;
+        target_repo_entry = entry_for_reshapping;
+        target_dc = entry_for_reshapping->data[dst_flow->flow_index];
+    }
+
+    /*
+     * Check that we don't forward a NULL data to someone else. This
+     * can be done only on the src node, since the dst node can
+     * check for datatypes without knowing the data yet.
+     * By checking now, we allow for the data to be created any time bfore we
+     * actually try to transfer it.
+     */
+    if( PARSEC_UNLIKELY((data->data == NULL) &&
+                       (es->virtual_process->parsec_context->my_rank == src_rank) &&
+                       ((dep->belongs_to->flow_flags & PARSEC_FLOW_ACCESS_MASK) != PARSEC_FLOW_ACCESS_NONE)) ) {
+        char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
+        parsec_fatal("A NULL is forwarded\n"
+                    "\tfrom: %s flow %s\n"
+                    "\tto:   %s flow %s",
+                    parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, oldcontext), dep->belongs_to->name,
+                    parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, newcontext), dep->flow->name);
+    }
+
+#if defined(DISTRIBUTED)
+    if( dst_rank != src_rank ) { 
+        assert( 0 == (arg->action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS) );
+
+        if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
+            struct remote_dep_output_param_s* output;
+            int _array_pos, _array_mask;
+
+#if !defined(PARSEC_DIST_COLLECTIVES)
+            assert(src_rank == es->virtual_process->parsec_context->my_rank);
+#endif
+            PARSEC_ALLOCATE_REMOTE_DEPS_IF_NULL(arg->remote_deps, oldcontext, MAX_PARAM_COUNT);
+            output = &arg->remote_deps->output[dep->dep_datatype_index];
+            assert( (-1 == arg->remote_deps->root) || (arg->remote_deps->root == src_rank) );
+            /** This is important. The collective operation will be done based on root*/
+            arg->remote_deps->root = src_rank;
+            arg->remote_deps->outgoing_mask |= (1 << dep->dep_datatype_index);
+
+            _array_pos = dst_rank / (8 * sizeof(uint32_t)); 
+            _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+
+            if( !(output->rank_bits[_array_pos] & _array_mask) ) {
+                output->rank_bits[_array_pos] |= _array_mask;
+                output->deps_mask |= (1 << dep->dep_index);
+
+                //if( 0 == output->count_bits && 0 == output->count_bits_direct ) {
+                if( 1 ) {
+                    output->data = *data;
+                    assert(output->data.data_future == NULL);
+                #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
+                    /* Now everything is a reshaping entry */
+                    /* Check if we need to reshape before sending */
+                    if(parsec_is_CTL_dep(output->data)){ /* CTL DEP */
+                        output->data.data_future = NULL;
+                        output->data.repo = NULL;
+                        output->data.repo_key = -1;
+                    } 
+                    else {
+                        /* Get reshape from whatever repo it has been set up into */
+                        output->data.data_future = (parsec_datacopy_future_t*)target_dc;
+                        output->data.repo = target_repo;
+                        output->data.repo_key = target_repo_entry->ht_item.key;
+                        PARSEC_DEBUG_VERBOSE(4, parsec_debug_output,
+                                         "th%d RESHAPE_PROMISE SETUP FOR REMOTE DEPS [%p:%p] for INLINE REMOTE %s fut %p",
+                                         es->th_id, output->data.data, (output->data.data)->dtt,
+                                         (target_repo == successor_repo? "UNFULFILLED" : "FULFILLED"),
+                                         output->data.data_future);
+                    }
+                #endif
+                } 
+                else {
+                    assert(output->data.data == data->data);
+                #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
+                    /* There's a reshape entry that is not being managed. */
+                    assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
+                #endif
+                }
+
+                output->count_bits++;
+                if(newcontext->priority > output->priority) {
+                    output->priority = newcontext->priority;
+                    if(newcontext->priority > arg->remote_deps->max_priority)
+                        arg->remote_deps->max_priority = newcontext->priority;
+                }   
+            }  /* otherwise the bit is already flipped, the peer is already part of the propagation. */
+            else {
+                assert(output->data.data == data->data);
+            #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
+                /* There's a reshape entry that is not being managed. */
+                assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
+            #endif
+            }
+        }
+    }
+#else
+    (void)src_rank;
+    (void)data;
+#endif
+
+    if( ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) ) ||
+
+        ((arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) )) {
+
+        if(parsec_runtime_task_mapping) {
+            was_migrated = find_migrated_tasks_details(newcontext);
+            if(was_migrated != -1) { /** The task was migrated */
+                return PARSEC_ITERATE_CONTINUE;
+            }
+        }
+        /* Copying data in data-repo if there is data .
+         * We are doing this in order for dtd to be able to track control dependences.
+         * Usage count of the repo is dealt with when setting up reshape promises.
+         */
+        parsec_release_local_OUT_dependencies(es,
+                                              oldcontext,
+                                              src_flow,
+                                              newcontext,
+                                              dep->flow,
+                                              data,
+                                              arg,
+                                              dst_vpid,
+                                              target_repo, target_dc, target_repo_entry,
+                                              src_rank);
+    }
+
+    return PARSEC_ITERATE_CONTINUE;
+}
+
+parsec_ontask_iterate_t
+parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
+                      const parsec_task_t *newcontext,
+                      const parsec_task_t *oldcontext,
+                      const parsec_dep_t* dep,
+                      parsec_dep_data_description_t* data,
+                      int src_rank, int dst_rank, int dst_vpid,
+                      data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                      void *param)
+{
+    parsec_release_dep_fct_arg_t *arg = (parsec_release_dep_fct_arg_t *)param;
+    const parsec_flow_t* src_flow = dep->belongs_to;
+    const parsec_flow_t* dst_flow = dep->flow;
+    int new_mapping = -1;
+    int was_migrated = -1;
+
+    if(!parsec_runtime_task_mapping) {
+        return PARSEC_ITERATE_STOP;
+    }
+
+    new_mapping = find_task_mapping(newcontext);
+    assert(dst_rank != new_mapping);
+  
+    /** if new_mapping is non-negative, that means I was one of the itermediate source of 
+    * data for the migrated task. 
+    */
+    if( -1 == new_mapping ) { /** I am only dealing with direct deps  */
+        return PARSEC_ITERATE_CONTINUE;
+    } 
+    assert(0 <= new_mapping && new_mapping < get_nb_nodes());
+    /** The new dst_rank is given by new_mapping */
+    dst_rank = new_mapping;
+
 
 
     data_repo_t        *target_repo = arg->output_repo;
@@ -1927,7 +2121,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     }
 
 #if defined(DISTRIBUTED)
-    if( dst_rank != src_rank ) {
+    if( dst_rank != src_rank ) { /** Also mean that new_mapping != src_rank */
         assert( 0 == (arg->action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS) );
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
@@ -1937,27 +2131,33 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 #if !defined(PARSEC_DIST_COLLECTIVES)
             assert(src_rank == es->virtual_process->parsec_context->my_rank);
 #endif
-            _array_pos = dst_rank / (8 * sizeof(uint32_t)); 
-            _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
             PARSEC_ALLOCATE_REMOTE_DEPS_IF_NULL(arg->remote_deps, oldcontext, MAX_PARAM_COUNT);
             output = &arg->remote_deps->output[dep->dep_datatype_index];
             assert( (-1 == arg->remote_deps->root) || (arg->remote_deps->root == src_rank) );
+            /** This is important. The collective operation will be done based on root*/
             arg->remote_deps->root = src_rank;
             arg->remote_deps->outgoing_mask |= (1 << dep->dep_datatype_index);
-            if( !(output->rank_bits[_array_pos] & _array_mask) ) {
-                output->rank_bits[_array_pos] |= _array_mask;
+            
+            _array_pos = dst_rank / (8 * sizeof(uint32_t)); 
+            _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+
+            if( !(output->rank_bits_direct[_array_pos] & _array_mask) ) {
+                output->rank_bits_direct[_array_pos] |= _array_mask;
                 output->deps_mask |= (1 << dep->dep_index);
-                if( 0 == output->count_bits ) {
+
+                //if( 0 == output->count_bits && 0 == output->count_bits_direct ) {
+                if( 1 ) {
                     output->data = *data;
                     assert(output->data.data_future == NULL);
-#ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
+            #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
                     /* Now everything is a reshaping entry */
                     /* Check if we need to reshape before sending */
                     if(parsec_is_CTL_dep(output->data)){ /* CTL DEP */
                         output->data.data_future = NULL;
                         output->data.repo = NULL;
                         output->data.repo_key = -1;
-                    }else{
+                    } 
+                    else {
                         /* Get reshape from whatever repo it has been set up into */
                         output->data.data_future = (parsec_datacopy_future_t*)target_dc;
                         output->data.repo = target_repo;
@@ -1968,29 +2168,30 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
                                          (target_repo == successor_repo? "UNFULFILLED" : "FULFILLED"),
                                          output->data.data_future);
                     }
-#endif
-                } else {
+            #endif
+                } 
+                else {
                     assert(output->data.data == data->data);
-#ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
+                #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
                     /* There's a reshape entry that is not being managed. */
                     assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
-#endif
+                #endif
                 }
-                output->count_bits++;
+
+                output->count_bits_direct++;
                 if(newcontext->priority > output->priority) {
                     output->priority = newcontext->priority;
                     if(newcontext->priority > arg->remote_deps->max_priority)
                         arg->remote_deps->max_priority = newcontext->priority;
-                }
+                }   
             }  /* otherwise the bit is already flipped, the peer is already part of the propagation. */
-            else{
+            else {
                 assert(output->data.data == data->data);
-#ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
+            #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
                 /* There's a reshape entry that is not being managed. */
                 assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
-#endif
+            #endif
             }
-
         }
     }
 #else
@@ -1998,8 +2199,17 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     (void)data;
 #endif
 
-    if( (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) ) {
+    if( ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) ) ||
+
+        ((arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) )) {
+
+        was_migrated = find_migrated_tasks_details(newcontext);
+        if(was_migrated != -1) { /** The task was migrated */
+            return PARSEC_ITERATE_CONTINUE;
+        }
+        
         /* Copying data in data-repo if there is data .
          * We are doing this in order for dtd to be able to track control dependences.
          * Usage count of the repo is dealt with when setting up reshape promises.

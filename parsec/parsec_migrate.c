@@ -1931,6 +1931,21 @@ int update_task_mapping(parsec_key_t key, int new_rank)
     return 0;
 }
 
+int find_task_mapping(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    assert(NULL != task->taskpool);
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key))) {
+        return -1;
+    }
+
+    return item->rank;
+}
+
 int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
     mig_task_mapping_info_t *mapping_info, int src)
                                  
