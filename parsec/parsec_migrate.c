@@ -1846,7 +1846,7 @@ int find_migrated_tasks_details(parsec_task_t *task)
 
     key = task->task_class->make_key(task->taskpool, task->locals);
     if (NULL == (item = parsec_hash_table_nolock_find(migrated_task_ht, key))) {
-        return 0;
+        return -1;
     }
 
     return item->rank;

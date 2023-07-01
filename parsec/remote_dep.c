@@ -412,7 +412,6 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
     if(parsec_runtime_task_mapping) {
         new_mapping = find_task_mapping(newcontext);
         assert(dst_rank != new_mapping);
-        assert(0 <= new_mapping && new_mapping < get_nb_nodes());
     }
 
     /** I have no information about this task being migrated */
