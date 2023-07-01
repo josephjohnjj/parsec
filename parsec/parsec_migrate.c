@@ -315,7 +315,16 @@ int parsec_node_migrate_init(parsec_context_t *context)
         return rc;
     }
 
-     rc = parsec_ce.tag_register(PARSEC_MIG_INFORM_PREDECESSOR_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
+    rc = parsec_ce.tag_register(PARSEC_MIG_INFORM_PREDECESSOR_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context,
+                                SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
         parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
@@ -2026,12 +2035,13 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     (void) tag; (void) cb_data;
     parsec_execution_stream_t* es = &parsec_comm_es;
 
-    int position = 0, length = msg_size, rc;
+    int position = 0, saved_position = 0, length = msg_size, rc;
     parsec_remote_deps_t* deps = NULL;
 
     while(position < length) {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
 
+        saved_position = position;
         parsec_ce.unpack(&parsec_ce, msg, length, &position, &deps->msg, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t);
         deps->from = src;
         deps->eager_msg = msg;
@@ -2064,7 +2074,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         } 
 
         mig_direct_recv_activate(es, deps, msg,
-                                     position + deps->msg.length, &position);
+                                     saved_position + deps->msg.length, &position);
     }
     assert(position == length);
 
