@@ -122,4 +122,9 @@ parsec_dependency_t
 parsec_update_sources(parsec_taskpool_t *tp, parsec_dependency_t *sources, int src);
 int get_nb_nodes();
 int find_task_mapping(parsec_task_t *task);
+int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
+    parsec_remote_deps_t* rdeps, int rank);
+void remote_dep_mark_forwarded_direct(parsec_execution_stream_t* es,
+    parsec_remote_deps_t* rdeps, int rank);
+
 #endif
