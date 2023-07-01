@@ -152,7 +152,7 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
     uint32_t i, rank_bit_size;
 
     if( NULL == remote_deps ) {
-        char *ptr, *ptr1;
+        char *ptr;
         remote_deps = (parsec_remote_deps_t*)parsec_lifo_item_alloc( lifo, parsec_remote_dep_context.elem_size );
         PARSEC_VALGRIND_MEMPOOL_ALLOC(lifo,
                                       ((unsigned char *)remote_deps)+sizeof(parsec_list_item_t),
@@ -160,10 +160,8 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
         remote_deps->origin = lifo;
         remote_deps->taskpool = NULL;
         ptr = (char*)(&(remote_deps->output[parsec_remote_dep_context.max_dep_count]));
-        ptr1 = (char*)(&(remote_deps->output[parsec_remote_dep_context.max_dep_count]));
         rank_bit_size = sizeof(uint32_t) * ((parsec_remote_dep_context.max_nodes_number + 31) / 32);
         memset(ptr, 0, rank_bit_size * parsec_remote_dep_context.max_dep_count);
-        memset(ptr1, 0, rank_bit_size * parsec_remote_dep_context.max_dep_count);
         for( i = 0; i < parsec_remote_dep_context.max_dep_count; i++ ) {
             PARSEC_OBJ_CONSTRUCT(&remote_deps->output[i].super, parsec_list_item_t);
             remote_deps->output[i].parent     = remote_deps;
@@ -172,13 +170,14 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
             remote_deps->output[i].rank_bits  = (uint32_t*)ptr;
             remote_deps->output[i].count_bits = 0;
             ptr += rank_bit_size;
-            remote_deps->output[i].rank_bits_direct  = (uint32_t*)ptr1;
+            remote_deps->output[i].rank_bits_direct  = (uint32_t*)ptr;
             remote_deps->output[i].count_bits_direct = 0;
-            ptr1 += rank_bit_size;
+            ptr += rank_bit_size;
         }
         /* fw_mask immediatly follows outputs */
         remote_deps->remote_dep_fw_mask = (uint32_t*) ptr;
-        remote_deps->remote_dep_fw_mask_direct = (uint32_t*) ptr1;
+        ptr += rank_bit_size;
+        remote_deps->remote_dep_fw_mask_direct = (uint32_t*) ptr;
         
         assert( (int)(ptr - (char*)remote_deps) ==
                 (int)(parsec_remote_dep_context.elem_size - rank_bit_size));
@@ -704,6 +703,10 @@ void remote_deps_allocation_init(int np, int max_output_deps)
             ((intptr_t)&fake_rdep.output[parsec_remote_dep_context.max_dep_count])-(intptr_t)&fake_rdep +
             /* One rankbits fw array per output param */
             parsec_remote_dep_context.max_dep_count * rankbits_size +
+            /* One direct rankbits fw array per output param */
+            parsec_remote_dep_context.max_dep_count * rankbits_size +
+            /* One extra rankbit to track the delivery of Activates */
+            rankbits_size +
             /* One extra rankbit to track the delivery of Activates */
             rankbits_size;
         PARSEC_OBJ_CONSTRUCT(&parsec_remote_dep_context.freelist, parsec_lifo_t);
