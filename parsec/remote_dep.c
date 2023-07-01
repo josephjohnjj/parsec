@@ -27,6 +27,8 @@ int parsec_communication_engine_up = -1;
 int parsec_comm_output_stream = 0;
 int parsec_comm_verbose = 0;
 
+extern int parsec_runtime_task_mapping;
+
 #ifdef DISTRIBUTED
 
 /* comm_yield mode: see valid values in the corresponding mca_register */
@@ -400,17 +402,45 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
     (void)successor_repo; (void) successor_repo_key;
     parsec_remote_deps_t* deps = (parsec_remote_deps_t*)param;
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
-    const int _array_pos  = dst_rank / (8 * sizeof(uint32_t));
-    const int _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+    int _array_pos  = 0;
+    int _array_mask = 0;
+    int new_mapping = -1;
 
     if( dst_rank == es->virtual_process->parsec_context->my_rank )
         deps->outgoing_mask |= (1 << dep->dep_datatype_index);
 
-    if( !(output->rank_bits[_array_pos] & _array_mask) ) {  /* new participant */
-        output->rank_bits[_array_pos] |= _array_mask;
-        output->deps_mask |= (1 << dep->dep_index);
-        output->count_bits++;
+    if(parsec_runtime_task_mapping) {
+        new_mapping = find_task_mapping(newcontext);
+        assert(dst_rank != new_mapping);
+        assert(0 <= new_mapping && new_mapping < get_nb_nodes());
     }
+
+    /** I have no information about this task being migrated */
+    if( -1 == new_mapping) {
+
+        _array_pos  = dst_rank / (8 * sizeof(uint32_t));
+        _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+
+        if( !(output->rank_bits[_array_pos] & _array_mask) ) {  /* new participant */
+            output->rank_bits[_array_pos] |= _array_mask;
+            output->deps_mask |= (1 << dep->dep_index);
+            output->count_bits++;
+        }
+    }
+    else { /** I have information about this task being migrated */
+
+        assert(0 <= new_mapping && new_mapping < get_nb_nodes());
+
+        _array_pos  = new_mapping / (8 * sizeof(uint32_t));
+        _array_mask = 1 << (new_mapping % (8 * sizeof(uint32_t)));
+
+        if( !(output->rank_bits_direct[_array_pos] & _array_mask) ) {  /* new participant */
+            output->rank_bits_direct[_array_pos] |= _array_mask;
+            output->deps_mask |= (1 << dep->dep_index);
+            output->count_bits_direct++;
+        }
+    }
+
     if(newcontext->priority > output->priority) {  /* select the priority */
         output->priority = newcontext->priority;
         if(newcontext->priority > deps->max_priority)
@@ -419,6 +449,7 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
     (void)oldcontext; (void)dst_vpid; (void)data; (void)src_rank;
     return PARSEC_ITERATE_CONTINUE;
 }
+
 
 /**
  * This is the local continuation of a collective pattern. Upon receiving an
