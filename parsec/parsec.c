@@ -1920,11 +1920,6 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 
     data_repo_t        *target_repo = arg->output_repo;
     data_repo_entry_t  *target_repo_entry = arg->output_entry;
-    if(NULL == target_repo_entry)
-    {
-        assert (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) ;
-
-    }
     assert(NULL != target_repo_entry);
     parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];
     data_repo_entry_t  *entry_for_reshapping =
@@ -2037,11 +2032,8 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     (void)data;
 #endif
 
-    if( ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) ) ||
-
-        ((arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) )) {
+    if ((arg->action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS)) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) ) {
 
         if(parsec_runtime_task_mapping) {
             was_migrated = find_migrated_tasks_details(newcontext);
@@ -2225,11 +2217,8 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     (void)data;
 #endif
 
-    if( ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) ) ||
-
-        ((arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) )) {
+    if ((arg->action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS)) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) ) {
 
         was_migrated = find_migrated_tasks_details(newcontext);
         if(was_migrated != -1) { /** The task was migrated */
