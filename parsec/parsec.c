@@ -1891,6 +1891,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     const parsec_flow_t* dst_flow = dep->flow;
     int new_mapping = -1;
     int was_migrated = -1;
+    int was_received = -1;
 
     if(parsec_runtime_task_mapping) {
         new_mapping = find_task_mapping(newcontext);
@@ -1905,8 +1906,18 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         } 
     }
 
+    if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
+        was_received = find_received_tasks_details(newcontext);
+        if(was_received == -1) { /** The task was not received */
+            return PARSEC_ITERATE_CONTINUE;
+        }
+        dst_rank = src_rank;
+    }
+    
+
     data_repo_t        *target_repo = arg->output_repo;
     data_repo_entry_t  *target_repo_entry = arg->output_entry;
+    assert(NULL != target_repo_entry);
     parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];
     data_repo_entry_t  *entry_for_reshapping =
             data_repo_lookup_entry(successor_repo, successor_repo_key);
@@ -1965,8 +1976,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
                 output->rank_bits[_array_pos] |= _array_mask;
                 output->deps_mask |= (1 << dep->dep_index);
 
-                //if( 0 == output->count_bits && 0 == output->count_bits_direct ) {
-                if( 1 ) {
+                if( 0 == output->count_bits && 0 == output->count_bits_direct ) {
                     output->data = *data;
                     assert(output->data.data_future == NULL);
                 #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
@@ -2065,6 +2075,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     const parsec_flow_t* dst_flow = dep->flow;
     int new_mapping = -1;
     int was_migrated = -1;
+    int was_received = -1;
 
     if(!parsec_runtime_task_mapping) {
         return PARSEC_ITERATE_STOP;
@@ -2082,6 +2093,14 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     assert(0 <= new_mapping && new_mapping < get_nb_nodes());
     /** The new dst_rank is given by new_mapping */
     dst_rank = new_mapping;
+
+    if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
+        was_received = find_received_tasks_details(newcontext);
+        if(was_received == -1) { /** The task was not received */
+            return PARSEC_ITERATE_CONTINUE;
+        }
+        dst_rank = src_rank;
+    }
 
 
 
@@ -2145,8 +2164,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
                 output->rank_bits_direct[_array_pos] |= _array_mask;
                 output->deps_mask |= (1 << dep->dep_index);
 
-                //if( 0 == output->count_bits && 0 == output->count_bits_direct ) {
-                if( 1 ) {
+                if( 0 == output->count_bits && 0 == output->count_bits_direct ) {
                     output->data = *data;
                     assert(output->data.data_future == NULL);
             #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
@@ -2171,10 +2189,10 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             #endif
                 } 
                 else {
-                    assert(output->data.data == data->data);
+                    //assert(output->data.data == data->data);
                 #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
-                    /* There's a reshape entry that is not being managed. */
-                    assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
+                    ///* There's a reshape entry that is not being managed. */
+                    //assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
                 #endif
                 }
 
@@ -2186,10 +2204,10 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
                 }   
             }  /* otherwise the bit is already flipped, the peer is already part of the propagation. */
             else {
-                assert(output->data.data == data->data);
+            //    assert(output->data.data == data->data);
             #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
-                /* There's a reshape entry that is not being managed. */
-                assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
+                ///* There's a reshape entry that is not being managed. */
+                //assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
             #endif
             }
         }

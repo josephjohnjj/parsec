@@ -21,6 +21,7 @@
 /**
  * Module functions
  */
+int rank_term = 0;
 
 static void parsec_termdet_fourcounter_monitor_taskpool(parsec_taskpool_t *tp,
                                                         parsec_termdet_termination_detected_function_t cb);
@@ -126,11 +127,20 @@ static int parsec_termdet_fourcounter_msg_dispatch_taskpool(parsec_taskpool_t *t
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tReceived %d bytes from %d relative to taskpool %d",
                          size, src, tp->taskpool_id);
 
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank_term);
+    printf("RANK %d TERMDET-4C:\tReceived %d bytes from %d relative to taskpool %d",
+                         rank_term, size, src, tp->taskpool_id);
+
     switch( t ) {
     case PARSEC_TERMDET_FOURCOUNTER_MSG_TYPE_DOWN:
         assert( size == sizeof(parsec_termdet_fourcounter_msg_down_t) );
         PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tIt is a DOWN message with result %d",
                              down_msg->result);
+
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank_term);
+        printf( "RANK %d TERMDET-4C:\tIt is a DOWN message with result %d",
+                             rank_term, down_msg->result);
         parsec_termdet_fourcounter_msg_down( down_msg, src, tp );
         return PARSEC_SUCCESS;
 
@@ -138,6 +148,9 @@ static int parsec_termdet_fourcounter_msg_dispatch_taskpool(parsec_taskpool_t *t
         assert( size == sizeof(parsec_termdet_fourcounter_msg_up_t) );
         PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tIt is an UP message with nb_sent = %d / nb_received = %d",
                              up_msg->nb_sent, up_msg->nb_received);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank_term);
+        printf("RANK %d TERMDET-4C:\tIt is an UP message with nb_sent = %d / nb_received = %d",
+                             rank_term, up_msg->nb_sent, up_msg->nb_received);
         parsec_termdet_fourcounter_msg_up( up_msg, src, tp );
         return PARSEC_SUCCESS;
     }
@@ -477,7 +490,8 @@ static int parsec_termdet_fourcounter_taskpool_addto_nb_tasks(parsec_taskpool_t 
     if(v == 0)
         return tp->nb_tasks;
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tNB_TASKS %d -> %d", tp->nb_tasks, tp->nb_tasks + v);
-    //printf("TERMDET-4C %p:\tNB_TASKS %d -> %d \n", tp, tp->nb_tasks, tp->nb_tasks + v);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank_term);
+    printf("RANK %d TERMDET-4C %p:\tNB_TASKS %d -> %d \n", rank_term, tp, tp->nb_tasks, tp->nb_tasks + v);
     int tmp = parsec_atomic_fetch_add_int32(&tp->nb_tasks, v);
     assert( ((parsec_termdet_fourcounter_monitor_t *)tp->tdm.monitor)->state != PARSEC_TERMDET_FOURCOUNTER_TERMINATED );
     ret = tmp + v;
@@ -501,7 +515,8 @@ static int parsec_termdet_fourcounter_taskpool_addto_runtime_actions(parsec_task
     if(v == 0)
         return tp->nb_pending_actions;
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tNB_PA %d -> %d", tp->nb_pending_actions, tp->nb_pending_actions + v);
-    //printf("TERMDET-4C %p:\tNB_PA %d -> %d \n", tp, tp->nb_pending_actions, tp->nb_pending_actions + v);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank_term);
+    printf("RANK %d TERMDET-4C %p:\tNB_PA %d -> %d \n", rank_term, tp, tp->nb_pending_actions, tp->nb_pending_actions + v);
     int tmp = parsec_atomic_fetch_add_int32(&tp->nb_pending_actions, v);
     ret = tmp + v;
     if (tmp == 0 || ret == 0) {

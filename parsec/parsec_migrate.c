@@ -1204,6 +1204,7 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     deps->msg.task_class_id = mig_task->task_class->task_class_id;
     deps->msg.taskpool_id = mig_task->taskpool->taskpool_id;
     deps->msg.deps = (uintptr_t)deps;
+    deps->msg.root = deps->root;
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
 
     assert(deps->taskpool == mig_task->taskpool);
@@ -1278,6 +1279,8 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
         parsec_ce.unpack(&parsec_ce, msg, length, &position, &deps->msg, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t);
         deps->from = src;
+        deps->root = deps->msg.root;
+        assert(deps->root == src);
         deps->eager_msg = NULL;
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
@@ -1866,6 +1869,7 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
     parsec_key_t key;
     mig_task_mapping_item_t *item;
 
+    assert(0 <= rank && rank < get_nb_nodes());
     key = task->task_class->make_key(task->taskpool, task->locals);
 
     /**
@@ -2056,7 +2060,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         if( -1 == rc ) {
             /* the corresponding tp doesn't exist, yet. Put it in unexpected */
 
-            printf("Take care of this case \n");
+            assert( 0 );
 
         #if 0
             char* packed_buffer;
@@ -2135,7 +2139,7 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,
     }
     else
     {
-        printf("Only PTG please \n");
+        assert( 0 );
     }
 
     /**
@@ -2160,7 +2164,7 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 
     int was_received = find_received_tasks_details(newcontext);
 
-    /** we are only intrested in task that were migrated in the previous iteeration */
+    /** we are only interested in task that were migrated in the previous iteration */
     if( -1 ==  was_received) {
         return PARSEC_ITERATE_CONTINUE;
     }
