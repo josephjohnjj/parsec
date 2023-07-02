@@ -7173,7 +7173,7 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
         coutput("  arg.output_entry = this_task->repo_entry;\n");
         coutput("  arg.output_usage = 0;\n");
 
-        coutput("  if( action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_GET_REPO_ENTRY) ) {\n"
+        coutput("  if( action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_GET_REPO_ENTRY | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) {\n"
                  "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
                  "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"
                  "#if defined(PARSEC_SIM)\n"
