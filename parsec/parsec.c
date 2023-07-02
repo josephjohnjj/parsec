@@ -1845,6 +1845,9 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             (void)data;
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
+            if( -1 != find_received_tasks_details(new_context)) {
+                new_context->mig_status = PARSEC_MIGRATED_TASK;
+            }
 
             if(parsec_runtime_task_mapping) {
                 new_context->sources = *sources;
@@ -1917,6 +1920,11 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 
     data_repo_t        *target_repo = arg->output_repo;
     data_repo_entry_t  *target_repo_entry = arg->output_entry;
+    if(NULL == target_repo_entry)
+    {
+        assert (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) ;
+
+    }
     assert(NULL != target_repo_entry);
     parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];
     data_repo_entry_t  *entry_for_reshapping =
