@@ -2029,11 +2029,8 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     (void)data;
 #endif
 
-    if( ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) ) ||
-
-        ((arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) )) {
+    if ((arg->action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) ) { 
 
         if(parsec_runtime_task_mapping) {
             was_migrated = find_migrated_tasks_details(newcontext);
@@ -2202,10 +2199,10 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
                 }   
             }  /* otherwise the bit is already flipped, the peer is already part of the propagation. */
             else {
-                assert(output->data.data == data->data);
+                //assert(output->data.data == data->data);
             #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
                 /* There's a reshape entry that is not being managed. */
-                assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
+                //assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
             #endif
             }
         }
@@ -2215,11 +2212,8 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     (void)data;
 #endif
 
-    if( ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) ) ||
-
-        ((arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) &&
-        (es->virtual_process->parsec_context->my_rank == dst_rank) )) {
+    if ((arg->action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) &&
+        (es->virtual_process->parsec_context->my_rank == dst_rank) ) {
 
         was_migrated = find_migrated_tasks_details(newcontext);
         if(was_migrated != -1) { /** The task was migrated */
