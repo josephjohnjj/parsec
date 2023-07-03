@@ -314,11 +314,17 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
-
-     rc = parsec_ce.tag_register(PARSEC_MIG_INFORM_PREDECESSOR_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
+    rc = parsec_ce.tag_register(PARSEC_MIG_INFORM_PREDECESSOR_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_INFORM_PREDECESSOR_TAG (error %d)\n", rc);
         parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+    rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context, SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -487,6 +493,9 @@ int parsec_node_migrate_fini()
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
+    parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
+    parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
+    
     free(device_progress_counter);
 
     if(parsec_runtime_task_mapping) {
