@@ -128,7 +128,7 @@ remote_dep_complete_and_cleanup(parsec_remote_deps_t** deps,
          */
         for( int i = 0; (*deps)->outgoing_mask >> i; i++ )
             if( (1U << i) & (*deps)->outgoing_mask ) {
-                assert( (*deps)->output[i].count_bits );
+                assert( (*deps)->output[i].count_bits || (*deps)->output[i].count_bits_direct);
                 if( NULL != (*deps)->output[i].data.data ) { /* if not CONTROL */
                     if( PARSEC_TASKPOOL_TYPE_DTD == (*deps)->taskpool->taskpool_type ) {
                         (void)parsec_atomic_fetch_dec_int32(&(*deps)->output[i].data.data->readers);
@@ -528,7 +528,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
     for( i = 0; propagation_mask >> i; i++ ) {
         if( !((1U << i) & propagation_mask )) continue;
         output = &remote_deps->output[i];
-        assert( 0 != output->count_bits );
+        assert( 0 != output->count_bits || 0 != output->count_bits_direct);
 
         my_idx = (remote_deps->root == es->virtual_process->parsec_context->my_rank) ? 0 : -1;
         idx = 0;
