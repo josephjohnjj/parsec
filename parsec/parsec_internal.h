@@ -160,6 +160,8 @@ struct parsec_taskpool_s {
                                                      *   Indexed on the same index as task_classes_array */
     data_repo_t**               repo_array; /**< Array of data repositories
                                              *   Indexed on the same index as functions array */
+    data_repo_t**               repo_array_direct; /**< Array of data repositories for direct flows
+                                             *   Indexed on the same index as functions array */
 };
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(parsec_taskpool_t);

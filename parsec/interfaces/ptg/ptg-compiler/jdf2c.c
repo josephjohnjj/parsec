@@ -1573,6 +1573,7 @@ static void jdf_generate_structure(jdf_t *jdf)
     coutput("*/\n");
     if(nbfunctions != 0 ) {
         coutput("  data_repo_t* repositories[%d];\n", nbfunctions);
+        coutput("  data_repo_t* repositories_direct[%d];\n", nbfunctions);
     }
 
     coutput("};\n\n");
@@ -3774,6 +3775,11 @@ static void jdf_generate_internal_init(const jdf_t *jdf, const jdf_function_entr
             jdf_property_get_string(f->properties, JDF_PROP_UD_HASH_STRUCT_NAME, NULL),
             idx );
 
+    coutput("  __parsec_tp->repositories_direct[%d] = data_repo_create_nothreadsafe(%s, %s, (parsec_taskpool_t*)__parsec_tp, %d);\n",
+            f->task_class_id, need_to_count_tasks ? "nb_tasks" : "PARSEC_DEFAULT_DATAREPO_HASH_LENGTH",
+            jdf_property_get_string(f->properties, JDF_PROP_UD_HASH_STRUCT_NAME, NULL),
+            idx );
+
     coutput("%s"
             "  %s (void)__parsec_tp; (void)es;\n",
             string_arena_get_string(sa_end),
@@ -4501,6 +4507,8 @@ static void jdf_generate_destructor( const jdf_t *jdf )
          */
         coutput("   data_repo_destroy_nothreadsafe(__parsec_tp->repositories[%d]);  /* %s */\n",
                 f->task_class_id, f->fname);
+        coutput("   data_repo_destroy_nothreadsafe(__parsec_tp->repositories_direct[%d]);  /* %s */\n",
+                f->task_class_id, f->fname);
     }
 
     coutput("  /* Release the dependencies arrays for this object */\n");
@@ -4722,6 +4730,9 @@ static void jdf_generate_constructor( const jdf_t* jdf )
 
     coutput("  __parsec_tp->super.super.repo_array = %s;\n",
             (NULL != jdf->functions) ? "__parsec_tp->repositories" : "NULL");
+
+    coutput("  __parsec_tp->super.super.repo_array_direct = %s;\n",
+            (NULL != jdf->functions) ? "__parsec_tp->repositories_direct" : "NULL");
 
     coutput("  __parsec_tp->super.super.startup_hook = (parsec_startup_fn_t)%s_startup;\n"
             "  (void)parsec_taskpool_reserve_id((parsec_taskpool_t*)__parsec_tp);\n"
