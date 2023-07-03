@@ -1204,6 +1204,7 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     deps->msg.task_class_id = mig_task->task_class->task_class_id;
     deps->msg.taskpool_id = mig_task->taskpool->taskpool_id;
     deps->msg.deps = (uintptr_t)deps;
+    deps->msg.root = deps->root;
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
 
     assert(deps->taskpool == mig_task->taskpool);
@@ -2450,13 +2451,6 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
         task.data[target->flow_index].data_out  = origin->output[i].data.data;
     }
 
-#ifdef PARSEC_DIST_COLLECTIVES
-    /* Corresponding comment below on the propagation part */
-    if(0 == origin->incoming_mask && PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
-        remote_dep_inc_flying_messages(task.taskpool);
-        (void)parsec_atomic_fetch_inc_int32(&origin->pending_ack);
-    }
-#endif  /* PARSEC_DIST_COLLECTIVES */
 
     if(PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
         /* We need to convert from a dep_datatype_index mask into a dep_index mask */
@@ -2467,8 +2461,6 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
                 if(complete_mask & (1U << target->dep_out[j]->dep_datatype_index))
                     action_mask |= (1U << target->dep_out[j]->dep_index);
         }
-    } else if(PARSEC_TASKPOOL_TYPE_DTD == origin->taskpool->taskpool_type) {
-        action_mask = complete_mask;
     } else {
         assert(0);
     }
@@ -2484,19 +2476,19 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
     
-    uint32_t mask = origin->outgoing_mask;
-    /**
-     * Release the dependency owned by the communication engine for all data
-     * internally allocated by the engine.
-     */
-    for(i = 0; mask>>i; i++) {
-        assert(i < MAX_PARAM_COUNT);
-        if( !((1U<<i) & mask) ) continue;
-        if( NULL != origin->output[i].data.data )  /* except CONTROLs */
-        {
-            PARSEC_DATA_COPY_RELEASE(origin->output[i].data.data);
-        }
-    }
+    //uint32_t mask = origin->outgoing_mask;
+    ///**
+    // * Release the dependency owned by the communication engine for all data
+    // * internally allocated by the engine.
+    // */
+    //for(i = 0; mask>>i; i++) {
+    //    assert(i < MAX_PARAM_COUNT);
+    //    if( !((1U<<i) & mask) ) continue;
+    //    if( NULL != origin->output[i].data.data )  /* except CONTROLs */
+    //    {
+    //        PARSEC_DATA_COPY_RELEASE(origin->output[i].data.data);
+    //    }
+    //}
 
     remote_deps_free(origin);
 
