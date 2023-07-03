@@ -1859,6 +1859,7 @@ int find_migrated_tasks_details(parsec_task_t *task)
         return -1;
     }
 
+    assert(0 <= item->rank && item->rank < get_nb_nodes());
     return item->rank;
 }
 
@@ -1867,6 +1868,7 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
     parsec_key_t key;
     mig_task_mapping_item_t *item;
 
+    assert(0 <= rank && rank < get_nb_nodes());
     key = task->task_class->make_key(task->taskpool, task->locals);
 
     /**
@@ -1894,6 +1896,8 @@ int find_received_tasks_details(parsec_task_t *task)
     if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key))) {
         return -1;
     }
+
+    assert(0 <= item->rank && item->rank < get_nb_nodes());
 
     return item->rank;
 }
@@ -1968,6 +1972,7 @@ int find_task_mapping(parsec_task_t *task)
         return -1;
     }
 
+     assert(0 <= item->rank && item->rank < get_nb_nodes());
     return item->rank;
 }
 
@@ -2056,7 +2061,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         if( -1 == rc ) {
             /* the corresponding tp doesn't exist, yet. Put it in unexpected */
 
-            printf("Take care of this case \n");
+            assert(0);
 
         #if 0
             char* packed_buffer;
@@ -2135,7 +2140,7 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,
     }
     else
     {
-        printf("Only PTG please \n");
+        assert(0);
     }
 
     /**
