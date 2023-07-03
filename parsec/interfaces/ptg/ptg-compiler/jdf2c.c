@@ -1632,6 +1632,16 @@ static void jdf_generate_structure(jdf_t *jdf)
             coutput("#define %s_repo (__parsec_tp->repositories[%d])\n",
                     f->fname, f->task_class_id);
         }
+
+        for( f = jdf->functions; NULL != f; f = f->next ) {
+            /* Generate the repo for all tasks classes, they can be used when:
+             * - a predecessor sets up a reshape promised for a datacopy
+             * - the own tasks use it when reshaping a datacopy directly read from desc
+             * No longer only when if( !(f->flags & JDF_FUNCTION_FLAG_NO_SUCCESSORS) )
+             */
+            coutput("#define %s_repo_direct (__parsec_tp->repositories_direct[%d])\n",
+                    f->fname, f->task_class_id);
+        }
     }
 
     if( JDF_COMPILER_GLOBAL_ARGS.dep_management == DEP_MANAGEMENT_INDEX_ARRAY ) {
@@ -7191,7 +7201,21 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  "    assert(arg.output_entry->sim_exec_date == 0);\n"
                  "    arg.output_entry->sim_exec_date = this_task->sim_exec_date;\n"
                  "#endif\n"
+                 "  }\n"
+                 "\n",
+                 jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
+
+        coutput("  if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) {\n"
+                 "    arg.output_repo = %s_repo_direct;\n"
+                 "    arg.output_entry = this_task->repo_entry;\n"
+                 "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
+                 "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"
+                 "#if defined(PARSEC_SIM)\n"
+                 "    assert(arg.output_entry->sim_exec_date == 0);\n"
+                 "    arg.output_entry->sim_exec_date = this_task->sim_exec_date;\n"
+                 "#endif\n"
                  "  }\n",
+                 f->fname,
                  jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
 
         /* We need 2 iterate_successors calls so that all reshapping info is
