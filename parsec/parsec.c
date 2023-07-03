@@ -1915,7 +1915,9 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     }
 
     data_repo_t        *target_repo = arg->output_repo;
+    assert(NULL != target_repo);
     data_repo_entry_t  *target_repo_entry = arg->output_entry;
+    assert(NULL != target_repo_entry);
     parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];
     data_repo_entry_t  *entry_for_reshapping =
             data_repo_lookup_entry(successor_repo, successor_repo_key);

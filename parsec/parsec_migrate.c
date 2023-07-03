@@ -1279,6 +1279,8 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
         parsec_ce.unpack(&parsec_ce, msg, length, &position, &deps->msg, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t);
         deps->from = src;
+        deps->root = deps->msg.root;
+        assert(deps->root == src);
         deps->eager_msg = NULL;
 
         rc = remote_dep_get_datatypes_of_mig_task(es, deps);
@@ -2041,12 +2043,13 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     (void) tag; (void) cb_data;
     parsec_execution_stream_t* es = &parsec_comm_es;
 
-    int position = 0, length = msg_size, rc;
+    int position = 0, saved_position = 0, length = msg_size, rc;
     parsec_remote_deps_t* deps = NULL;
 
     while(position < length) {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
 
+        saved_position = position;
         parsec_ce.unpack(&parsec_ce, msg, length, &position, &deps->msg, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t);
         deps->from = src;
         deps->eager_msg = msg;
@@ -2056,30 +2059,12 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
          * the data we should be receiving from the predecessor.
          */
         rc = mig_direct_get_datatypes(es, deps, 0, &position);
-
- 
         if( -1 == rc ) {
-            /* the corresponding tp doesn't exist, yet. Put it in unexpected */
-
             assert(0);
-
-        #if 0
-            char* packed_buffer;
-            PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "MPI:\tFROM\t%d\tActivate NoTPool\t% -8s\tk=%d\twith datakey %lx\tparams %lx",
-                    deps->from, remote_dep_cmd_to_string(&deps->msg, tmp, MAX_TASK_STRLEN),
-                    0, deps->msg.deps, deps->msg.output_mask);
-            /* Copy the eager data to some temp storage */
-            packed_buffer = malloc(deps->msg.length);
-            memcpy(packed_buffer, msg + position, deps->msg.length);
-            position += deps->msg.length;  /* move to the next order */
-            deps->taskpool = (parsec_taskpool_t*)packed_buffer;  /* temporary storage */
-            parsec_list_nolock_push_back(&dep_activates_noobj_fifo, (parsec_list_item_t*)deps);
-            continue;
-        #endif
         } 
 
         mig_direct_recv_activate(es, deps, msg,
-                                     position + deps->msg.length, &position);
+                                     saved_position + deps->msg.length, &position);
     }
     assert(position == length);
 
