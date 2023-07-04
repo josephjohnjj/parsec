@@ -27,7 +27,8 @@ typedef union dep_cmd_u dep_cmd_t;
 
 typedef unsigned long remote_dep_datakey_t;
 
-#define PARSEC_ACTION_DEPS_MASK                  0x00FFFFFF
+#define PARSEC_ACTION_DEPS_MASK                  0x000FFFFF
+#define PARSEC_ACTION_RELEASE_DIRECT_DEPS        0x00100000
 #define PARSEC_ACTION_RELEASE_LOCAL_DEPS         0x01000000
 #define PARSEC_ACTION_RELEASE_LOCAL_REFS         0x02000000
 #define PARSEC_ACTION_GET_REPO_ENTRY             0x04000000
@@ -37,7 +38,6 @@ typedef unsigned long remote_dep_datakey_t;
 #define PARSEC_ACTION_RECV_INIT_REMOTE_DEPS      0x40000000
 #define PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE  0x80000000
 #define PARSEC_ACTION_RELEASE_REMOTE_DEPS        (PARSEC_ACTION_SEND_INIT_REMOTE_DEPS | PARSEC_ACTION_SEND_REMOTE_DEPS)
-#define PARSEC_ACTION_RELEASE_DIRECT_DEPS        0x100000000
 
 typedef struct remote_dep_wire_activate_s {
     remote_dep_datakey_t deps;         /**< a pointer to the dep structure on the source */
