@@ -26,6 +26,7 @@ int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 parsec_list_t mig_noobj_fifo;               /* fifo of mig task details with taskpools not actually known */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
 parsec_list_t received_task_fifo;           /** list of all tasks received */
+parsec_list_t direct_msg_fifo;               /* fifo of direct msg with taskpools not actually known */
 
 
 /**
@@ -340,6 +341,8 @@ int parsec_node_migrate_init(parsec_context_t *context)
     PARSEC_OBJ_CONSTRUCT(&steal_req_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&mig_noobj_fifo, parsec_list_t);
     PARSEC_OBJ_CONSTRUCT(&received_task_fifo, parsec_list_t);
+    PARSEC_OBJ_CONSTRUCT(&direct_msg_fifo, parsec_list_t);
+    
 
     if(parsec_runtime_task_mapping) {
         task_map_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
@@ -489,7 +492,8 @@ int parsec_node_migrate_fini()
     PARSEC_OBJ_DESTRUCT(&steal_req_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
     PARSEC_OBJ_DESTRUCT(&received_task_fifo);
-    
+    PARSEC_OBJ_DESTRUCT(&direct_msg_fifo);
+
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
@@ -1325,6 +1329,31 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
     }
 
     parsec_list_unlock(&mig_noobj_fifo);
+
+    parsec_list_lock(&direct_msg_fifo);
+
+    for(item = PARSEC_LIST_ITERATOR_FIRST(&direct_msg_fifo);
+        item != PARSEC_LIST_ITERATOR_END(&direct_msg_fifo);
+        item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
+
+        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
+
+        if( deps->msg.taskpool_id == obj->taskpool_id ) {
+            char* buffer = (char*)deps->taskpool;  /* get back the buffer from the "temporary" storage */
+            deps->taskpool = NULL;
+            int rc, position = 0;
+            rc = mig_direct_get_datatypes(es, deps, 0, &position); 
+            assert( -1 != rc );
+            item = parsec_list_nolock_remove(&direct_msg_fifo, item);
+
+            mig_direct_recv_activate(es, deps, buffer,
+                                     position + deps->msg.length, &position);
+        }
+    }
+
+    parsec_list_unlock(&direct_msg_fifo);
+
+    
 }
 
 static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
@@ -2060,11 +2089,16 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
          */
         rc = mig_direct_get_datatypes(es, deps, 0, &position);
         if( -1 == rc ) {
-            assert(0);
+            char* packed_buffer;
+            packed_buffer = malloc(deps->msg.length);
+            memcpy(packed_buffer, msg + saved_position, deps->msg.length);
+            deps->taskpool = (parsec_taskpool_t*)packed_buffer;  /* temporary storage */
+            parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
         } 
-
-        mig_direct_recv_activate(es, deps, msg,
+        else {
+            mig_direct_recv_activate(es, deps, msg,
                                      saved_position + deps->msg.length, &position);
+        }
     }
     assert(position == length);
 
