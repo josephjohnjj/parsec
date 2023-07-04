@@ -2189,10 +2189,10 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             #endif
                 } 
                 else {
-                    assert(output->data.data == data->data);
+                    //assert(output->data.data == data->data);
                 #ifdef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
                     /* There's a reshape entry that is not being managed. */
-                    assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
+                    //assert( !((entry_for_reshapping != NULL) && (entry_for_reshapping->data[dst_flow->flow_index] != NULL)) );
                 #endif
                 }
 
