@@ -15,11 +15,12 @@
 #include "parsec/utils/debug.h"
 #include "parsec/execution_stream.h"
 #include "parsec/data_distribution.h"
+#include "parsec/parsec_migrate.h"
 
 #define PARSEC_UNFULFILLED_RESHAPE_PROMISE 0
 #define PARSEC_FULFILLED_RESHAPE_PROMISE   1
 
-
+extern int parsec_runtime_task_mapping;
 /**
  *
  * Callback routine to clean up a reshape promise.
@@ -423,6 +424,11 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
             || ((data->local.dst_datatype == data->data->dtt)
                && (data->local.src_datatype == data->data->dtt)));
 
+    if (parsec_runtime_task_mapping ) {
+        if( -1 != find_received_tasks_details(newcontext)) {
+            dst_rank = es->virtual_process->parsec_context->my_rank;
+        }
+    }
 #ifndef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
     if (dst_rank != es->virtual_process->parsec_context->my_rank){
         /* avoid setting up reshape for remotes */

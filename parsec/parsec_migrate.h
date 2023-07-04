@@ -108,7 +108,6 @@ int parsec_node_mig_inc_released();
 int parsec_node_mig_inc_selected();
 int parsec_node_mig_inc_gpu_task_executed();
 int parsec_node_mig_inc_cpu_task_executed();
-int print_stats();
 void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_item);
 int migrate_put_mpi_progress(parsec_execution_stream_t* es);
 int nb_starving_device(parsec_execution_stream_t *es);
@@ -126,5 +125,6 @@ int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
     parsec_remote_deps_t* rdeps, int rank);
 void remote_dep_mark_forwarded_direct(parsec_execution_stream_t* es,
     parsec_remote_deps_t* rdeps, int rank);
+int find_received_tasks_details(parsec_task_t *task);
 
 #endif

@@ -7201,13 +7201,11 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  "    assert(arg.output_entry->sim_exec_date == 0);\n"
                  "    arg.output_entry->sim_exec_date = this_task->sim_exec_date;\n"
                  "#endif\n"
-                 "  }\n"
-                 "\n",
+                 "  }\n",
                  jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
 
-        coutput("  if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) {\n"
+        coutput("  else if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) {\n"
                  "    arg.output_repo = %s_repo_direct;\n"
-                 "    arg.output_entry = NULL;\n"
                  "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
                  "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"
                  "#if defined(PARSEC_SIM)\n"
@@ -7217,6 +7215,21 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  "  }\n",
                  f->fname,
                  jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
+
+        coutput("  else {\n"
+                "    if( action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS ) printf(\"PARSEC_ACTION_RELEASE_LOCAL_DEPS \"); \n"
+                "    if( action_mask & PARSEC_ACTION_RELEASE_LOCAL_REFS ) printf(\"PARSEC_ACTION_RELEASE_LOCAL_REFS \"); \n"
+                "    if( action_mask & PARSEC_ACTION_GET_REPO_ENTRY ) printf(\"PARSEC_ACTION_GET_REPO_ENTRY \"); \n"
+                "    if( action_mask & PARSEC_ACTION_RESHAPE_ON_RELEASE ) printf(\"PARSEC_ACTION_RESHAPE_ON_RELEASE \"); \n"
+                "    if( action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ) printf(\"PARSEC_ACTION_SEND_INIT_REMOTE_DEPS \"); \n"
+                "    if( action_mask & PARSEC_ACTION_SEND_REMOTE_DEPS ) printf(\"PARSEC_ACTION_SEND_REMOTE_DEPS \"); \n"
+                "    if( action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS ) printf(\"PARSEC_ACTION_RECV_INIT_REMOTE_DEPS \"); \n"
+                "    if( action_mask & PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE ) printf(\"PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE \"); \n"
+                "    if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) printf(\"PARSEC_ACTION_RELEASE_DIRECT_DEPS \"); \n"
+
+                "    assert( NULL != arg.output_repo ); \n"
+                "    //assert( NULL != arg.output_entry ); \n"
+                "  } \n");
 
         /* We need 2 iterate_successors calls so that all reshapping info is
          * setup before it is consumed by any local successor.

@@ -458,10 +458,7 @@ int __parsec_complete_execution( parsec_execution_stream_t *es,
                                  parsec_task_t *task )
 {
     int rc = 0;
-
-    if(parsec_runtime_print_completion_stats)
-        print_stats();
-
+    
     /* complete execution PINS event includes the preparation of the
      * output and the and the call to complete_execution.
      */
