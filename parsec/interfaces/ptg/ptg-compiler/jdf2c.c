@@ -7217,18 +7217,7 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
 
         coutput("  else {\n"
-                "    if( action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS ) printf(\"PARSEC_ACTION_RELEASE_LOCAL_DEPS \"); \n"
-                "    if( action_mask & PARSEC_ACTION_RELEASE_LOCAL_REFS ) printf(\"PARSEC_ACTION_RELEASE_LOCAL_REFS \"); \n"
-                "    if( action_mask & PARSEC_ACTION_GET_REPO_ENTRY ) printf(\"PARSEC_ACTION_GET_REPO_ENTRY \"); \n"
-                "    if( action_mask & PARSEC_ACTION_RESHAPE_ON_RELEASE ) printf(\"PARSEC_ACTION_RESHAPE_ON_RELEASE \"); \n"
-                "    if( action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ) printf(\"PARSEC_ACTION_SEND_INIT_REMOTE_DEPS \"); \n"
-                "    if( action_mask & PARSEC_ACTION_SEND_REMOTE_DEPS ) printf(\"PARSEC_ACTION_SEND_REMOTE_DEPS \"); \n"
-                "    if( action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS ) printf(\"PARSEC_ACTION_RECV_INIT_REMOTE_DEPS \"); \n"
-                "    if( action_mask & PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE ) printf(\"PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE \"); \n"
-                "    if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) printf(\"PARSEC_ACTION_RELEASE_DIRECT_DEPS \"); \n"
-
                 "    assert( NULL != arg.output_repo ); \n"
-                "    //assert( NULL != arg.output_entry ); \n"
                 "  } \n");
 
         /* We need 2 iterate_successors calls so that all reshapping info is
