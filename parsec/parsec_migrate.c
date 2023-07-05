@@ -733,7 +733,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                     gpu_task = (parsec_gpu_task_t *)item;
 
                     if ((gpu_task != NULL) && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) &&
-                        (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK)) {
+                        (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) &&
+                        (gpu_task->ec->task_class->task_class_id == 5)) {
 
                         item = parsec_list_nolock_remove(list, item);
                         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
@@ -1864,6 +1865,7 @@ int insert_migrated_tasks_details(parsec_task_t *task, int rank)
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
         item->rank = rank;
+        item->task_class_id  = task->task_class->task_class_id;
         parsec_hash_table_lock_bucket(migrated_task_ht, key);
         parsec_hash_table_nolock_insert(migrated_task_ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(migrated_task_ht, key);
@@ -1878,6 +1880,9 @@ int find_migrated_tasks_details(parsec_task_t *task)
 
     key = task->task_class->make_key(task->taskpool, task->locals);
     if (NULL == (item = parsec_hash_table_nolock_find(migrated_task_ht, key))) {
+        return -1;
+    }
+    if(task->task_class->task_class_id != item->task_class_id) {
         return -1;
     }
 
@@ -1902,6 +1907,7 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
         item->rank = rank;
+        item->task_class_id = task->task_class->task_class_id;
         parsec_hash_table_lock_bucket(received_task_ht, key);
         parsec_hash_table_nolock_insert(received_task_ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(received_task_ht, key);
@@ -1916,6 +1922,9 @@ int find_received_tasks_details(parsec_task_t *task)
 
     key = task->task_class->make_key(task->taskpool, task->locals);
     if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key))) {
+        return -1;
+    }
+    if(task->task_class->task_class_id != item->task_class_id) {
         return -1;
     }
 
@@ -1945,7 +1954,7 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
         assert(0 <= src_rank && src_rank < get_nb_nodes());
 
         if(src_rank == my_rank) {
-            update_task_mapping(mapping_info.key, mapping_info.mig_rank);          
+            update_task_mapping(&mapping_info);          
         }
         else {
             send_task_mapping_info(es, task, &mapping_info, src_rank);
@@ -1955,9 +1964,13 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     return 0;
 }
 
-int update_task_mapping(parsec_key_t key, int new_rank)
+
+int update_task_mapping(mig_task_mapping_info_t *mapping_info)
 {
     mig_task_mapping_item_t *item;
+    parsec_key_t key = mapping_info->key;
+    int task_class_id = mapping_info->task_class_id;
+    int new_rank =  mapping_info->mig_rank;
 
 
     /**
@@ -1970,14 +1983,19 @@ int update_task_mapping(parsec_key_t key, int new_rank)
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->rank = new_rank;
         item->ht_item.key = key;
+        item->task_class_id = task_class_id;
         parsec_hash_table_lock_bucket(task_map_ht, key);
         parsec_hash_table_nolock_insert(task_map_ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(task_map_ht, key);
 
         return 1;
     }
-    else
+    else {
+        if(item->task_class_id != task_class_id) {
+            return 0;
+        }
         item->ht_item.key = key;
+    }
 
     return 0;
 }
@@ -1991,6 +2009,10 @@ int find_task_mapping(parsec_task_t *task)
 
     key = task->task_class->make_key(task->taskpool, task->locals);
     if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key))) {
+        return -1;
+    }
+
+    if(task->task_class->task_class_id != item->task_class_id) {
         return -1;
     }
 
@@ -2019,7 +2041,7 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
     assert(0 <= mapping_info->mig_rank && mapping_info->mig_rank < get_nb_nodes());
 
-    update_task_mapping(mapping_info->key, mapping_info->mig_rank);
+    update_task_mapping(mapping_info);
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
     
     return 0;

@@ -639,6 +639,15 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
                     current_mask ^= (1 << bit_index);
                     count++;
 
+                    /** If the remote_deps have alreday been forwarded to the rank
+                     * ignore the direct data flow. 
+                    */
+                    //if(remote_dep_is_forwarded(es, remote_deps, rank)) { 
+                    //    PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "[%d:%d] task %s my_idx %d idx %d rank %d -- skip (already done)",
+                    //            remote_deps->root, i, tmp, my_idx, idx, rank);
+                    //    continue;
+                    //}
+
                     if(remote_dep_is_forwarded_direct(es, remote_deps, rank)) {  /* already in the counting */
                         PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "[%d:%d] task %s my_idx %d idx %d rank %d -- skip (already done)",
                                 remote_deps->root, i, tmp, my_idx, idx, rank);

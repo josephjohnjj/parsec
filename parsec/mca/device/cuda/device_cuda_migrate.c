@@ -2,6 +2,7 @@
 #include "parsec/include/parsec/os-spec-timing.h"
 #include "parsec/class/list.h"
 #include "parsec/execution_stream.h"
+#include "parsec/parsec_migrate.h"
 
 extern int parsec_device_cuda_enabled;
 extern int parsec_migrate_statistics;

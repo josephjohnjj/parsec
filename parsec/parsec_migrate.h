@@ -87,6 +87,7 @@ typedef struct mig_task_mapping_item_s
 {
     parsec_hash_table_item_t ht_item;
     int rank;
+    int task_class_id;
 } mig_task_mapping_item_t;
 
 typedef struct mig_task_mapping_info_s

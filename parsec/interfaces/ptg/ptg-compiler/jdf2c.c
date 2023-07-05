@@ -6169,6 +6169,7 @@ static void jdf_generate_code_call_release_dependencies(const jdf_t *jdf,
             "      PARSEC_ACTION_RELEASE_LOCAL_DEPS |\n"
             "      PARSEC_ACTION_RELEASE_LOCAL_REFS |\n"
             "      PARSEC_ACTION_RESHAPE_ON_RELEASE |\n"
+            "      PARSEC_ACTION_RELEASE_DIRECT_DEPS |\n"
             "      0x%x,  /* mask of all dep_index */ \n"
             "      NULL);\n",
             jdf_basename, function->fname, context_name, complete_mask);
@@ -7204,7 +7205,7 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  "  }\n",
                  jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
 
-        coutput("  else if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) {\n"
+        coutput("  else if( (action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) && !(action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) ) {\n"
                  "    arg.output_repo = %s_repo_direct;\n"
                  "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
                  "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"

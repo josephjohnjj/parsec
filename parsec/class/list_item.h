@@ -275,6 +275,19 @@ parsec_list_item_ring_push_sorted( parsec_list_item_t* ring,
     return ring;
 }
 
+static inline parsec_list_item_t*
+parsec_list_item_ring_push_unsorted( parsec_list_item_t* ring,
+                                   parsec_list_item_t* item)
+{
+    parsec_list_item_singleton(item);
+    if( NULL == ring ) {
+        return item;
+    }
+
+    parsec_list_item_ring_push(ring, item);
+    return ring;
+}
+
 /* This is debug helpers for list items accounting */
 /**
  * Don't include the implementation in the doxygen documentation

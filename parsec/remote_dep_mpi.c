@@ -736,6 +736,11 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 {
     (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
     (void)successor_repo; (void) successor_repo_key;
+
+    ///** The task was received. So we act if we are the original destination */
+    //if( -1 != find_received_tasks_details(newcontext)) {
+    //    dst_rank == eu->virtual_process->parsec_context->my_rank;
+    //}
     if( dst_rank != eu->virtual_process->parsec_context->my_rank )
         return PARSEC_ITERATE_CONTINUE;
 

@@ -666,7 +666,7 @@ int32_t parsec_add_fetch_runtime_task( parsec_taskpool_t *tp, int32_t nb_tasks )
 
 void parsec_dependencies_mark_task_as_startup(parsec_task_t* task, parsec_execution_stream_t *es);
 
-parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
+int parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                                       const parsec_task_t* restrict origin,
                                       const parsec_flow_t* restrict origin_flow,
                                       const parsec_task_t* restrict task,

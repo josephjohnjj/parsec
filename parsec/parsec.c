@@ -1846,13 +1846,12 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
             if (parsec_runtime_task_mapping ) {
-                if( -1 != find_received_tasks_details(new_context)) {
+                if( -1 != find_received_tasks_details(task)) {
                     new_context->mig_status = PARSEC_MIGRATED_TASK;
+                    printf("I am here \n");
                 }
-            }
 
-            if(parsec_runtime_task_mapping) {
-                new_context->sources = *sources;
+                new_context->sources = *sources; /** Set the intermediate dataflow sources */
             }
 
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
@@ -1869,9 +1868,11 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
 #endif
             } else {
                 *pready_ring = (parsec_task_t*)
-                    parsec_list_item_ring_push_sorted( (parsec_list_item_t*)(*pready_ring),
-                                                       &new_context->super,
-                                                       parsec_execution_context_priority_comparator );
+                    //parsec_list_item_ring_push_sorted( (parsec_list_item_t*)(*pready_ring),
+                    //                                   &new_context->super,
+                    //                                   parsec_execution_context_priority_comparator );
+                    parsec_list_item_ring_push_unsorted((parsec_list_item_t*)(*pready_ring),
+                                                       &new_context->super);
             }
         }
     } else { /* Service not ready */
@@ -1911,12 +1912,14 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         } 
     }
 
-    if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
-        was_received = find_received_tasks_details(newcontext);
-        if(was_received == -1) { /** The task was not received */
-            return PARSEC_ITERATE_CONTINUE;
+    if(parsec_runtime_task_mapping) {
+        if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
+            was_received = find_received_tasks_details(newcontext);
+            if(was_received == -1) { /** The task was not received */
+                return PARSEC_ITERATE_CONTINUE;
+            }
+            dst_rank = src_rank;
         }
-        dst_rank = src_rank;
     }
 
     data_repo_t        *target_repo = arg->output_repo;
@@ -2093,15 +2096,15 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         return PARSEC_ITERATE_CONTINUE;
     } 
     assert(0 <= new_mapping && new_mapping < get_nb_nodes());
-    /** The new dst_rank is given by new_mapping */
-    dst_rank = new_mapping;
 
-    if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
-        was_received = find_received_tasks_details(newcontext);
-        if(was_received == -1) { /** The task was not received */
-            return PARSEC_ITERATE_CONTINUE;
+    if(parsec_runtime_task_mapping) {
+        if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
+            was_received = find_received_tasks_details(newcontext);
+            if(was_received == -1) { /** The task was not received */
+                return PARSEC_ITERATE_CONTINUE;
+            }
+            dst_rank = src_rank;
         }
-        dst_rank = src_rank;
     }
 
     data_repo_t        *target_repo = arg->output_repo;
