@@ -1970,8 +1970,9 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
     mig_task_mapping_item_t *item;
     parsec_key_t key = mapping_info->key;
     int task_class_id = mapping_info->task_class_id;
-    int new_rank =  mapping_info->mig_rank;
+    int new_rank = mapping_info->mig_rank;
 
+    assert(0 <= mapping_info->mig_rank && mapping_info->mig_rank < get_nb_nodes());
 
     /**
      * @brief Entry NULL imples that this task has never been migrated
@@ -1988,16 +1989,19 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
         parsec_hash_table_nolock_insert(task_map_ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(task_map_ht, key);
 
-        return 1;
+        return item->rank;
     }
     else {
         if(item->task_class_id != task_class_id) {
-            return 0;
+            return -1;
         }
+        item->rank = new_rank;
         item->ht_item.key = key;
+        item->task_class_id = task_class_id;
+        return item->rank;
     }
 
-    return 0;
+    return -1;
 }
 
 int find_task_mapping(parsec_task_t *task)
