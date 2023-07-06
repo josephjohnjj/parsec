@@ -1353,6 +1353,9 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             assert( -1 != rc );
             if ( -2 == rc) {
                 /** The same message was received from someone else */
+                deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, buffer, position,
+                                                       deps->msg.length, deps);
+                deps->taskpool->tdm.module->incoming_message_end(deps->taskpool, deps);
                 free(deps);
             }
             else {
@@ -2180,6 +2183,9 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         } 
         else if ( -2 == rc){
             /** The same message was received from someone else */
+            deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, msg, position,
+                                                       deps->msg.length, deps);
+            deps->taskpool->tdm.module->incoming_message_end(deps->taskpool, deps);
             free(deps);
         }
         else {
