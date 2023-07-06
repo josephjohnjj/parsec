@@ -1898,10 +1898,12 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     int new_mapping = -1;
     int was_migrated = -1;
     int was_received = -1;
+    int original_dst = dst_rank;
+    int rc = 0;
 
     if(parsec_runtime_task_mapping) {
         new_mapping = find_task_mapping(newcontext);
-        assert(dst_rank != new_mapping);
+        assert(dst_rank != new_mapping); /** new rank or -1*/
 
         /** if new_mapping is non-negative, that means I was one of the itermediate source of 
         * data for the migrated task. 
@@ -1917,19 +1919,29 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         /** This is a local activation */
         if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
             (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+                
             was_received = find_received_tasks_details(newcontext);
             /** newcontext was migrated to this node */
             if(was_received != -1) { /** The task was received */
+                /** newcontext was migrated to this node */
+                assert(was_received == dst_rank);
+                assert(new_mapping == src_rank || new_mapping == -1);
                 dst_rank = src_rank;
+
+                rc = find_direct_msg(oldcontext);
+                assert(-1 == rc);
+                insert_direct_msg(oldcontext, src_rank);
             }
         }
-        /** This is a remote activation throhgh direct dataflow */
+        /** This is a remote activation through direct dataflow */
         else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
             (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
             was_received = find_received_tasks_details(newcontext);
             /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was not received */
+            if(was_received != -1) { /** The task was received */
                 /** newcontext was migrated to this node */
+                assert(was_received == dst_rank);
                 dst_rank = src_rank;
             }
             else {
@@ -1941,8 +1953,12 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
             (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
                 
-                assert(0 <= dst_rank && dst_rank < get_nb_nodes());
-                assert(0 <= src_rank && src_rank < get_nb_nodes());
+            was_received = find_received_tasks_details(newcontext);
+            /** newcontext was migrated to this node */
+            if(was_received != -1) {
+                /** Direct dataflow will take care of this */
+                assert(dst_rank != src_rank);
+            }
         }
         else
         {
@@ -2073,6 +2089,11 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             if(was_migrated != -1) { /** The task was migrated */
                 return PARSEC_ITERATE_CONTINUE;
             }
+
+            if(was_received != -1) {
+                assert(dst_rank != original_dst);
+                assert(new_mapping == src_rank || new_mapping == -1);
+            }
         }
         /* Copying data in data-repo if there is data .
          * We are doing this in order for dtd to be able to track control dependences.
@@ -2109,6 +2130,8 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     int new_mapping = -1;
     int was_migrated = -1;
     int was_received = -1;
+    int original_dst = dst_rank;
+    int rc = 0;
 
     if(!parsec_runtime_task_mapping) {
         return PARSEC_ITERATE_STOP;
@@ -2130,19 +2153,29 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         /** This is a local activation */
         if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
             (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+                
             was_received = find_received_tasks_details(newcontext);
             /** newcontext was migrated to this node */
             if(was_received != -1) { /** The task was received */
+                /** newcontext was migrated to this node */
+                assert(was_received == dst_rank);
+                assert(new_mapping == src_rank || new_mapping == -1);
                 dst_rank = src_rank;
+
+                rc = find_direct_msg(oldcontext);
+                assert(-1 == rc);
+                insert_direct_msg(oldcontext, src_rank);
             }
         }
-        /** This is a remote activation throhgh direct dataflow */
+        /** This is a remote activation through direct dataflow */
         else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
             (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
             was_received = find_received_tasks_details(newcontext);
             /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was not received */
+            if(was_received != -1) { /** The task was received */
                 /** newcontext was migrated to this node */
+                assert(was_received == dst_rank);
                 dst_rank = src_rank;
             }
             else {
@@ -2153,9 +2186,13 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         /** This is a remote activation through normal dataflow */
         else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
             (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-                assert(0 <= dst_rank && dst_rank < get_nb_nodes());
-                assert(0 <= src_rank && src_rank < get_nb_nodes());
+                
+            was_received = find_received_tasks_details(newcontext);
+            /** newcontext was migrated to this node */
+            if(was_received != -1) {
+                /** Direct dataflow will take care of this */
+                assert(dst_rank != src_rank);
+            }
         }
         else
         {
@@ -2282,6 +2319,11 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         was_migrated = find_migrated_tasks_details(newcontext);
         if(was_migrated != -1) { /** The task was migrated */
             return PARSEC_ITERATE_CONTINUE;
+        }
+
+        if(was_received != -1) {
+            assert(dst_rank != original_dst);
+            assert(new_mapping == src_rank || new_mapping == -1);
         }
         
         /* Copying data in data-repo if there is data .

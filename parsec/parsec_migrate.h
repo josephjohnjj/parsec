@@ -127,5 +127,7 @@ int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
 void remote_dep_mark_forwarded_direct(parsec_execution_stream_t* es,
     parsec_remote_deps_t* rdeps, int rank);
 int find_received_tasks_details(parsec_task_t *task);
+int insert_direct_msg(parsec_task_t *task, int rank);
+int find_direct_msg(parsec_task_t *task);
 
 #endif

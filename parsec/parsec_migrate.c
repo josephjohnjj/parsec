@@ -65,6 +65,8 @@ static parsec_hash_table_t *task_map_ht = NULL;
 static parsec_hash_table_t *received_task_ht = NULL; 
 /** hashtable for storing details of migrated tasks */
 static parsec_hash_table_t *migrated_task_ht = NULL; 
+/** hashtable of direct messages */
+static parsec_hash_table_t *direct_msg_ht = NULL; 
 
 static parsec_key_fn_t node_task_mapping_table_generic_key_fn = {
     .key_equal = parsec_hash_table_generic_64bits_key_equal,
@@ -347,6 +349,12 @@ int parsec_node_migrate_init(parsec_context_t *context)
         migrated_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
         parsec_hash_table_init(migrated_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
             node_task_mapping_table_generic_key_fn, NULL);
+
+        direct_msg_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
+        parsec_hash_table_init(direct_msg_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
+            node_task_mapping_table_generic_key_fn, NULL);
+
+            
     }
     
     return 0;
@@ -508,6 +516,13 @@ int parsec_node_migrate_fini()
         parsec_hash_table_fini(migrated_task_ht);
         PARSEC_OBJ_RELEASE(migrated_task_ht);
         migrated_task_ht = NULL;
+
+        parsec_hash_table_for_all(direct_msg_ht, task_mapping_free_elt, direct_msg_ht);
+        parsec_hash_table_fini(direct_msg_ht);
+        PARSEC_OBJ_RELEASE(direct_msg_ht);
+        direct_msg_ht = NULL;
+
+        
     }
 
     return parsec_migration_engine_up;
@@ -1336,10 +1351,17 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             int rc, position = 0;
             rc = mig_direct_get_datatypes(es, deps, 0, &position); 
             assert( -1 != rc );
-            item = parsec_list_nolock_remove(&direct_msg_fifo, item);
+            if ( -2 == rc) {
+                /** The same message was received from someone else */
+                free(deps);
+            }
+            else {
+                item = parsec_list_nolock_remove(&direct_msg_fifo, item);
 
-            mig_direct_recv_activate(es, deps, buffer,
+                mig_direct_recv_activate(es, deps, buffer,
                                      position + deps->msg.length, &position);
+            }
+            
         }
     }
 
@@ -1623,6 +1645,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     /** schedule the migrated tasks */
     schedule_migrated_task(es, task);
+    assert(origin->root == origin->from);
 
     remote_deps_free(origin);
     return 0;
@@ -1933,6 +1956,49 @@ int find_received_tasks_details(parsec_task_t *task)
     return item->rank;
 }
 
+int insert_direct_msg(parsec_task_t *task, int rank)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    assert(0 <= rank && rank < get_nb_nodes());
+    key = task->task_class->make_key(task->taskpool, task->locals);
+
+    /**
+     * @brief Entry NULL imples that this task has never been received
+     * till now in any of the iteration. So we start a new entry.
+     */
+    if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key)))
+    {
+        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
+        item->ht_item.key = key;
+        item->rank = rank;
+        item->task_class_id = task->task_class->task_class_id;
+        parsec_hash_table_lock_bucket(direct_msg_ht, key);
+        parsec_hash_table_nolock_insert(direct_msg_ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(direct_msg_ht, key);
+    }
+    return 1;
+}
+
+int find_direct_msg(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item;
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key))) {
+        return -1;
+    }
+    if(task->task_class->task_class_id != item->task_class_id) {
+        return -1;
+    }
+
+    assert(0 <= item->rank && item->rank < get_nb_nodes());
+
+    return item->rank;
+}
+
 int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_task_t *task,
     int rank)
 {
@@ -2020,7 +2086,7 @@ int find_task_mapping(parsec_task_t *task)
         return -1;
     }
 
-     assert(0 <= item->rank && item->rank < get_nb_nodes());
+    assert(0 <= item->rank && item->rank < get_nb_nodes());
     return item->rank;
 }
 
@@ -2112,6 +2178,10 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             deps->taskpool = (parsec_taskpool_t*)packed_buffer;  /* temporary storage */
             parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
         } 
+        else if ( -2 == rc){
+            /** The same message was received from someone else */
+            free(deps);
+        }
         else {
             mig_direct_recv_activate(es, deps, msg,
                                      saved_position + deps->msg.length, &position);
@@ -2127,7 +2197,7 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,
                          parsec_remote_deps_t* origin,
                          int storage_id, int *position)
 {
-    uint32_t i, j, k, local_mask = 0;
+    uint32_t i, j, k, local_mask = 0, rc = -1;
 
     assert(NULL == origin->taskpool);
     origin->taskpool = parsec_taskpool_lookup(origin->msg.taskpool_id);
@@ -2150,6 +2220,17 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,
 
         for(i = 0; i < task.task_class->nb_locals; i++)
             task.locals[i] = origin->msg.locals[i];
+
+        rc = find_direct_msg(&task);
+        /** check if this message was already received from someone else */
+        if(-1 != rc) {
+            assert(0 <= rc && rc < get_nb_nodes());
+            return -2;
+        }
+        insert_direct_msg(&task, origin->from);
+        assert(origin->from != rc);
+
+
 
         /* We need to convert from a dep_datatype_index mask into a dep_index
          * mask. However, in order to be able to use the above iterator we need to
@@ -2557,5 +2638,11 @@ int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
     PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "fw test\tREMOTE rank %d (value=%x)", rank, (int) (rdeps->remote_dep_fw_mask[boffset] & mask));
     (void)es;
     return (int) ((rdeps->remote_dep_fw_mask_direct[boffset] & mask) != 0);
+}
+
+int change_destination(parsec_execution_stream_t *es, parsec_release_dep_fct_arg_t *arg, 
+    parsec_task_t task, int src, int dst)
+{
+    
 }
 
