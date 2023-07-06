@@ -1848,7 +1848,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             if (parsec_runtime_task_mapping ) {
                 if( -1 != find_received_tasks_details(task)) {
                     new_context->mig_status = PARSEC_MIGRATED_TASK;
-                    printf("I am here \n");
+                    printf("I am %d \n", new_context->task_class->task_class_id );
                 }
 
                 new_context->sources = *sources; /** Set the intermediate dataflow sources */
@@ -1913,12 +1913,40 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     }
 
     if(parsec_runtime_task_mapping) {
-        if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
+
+        /** This is a local activation */
+        if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
             was_received = find_received_tasks_details(newcontext);
-            if(was_received == -1) { /** The task was not received */
+            /** newcontext was migrated to this node */
+            if(was_received != -1) { /** The task was received */
+                dst_rank = src_rank;
+            }
+        }
+        /** This is a remote activation throhgh direct dataflow */
+        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+            (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+            was_received = find_received_tasks_details(newcontext);
+            /** newcontext was migrated to this node */
+            if(was_received != -1) { /** The task was not received */
+                /** newcontext was migrated to this node */
+                dst_rank = src_rank;
+            }
+            else {
+                /** we are only intrested in task that were migrated to this node */
                 return PARSEC_ITERATE_CONTINUE;
             }
-            dst_rank = src_rank;
+        }
+        /** This is a remote activation through normal dataflow */
+        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+                
+                assert(0 <= dst_rank && dst_rank < get_nb_nodes());
+                assert(0 <= src_rank && src_rank < get_nb_nodes());
+        }
+        else
+        {
+            assert(0);
         }
     }
 
@@ -2098,12 +2126,40 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     assert(0 <= new_mapping && new_mapping < get_nb_nodes());
 
     if(parsec_runtime_task_mapping) {
-        if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) {
+
+        /** This is a local activation */
+        if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
             was_received = find_received_tasks_details(newcontext);
-            if(was_received == -1) { /** The task was not received */
+            /** newcontext was migrated to this node */
+            if(was_received != -1) { /** The task was received */
+                dst_rank = src_rank;
+            }
+        }
+        /** This is a remote activation throhgh direct dataflow */
+        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+            (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+            was_received = find_received_tasks_details(newcontext);
+            /** newcontext was migrated to this node */
+            if(was_received != -1) { /** The task was not received */
+                /** newcontext was migrated to this node */
+                dst_rank = src_rank;
+            }
+            else {
+                /** we are only intrested in task that were migrated to this node */
                 return PARSEC_ITERATE_CONTINUE;
             }
-            dst_rank = src_rank;
+        }
+        /** This is a remote activation through normal dataflow */
+        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+                assert(0 <= dst_rank && dst_rank < get_nb_nodes());
+                assert(0 <= src_rank && src_rank < get_nb_nodes());
+        }
+        else
+        {
+            assert(0);
         }
     }
 
