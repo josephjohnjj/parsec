@@ -1929,8 +1929,12 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
                 dst_rank = src_rank;
 
                 rc = find_direct_msg(oldcontext);
-                assert(-1 == rc);
-                insert_direct_msg(oldcontext, src_rank);
+                if(-1 == rc) {
+                    insert_direct_msg(oldcontext, src_rank);
+                }
+                else {
+                    assert(rc == src_rank);
+                }
             }
         }
         /** This is a remote activation through direct dataflow */
@@ -2163,8 +2167,13 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
                 dst_rank = src_rank;
 
                 rc = find_direct_msg(oldcontext);
-                assert(-1 == rc);
-                insert_direct_msg(oldcontext, src_rank);
+                if(-1 == rc) {
+                    insert_direct_msg(oldcontext, src_rank);
+                }
+                else {
+                    assert(rc == src_rank);
+                }
+                
             }
         }
         /** This is a remote activation through direct dataflow */

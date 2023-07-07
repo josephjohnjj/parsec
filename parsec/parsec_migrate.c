@@ -128,6 +128,12 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
     int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
     parsec_key_t successor_repo_key, void *param);
+static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+    void *msg, size_t msg_size, int src, void *cb_data);
+static void mig_direct_no_get_start(parsec_execution_stream_t* es,
+                                     parsec_remote_deps_t* deps);
+static int 
+check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -322,6 +328,14 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+    rc = parsec_ce.tag_register(PARSEC_MIG_NO_GET_DATA_TAG, mig_no_put_cb, context,
+                                SINGLE_ACTIVATE_MSG_SIZE * sizeof(char) );
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NO_GET_DATA_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
 
     finalised_hop_count = ((0 == parsec_runtime_hop_count) || (parsec_runtime_hop_count >= nb_nodes) ) ? (nb_nodes - 1) : parsec_runtime_hop_count;
 
@@ -352,9 +366,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
         direct_msg_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
         parsec_hash_table_init(direct_msg_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
-            node_task_mapping_table_generic_key_fn, NULL);
-
-            
+            node_task_mapping_table_generic_key_fn, NULL);     
     }
     
     return 0;
@@ -498,6 +510,7 @@ int parsec_node_migrate_fini()
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
+    parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
     
     free(device_progress_counter);
 
@@ -1351,11 +1364,11 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             int rc, position = 0;
             rc = mig_direct_get_datatypes(es, deps, 0, &position); 
             assert( -1 != rc );
+
+            rc = check_deps_received(es, deps);
             if ( -2 == rc) {
                 /** The same message was received from someone else */
-                deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, buffer, position,
-                                                       deps->msg.length, deps);
-                deps->taskpool->tdm.module->incoming_message_end(deps->taskpool, deps);
+                mig_direct_no_get_start(es, deps);
                 free(deps);
             }
             else {
@@ -2181,11 +2194,10 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             deps->taskpool = (parsec_taskpool_t*)packed_buffer;  /* temporary storage */
             parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
         } 
-        else if ( -2 == rc){
+        rc = check_deps_received(es, deps);
+        if ( -2 == rc) {
             /** The same message was received from someone else */
-            deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, msg, position,
-                                                       deps->msg.length, deps);
-            deps->taskpool->tdm.module->incoming_message_end(deps->taskpool, deps);
+            mig_direct_no_get_start(es, deps);
             free(deps);
         }
         else {
@@ -2226,17 +2238,6 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,
 
         for(i = 0; i < task.task_class->nb_locals; i++)
             task.locals[i] = origin->msg.locals[i];
-
-        rc = find_direct_msg(&task);
-        /** check if this message was already received from someone else */
-        if(-1 != rc) {
-            assert(0 <= rc && rc < get_nb_nodes());
-            return -2;
-        }
-        insert_direct_msg(&task, origin->from);
-        assert(origin->from != rc);
-
-
 
         /* We need to convert from a dep_datatype_index mask into a dep_index
          * mask. However, in order to be able to use the above iterator we need to
@@ -2651,4 +2652,107 @@ int change_destination(parsec_execution_stream_t *es, parsec_release_dep_fct_arg
 {
     
 }
+
+static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg,
+    size_t msg_size, int src, void *cb_data)
+{
+    (void) ce; (void) tag; (void) cb_data; (void) msg_size;
+    remote_dep_wire_get_t* task;
+    parsec_remote_deps_t *deps;
+
+    parsec_execution_stream_t* es = &parsec_comm_es;
+    task = malloc(sizeof(remote_dep_wire_get_t));
+
+    /** copy the static message */
+    memcpy(task, msg, sizeof(remote_dep_wire_get_t));
+
+    /* we are expecting exactly one wire_get_t + remote memory handle */
+    assert(msg_size == sizeof(remote_dep_wire_get_t));
+
+    int total_cleanup = task->output_mask; /** Get the total_cleanup from the temprary storage */
+    deps = (parsec_remote_deps_t*)(remote_dep_datakey_t)task->source_deps; /* get our deps back */
+
+    remote_dep_complete_and_cleanup(&deps, total_cleanup);
+    free(task);
+    
+    return 1;
+}
+
+static void mig_direct_no_get_start(parsec_execution_stream_t* es,
+                                     parsec_remote_deps_t* deps)
+{
+    remote_dep_wire_activate_t* task = &(deps->msg);
+    int from = deps->from, k, position = 0;
+    remote_dep_wire_get_t msg;
+
+    assert(0 <= from && from < get_nb_nodes());
+
+    (void)es;
+    int total_cleanup = 0;
+
+    deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, 
+        &position, deps->msg.length, deps);
+                
+    msg.source_deps = task->deps; /* the deps copied from activate message from source */
+    
+    for(k = 0; deps->incoming_mask >> k; k++) {
+        if( !((1U<<k) & deps->incoming_mask) ) continue;
+
+        total_cleanup++;
+    }
+    msg.output_mask = total_cleanup; /** temporary storage for the source */
+
+    /** We pack the static message(remote_dep_wire_get_t) and the total_cleanup required
+     *  on the source side, to the source. 
+     */
+    int buf_size = sizeof(remote_dep_wire_get_t);
+    void *buf = malloc(buf_size);
+    memcpy( buf, &msg, sizeof(remote_dep_wire_get_t) );
+
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_NO_GET_DATA_TAG, from, buf, buf_size);
+
+    deps->taskpool->tdm.module->incoming_message_end(deps->taskpool, deps);
+    free(buf);
+}
+
+
+static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin)
+{
+    uint32_t i, j, k, local_mask = 0, rc = -1;
+
+    assert(NULL != origin->taskpool);
+
+    /* This function is divided into DTD and PTG's logic */
+    if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) {
+        parsec_task_t task;
+        task.taskpool   = origin->taskpool;
+        /* Do not set the task.task_class here, because it might trigger a race condition in DTD */
+
+        task.priority = 0;  /* unknown yet */
+
+        task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
+        for(i = 0; i < task.task_class->nb_flows;
+            task.data[i].data_in = task.data[i].data_out = NULL,
+            task.data[i].source_repo_entry = NULL,
+            task.data[i].source_repo = NULL, i++);
+
+        for(i = 0; i < task.task_class->nb_locals; i++)
+            task.locals[i] = origin->msg.locals[i];
+
+        rc = find_direct_msg(&task);
+        /** check if this message was already received from someone else */
+        if(-1 != rc) {
+            assert(0 <= rc && rc < get_nb_nodes());
+            return -2;
+        }
+        insert_direct_msg(&task, origin->from);
+        assert(origin->from != rc);
+    }
+    else {
+        assert(0);
+    }
+    
+    return 1;
+}
+
 

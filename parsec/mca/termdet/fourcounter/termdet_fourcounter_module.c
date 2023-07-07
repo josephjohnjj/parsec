@@ -477,7 +477,7 @@ static int parsec_termdet_fourcounter_taskpool_addto_nb_tasks(parsec_taskpool_t 
     if(v == 0)
         return tp->nb_tasks;
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tNB_TASKS %d -> %d", tp->nb_tasks, tp->nb_tasks + v);
-    //printf("TERMDET-4C %p:\tNB_TASKS %d -> %d \n", tp, tp->nb_tasks, tp->nb_tasks + v);
+    printf("TERMDET-4C %p:\tNB_TASKS %d -> %d \n", tp, tp->nb_tasks, tp->nb_tasks + v);
     int tmp = parsec_atomic_fetch_add_int32(&tp->nb_tasks, v);
     assert( ((parsec_termdet_fourcounter_monitor_t *)tp->tdm.monitor)->state != PARSEC_TERMDET_FOURCOUNTER_TERMINATED );
     ret = tmp + v;
@@ -501,7 +501,7 @@ static int parsec_termdet_fourcounter_taskpool_addto_runtime_actions(parsec_task
     if(v == 0)
         return tp->nb_pending_actions;
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tNB_PA %d -> %d", tp->nb_pending_actions, tp->nb_pending_actions + v);
-    //printf("TERMDET-4C %p:\tNB_PA %d -> %d \n", tp, tp->nb_pending_actions, tp->nb_pending_actions + v);
+    printf("TERMDET-4C %p:\tNB_PA %d -> %d \n", tp, tp->nb_pending_actions, tp->nb_pending_actions + v);
     int tmp = parsec_atomic_fetch_add_int32(&tp->nb_pending_actions, v);
     ret = tmp + v;
     if (tmp == 0 || ret == 0) {
