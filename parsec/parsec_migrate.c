@@ -2368,20 +2368,11 @@ static void mig_direct_recv_activate(parsec_execution_stream_t* es,
         deps = mig_direct_release_incoming(es, deps, complete_mask);
     }
 
-    ///* Store the request in the rdv queue if any unsatisfied dep exist at this point */
-    //if(NULL != deps) {
-    //    assert(0 != deps->incoming_mask);
-    //    assert(0 != deps->msg.output_mask);
-    //    parsec_list_nolock_push_sorted(&dep_activates_fifo, (parsec_list_item_t*)deps, rdep_prio);
-    //}
-
-    ///* Check if we have any pending GET orders */
-    //if(parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&dep_activates_fifo)) {
-    //    deps = (parsec_remote_deps_t*)parsec_list_nolock_pop_front(&dep_activates_fifo);
-    //    remote_dep_mpi_get_start(es, deps);
-    //}
-
-    mig_direct_get_start(es, deps);
+    if(NULL != deps) {
+        assert(0 != deps->incoming_mask);
+        assert(0 != deps->msg.output_mask);
+        mig_direct_get_start(es, deps);
+    }
 }
 
 static void mig_direct_get_start(parsec_execution_stream_t* es,
