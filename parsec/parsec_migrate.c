@@ -1641,9 +1641,6 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         origin->output[flow_index].data.data->readers = 0;
     }
 
-    /** mark the end of communication for this migration message */
-    origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
-
     /** Update the task count on this node */
     origin->taskpool->tdm.module->taskpool_addto_nb_tasks(origin->taskpool, 1);
     /** Schedule the task on this node */
@@ -1662,6 +1659,9 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     /** schedule the migrated tasks */
     schedule_migrated_task(es, task);
     assert(origin->root == origin->from);
+
+    /** mark the end of communication for this migration message */
+    origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
 
     remote_deps_free(origin);
     return 0;
@@ -2596,22 +2596,6 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
     
-    //uint32_t mask = origin->outgoing_mask;
-    ///**
-    // * Release the dependency owned by the communication engine for all data
-    // * internally allocated by the engine.
-    // */
-    //for(i = 0; mask>>i; i++) {
-    //    assert(i < MAX_PARAM_COUNT);
-    //    if( !((1U<<i) & mask) ) continue;
-    //    if( NULL != origin->output[i].data.data )  /* except CONTROLs */
-    //    {
-    //        PARSEC_DATA_COPY_RELEASE(origin->output[i].data.data);
-    //    }
-    //}
-
-    //remote_deps_free(origin);
-
     return NULL;
 }
 
@@ -2744,6 +2728,11 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
     }
     
     return 1;
+}
+
+int whoami()
+{
+    return my_rank;
 }
 
 
