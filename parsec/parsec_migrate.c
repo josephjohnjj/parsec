@@ -1366,7 +1366,7 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             if (1 == check_reception) {
                 /** The same message was received from someone else */
                 mig_direct_no_get_start(es, deps);
-                free(deps);
+                remote_deps_free(deps);
             }
             else {
                 mig_direct_recv_activate(es, deps, buffer, position + deps->msg.length, &position);
@@ -2195,7 +2195,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             if (1 == check_reception) {
                 /** The same message was received from someone else */
                 mig_direct_no_get_start(es, deps);
-                free(deps);
+                remote_deps_free(deps);
             }
             else {
                 mig_direct_recv_activate(es, deps, msg, saved_position + deps->msg.length, &position);
@@ -2693,10 +2693,7 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
     if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) {
         parsec_task_t task;
         task.taskpool   = origin->taskpool;
-        /* Do not set the task.task_class here, because it might trigger a race condition in DTD */
-
-        task.priority = 0;  /* unknown yet */
-
+        task.priority = 0;  
         task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
         for(i = 0; i < task.task_class->nb_flows;
             task.data[i].data_in = task.data[i].data_out = NULL,
