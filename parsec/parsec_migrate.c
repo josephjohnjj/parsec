@@ -1372,11 +1372,10 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
                 free(deps);
             }
             else {
-                item = parsec_list_nolock_remove(&direct_msg_fifo, item);
-
-                mig_direct_recv_activate(es, deps, buffer,
-                                     position + deps->msg.length, &position);
+                mig_direct_recv_activate(es, deps, buffer, position + deps->msg.length, &position);
             }
+
+            item = parsec_list_nolock_remove(&direct_msg_fifo, item);
             
         }
     }
