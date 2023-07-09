@@ -2160,7 +2160,7 @@ int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_d
   
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, rank, packed_buffer, position);
    
-    return 0;
+    return 1;
     
 }
 
@@ -2194,15 +2194,17 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             deps->taskpool = (parsec_taskpool_t*)packed_buffer;  /* temporary storage */
             parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
         } 
-        rc = check_deps_received(es, deps);
-        if ( -2 == rc) {
-            /** The same message was received from someone else */
-            mig_direct_no_get_start(es, deps);
-            free(deps);
-        }
         else {
-            mig_direct_recv_activate(es, deps, msg,
-                                     saved_position + deps->msg.length, &position);
+            rc = check_deps_received(es, deps);
+            if ( -2 == rc) {
+                /** The same message was received from someone else */
+                mig_direct_no_get_start(es, deps);
+                free(deps);
+            }
+            else {
+                mig_direct_recv_activate(es, deps, msg,
+                                         saved_position + deps->msg.length, &position);
+            }
         }
     }
     assert(position == length);
@@ -2622,12 +2624,6 @@ int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
     return (int) ((rdeps->remote_dep_fw_mask_direct[boffset] & mask) != 0);
 }
 
-int change_destination(parsec_execution_stream_t *es, parsec_release_dep_fct_arg_t *arg, 
-    parsec_task_t task, int src, int dst)
-{
-    
-}
-
 static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg,
     size_t msg_size, int src, void *cb_data)
 {
@@ -2641,7 +2637,7 @@ static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *ms
     /** copy the static message */
     memcpy(task, msg, sizeof(remote_dep_wire_get_t));
 
-    /* we are expecting exactly one wire_get_t + remote memory handle */
+    /* we are expecting exactly one wire_get_t */
     assert(msg_size == sizeof(remote_dep_wire_get_t));
 
     int total_cleanup = task->output_mask; /** Get the total_cleanup from the temprary storage */
