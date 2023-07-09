@@ -105,12 +105,8 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
 int get_gpu_wt_tasks(parsec_device_gpu_module_t * device);
 static int update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
                          void *msg, size_t msg_size, int src, void *cb_data);
-static int mig_dep_send(parsec_execution_stream_t* es, int rank, parsec_remote_deps_t *deps);
-static int remote_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data);
-static parsec_remote_deps_t*
-mig_direct_release_incoming(parsec_execution_stream_t* es, parsec_remote_deps_t* origin,    
-remote_dep_datakey_t complete_mask);
+static parsec_remote_deps_t* mig_direct_release_incoming(parsec_execution_stream_t* es,
+    parsec_remote_deps_t* origin, remote_dep_datakey_t complete_mask);
 static void mig_direct_get_end(parsec_execution_stream_t* es, int idx, parsec_remote_deps_t* deps);
 static int mig_direct_get_end_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg,
     size_t msg_size, int src, void *cb_data);
@@ -543,12 +539,12 @@ int parsec_node_migrate_fini()
 
 int increment_progress_counter(int device_num)
 {
-    device_progress_counter[device_num]++;
+    return device_progress_counter[device_num]++;
 }
 
 int unset_progress_counter(int device_num)
 {
-    device_progress_counter[device_num] = 0;
+    return device_progress_counter[device_num] = 0;
 }
 
 int get_progress_counter(int device_num)
@@ -1365,8 +1361,9 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             rc = mig_direct_get_datatypes(es, deps, 0, &position); 
             assert( -1 != rc );
 
-            rc = check_deps_received(es, deps);
-            if ( -2 == rc) {
+            int check_reception = 0;
+            check_reception = check_deps_received(es, deps);
+            if (1 == check_reception) {
                 /** The same message was received from someone else */
                 mig_direct_no_get_start(es, deps);
                 free(deps);
@@ -2156,7 +2153,6 @@ int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_d
     /** Update the position. Next task details will start from this position*/
     position = position + dsize;
 
-  
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, rank, packed_buffer, position);
    
     return 1;
@@ -2194,15 +2190,15 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
         } 
         else {
-            rc = check_deps_received(es, deps);
-            if ( -2 == rc) {
+            int check_reception = 0;
+            check_reception = check_deps_received(es, deps);
+            if (1 == check_reception) {
                 /** The same message was received from someone else */
                 mig_direct_no_get_start(es, deps);
                 free(deps);
             }
             else {
-                mig_direct_recv_activate(es, deps, msg,
-                                         saved_position + deps->msg.length, &position);
+                mig_direct_recv_activate(es, deps, msg, saved_position + deps->msg.length, &position);
             }
         }
     }
@@ -2629,22 +2625,21 @@ static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *ms
     (void) ce; (void) tag; (void) cb_data; (void) msg_size;
     remote_dep_wire_get_t* task;
     parsec_remote_deps_t *deps;
-
     parsec_execution_stream_t* es = &parsec_comm_es;
-    task = malloc(sizeof(remote_dep_wire_get_t));
 
+    task = malloc(sizeof(remote_dep_wire_get_t));
     /** copy the static message */
     memcpy(task, msg, sizeof(remote_dep_wire_get_t));
-
     /* we are expecting exactly one wire_get_t */
     assert(msg_size == sizeof(remote_dep_wire_get_t));
 
     int total_cleanup = task->output_mask; /** Get the total_cleanup from the temprary storage */
     deps = (parsec_remote_deps_t*)(remote_dep_datakey_t)task->source_deps; /* get our deps back */
-
+    assert(NULL != deps);
+    assert(NULL != deps->taskpool);
     remote_dep_complete_and_cleanup(&deps, total_cleanup);
+
     free(task);
-    
     return 1;
 }
 
@@ -2654,6 +2649,8 @@ static void mig_direct_no_get_start(parsec_execution_stream_t* es,
     remote_dep_wire_activate_t* task = &(deps->msg);
     int from = deps->from, k, position = 0;
     remote_dep_wire_get_t msg;
+
+    printf("mig_direct_no_get_start \n");
 
     assert(0 <= from && from < get_nb_nodes());
 
@@ -2688,7 +2685,7 @@ static void mig_direct_no_get_start(parsec_execution_stream_t* es,
 
 static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin)
 {
-    uint32_t i, j, k, local_mask = 0, rc = -1;
+    uint32_t i, j, k, local_mask = 0, rc;
 
     assert(NULL != origin->taskpool);
 
@@ -2713,7 +2710,7 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
         /** check if this message was already received from someone else */
         if(-1 != rc) {
             assert(0 <= rc && rc < get_nb_nodes());
-            return -2;
+            return 1;
         }
         insert_direct_msg(&task, origin->from);
         assert(origin->from != rc);
@@ -2722,7 +2719,7 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
         assert(0);
     }
     
-    return 1;
+    return 0;
 }
 
 int whoami()
