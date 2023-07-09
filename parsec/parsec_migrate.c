@@ -2588,7 +2588,9 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
         return origin;
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
-    
+
+    origin->outgoing_mask = 0;
+    remote_deps_free(origin);
     return NULL;
 }
 
