@@ -1325,7 +1325,6 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
     int rc;
 
     parsec_list_lock(&mig_noobj_fifo);
-
     for(item = PARSEC_LIST_ITERATOR_FIRST(&mig_noobj_fifo);
         item != PARSEC_LIST_ITERATOR_END(&mig_noobj_fifo);
         item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
@@ -1343,11 +1342,9 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             get_mig_task_data(es, deps);
         }
     }
-
     parsec_list_unlock(&mig_noobj_fifo);
 
     parsec_list_lock(&direct_msg_fifo);
-
     for(item = PARSEC_LIST_ITERATOR_FIRST(&direct_msg_fifo);
         item != PARSEC_LIST_ITERATOR_END(&direct_msg_fifo);
         item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
@@ -1366,6 +1363,7 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             if (1 == check_reception) {
                 /** The same message was received from someone else */
                 mig_direct_no_get_start(es, deps);
+                deps->incoming_mask = deps->outgoing_mask = 0;
                 remote_deps_free(deps);
             }
             else {
@@ -1376,10 +1374,7 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
             
         }
     }
-
     parsec_list_unlock(&direct_msg_fifo);
-
-    
 }
 
 static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
@@ -2195,6 +2190,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             if (1 == check_reception) {
                 /** The same message was received from someone else */
                 mig_direct_no_get_start(es, deps);
+                deps->incoming_mask = deps->outgoing_mask = 0;
                 remote_deps_free(deps);
             }
             else {
@@ -2650,8 +2646,6 @@ static void mig_direct_no_get_start(parsec_execution_stream_t* es,
     int from = deps->from, k, position = 0;
     remote_dep_wire_get_t msg;
 
-    printf("mig_direct_no_get_start \n");
-
     assert(0 <= from && from < get_nb_nodes());
 
     (void)es;
@@ -2685,7 +2679,8 @@ static void mig_direct_no_get_start(parsec_execution_stream_t* es,
 
 static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin)
 {
-    uint32_t i, j, k, local_mask = 0, rc;
+    uint32_t i;
+    (void)es;
 
     assert(NULL != origin->taskpool);
 
@@ -2703,14 +2698,15 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
         for(i = 0; i < task.task_class->nb_locals; i++)
             task.locals[i] = origin->msg.locals[i];
 
-        rc = find_direct_msg(&task);
+        int is_received = 0;
+        is_received = find_direct_msg(&task);
         /** check if this message was already received from someone else */
-        if(-1 != rc) {
-            assert(0 <= rc && rc < get_nb_nodes());
+        if(-1 != is_received) {
+            assert(0 <= is_received && is_received < get_nb_nodes());
             return 1;
         }
         insert_direct_msg(&task, origin->from);
-        assert(origin->from != rc);
+        assert(origin->from != is_received);
     }
     else {
         assert(0);
