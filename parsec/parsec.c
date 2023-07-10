@@ -1960,8 +1960,12 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             was_received = find_received_tasks_details(newcontext);
             /** newcontext was migrated to this node */
             if(was_received != -1) {
-                /** Direct dataflow will take care of this */
+                /** Direct dataflow will take care of this. As dst_rank != src_rank and
+                 * action mask does not have PARSEC_ACTION_SEND_INIT_REMOTE_DEPS
+                 * no action will be tasken. 
+                */
                 assert(dst_rank != src_rank);
+                assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
             }
         }
         else
@@ -2199,8 +2203,12 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             was_received = find_received_tasks_details(newcontext);
             /** newcontext was migrated to this node */
             if(was_received != -1) {
-                /** Direct dataflow will take care of this */
+                /** Direct dataflow will take care of this. As dst_rank != src_rank and
+                 * action mask does not have PARSEC_ACTION_SEND_INIT_REMOTE_DEPS
+                 * no action will be tasken. 
+                */
                 assert(dst_rank != src_rank);
+                assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
             }
         }
         else
