@@ -130,4 +130,6 @@ int find_received_tasks_details(parsec_task_t *task);
 int insert_direct_msg(parsec_task_t *task, int rank);
 int find_direct_msg(parsec_task_t *task);
 int whoami();
+int progress_direct_activation(parsec_execution_stream_t* es);
+int direct_activation_fifo_status(parsec_execution_stream_t* es);
 #endif

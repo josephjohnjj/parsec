@@ -51,6 +51,7 @@ PARSEC_OBJ_CLASS_INSTANCE(remote_dep_cb_data_t, parsec_list_item_t,
 extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_migration_engine_up;
 extern int parsec_runtime_node_migrate_stats;
+extern int parsec_runtime_task_mapping;
 
 char*
 remote_dep_cmd_to_string(remote_dep_wire_activate_t* origin,
@@ -1152,7 +1153,8 @@ remote_dep_dequeue_nothread_progress(parsec_execution_stream_t* es,
                 && ((comm_yield == 2)
                     || (comm_yield == 1  /* communication list is full, we need to forcefully drain the network */
                         && parsec_list_nolock_is_empty(&dep_activates_fifo)
-                        && parsec_list_nolock_is_empty(&dep_put_fifo))) ) {
+                        && parsec_list_nolock_is_empty(&dep_put_fifo)
+                        && direct_activation_fifo_status(es))) ) {
                 struct timespec ts;
                 ts.tv_sec = 0; ts.tv_nsec = comm_yield_ns;
                 nanosleep(&ts, NULL);
@@ -1536,6 +1538,10 @@ static int remote_dep_mpi_progress(parsec_execution_stream_t* es)
             dep_cmd_item_t* item = (dep_cmd_item_t*)parsec_list_nolock_pop_front(&dep_put_fifo);
         remote_dep_mpi_put_start(es, item);
         ret++;
+    }
+
+    if(parsec_runtime_task_mapping) {
+        ret += progress_direct_activation(es);
     }
 
     return ret;
