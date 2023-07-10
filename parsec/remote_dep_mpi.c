@@ -1731,7 +1731,8 @@ remote_dep_mpi_put_start(parsec_execution_stream_t* es,
                       remote_dep_mpi_put_end_cb, cb_data,
                       (parsec_ce_tag_t)task->callback_fn, &task->remote_callback_data, sizeof(uintptr_t));
 
-        parsec_comm_puts++;
+        //parsec_comm_puts++;
+        parsec_atomic_fetch_inc_int32(&parsec_comm_puts);
     }
 #endif  /* !defined(PARSEC_PROF_DRY_DEP) */
     if(0 == task->output_mask) {
@@ -1769,7 +1770,8 @@ remote_dep_mpi_put_end_cb(parsec_comm_engine_t *ce,
     ce->mem_unregister(&lreg);
     parsec_thread_mempool_free(parsec_remote_dep_cb_data_mempool->thread_mempools, cb_data);
 
-    parsec_comm_puts--;
+    //parsec_comm_puts--;
+    parsec_atomic_fetch_dec_int32(&parsec_comm_puts);
     return 1;
 }
 
@@ -2086,7 +2088,8 @@ static void remote_dep_mpi_get_start(parsec_execution_stream_t* es,
 
         free(buf);
 
-        parsec_comm_gets++;
+        //parsec_comm_gets++;
+        parsec_atomic_fetch_inc_int32(&parsec_comm_gets);
     }
 }
 
@@ -2131,7 +2134,8 @@ remote_dep_mpi_get_end_cb(parsec_comm_engine_t *ce,
     parsec_ce.mem_unregister(&callback_data->memory_handle);
     parsec_thread_mempool_free(parsec_remote_dep_cb_data_mempool->thread_mempools, callback_data);
 
-    parsec_comm_gets--;
+    //parsec_comm_gets--;
+    parsec_atomic_fetch_dec_int32(&parsec_comm_gets);
 
     return 1;
 }
