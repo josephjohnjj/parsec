@@ -828,9 +828,13 @@ int process_steal_request(parsec_execution_stream_t *es)
 
                     if(parsec_runtime_task_mapping) {
                         /** send the new task mapping to the predecessors*/
-                        send_task_mapping_info_to_predecessor(es, gpu_task->ec, steal_request->msg.root);
+                        int total_info_send = send_task_mapping_info_to_predecessor(es, gpu_task->ec, steal_request->msg.root);
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, steal_request->msg.root);
+
+                        int flying = 0;
+                        for(flying = 0; flying < total_info_send; flying++)
+                            remote_dep_dec_flying_messages(gpu_task->ec->taskpool);
                     }
                 }
             }
@@ -1649,7 +1653,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     }
 
     if(parsec_runtime_task_mapping) {
-        insert_received_tasks_details(task, origin->root);
+        insert_received_tasks_details(task, origin->from);
     }
 
     /** schedule the migrated tasks */
@@ -2026,7 +2030,9 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     int src_rank = 0;
     int32_t source_mask = task->sources;
     mig_task_mapping_info_t mapping_info;
+    int total_info_send =  0;
 
+    parsec_taskpool_t *tp = task->taskpool;
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
     mapping_info.mig_rank       = rank;
     mapping_info.task_class_id  = task->task_class->task_class_id;
@@ -2046,9 +2052,11 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
         else {
             send_task_mapping_info(es, task, &mapping_info, src_rank);
         }
+        remote_dep_inc_flying_messages(task->taskpool);
+        total_info_send++;
     }
 
-    return 0;
+    return total_info_send;
 }
 
 
@@ -2634,7 +2642,7 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
             complete_mask, action_mask);
     (void)task.task_class->release_deps(es, &task,
         action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
-        NULL);
+        origin);
     assert(0 == (origin->incoming_mask & complete_mask));
 
     if(0 != origin->incoming_mask)  /* not done receiving */
