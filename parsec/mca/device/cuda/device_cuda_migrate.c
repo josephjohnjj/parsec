@@ -1474,14 +1474,6 @@ parsec_cuda_co_manager( parsec_execution_stream_t *es, parsec_device_gpu_module_
                 #endif
 
                     __parsec_complete_execution( es, task );
-
-                    if(parsec_runtime_node_migrate_stats)
-                    {
-                        if(gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
-                        {
-                            parsec_node_mig_inc_gpu_task_executed();
-                        }
-                    }
                 
                 #if defined(PARSEC_PROF_TRACE)
                      gpu_task->complete_time_end = time_stamp();

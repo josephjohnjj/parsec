@@ -2215,7 +2215,6 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
     if( NULL != stream->tasks[stream->end] ) {
         rc = cudaEventQuery(cuda_stream->events[stream->end]);
         if( cudaSuccess == rc ) {
-
             /* Save the task for the next step */
             task = *out_task = stream->tasks[stream->end];
             PARSEC_DEBUG_VERBOSE(19, parsec_gpu_output_stream,
@@ -2223,6 +2222,15 @@ progress_stream( parsec_device_gpu_module_t* gpu_device,
                                  gpu_device->super.name,
                                  parsec_task_snprintf(task_str, MAX_TASK_STRLEN, task->ec),
                                  task->ec->priority, stream->name, (void*)stream);
+
+            if(stream != gpu_device->exec_stream[0] && stream == gpu_device->exec_stream[1]) {//execution stream
+                if(parsec_runtime_node_migrate_stats) {
+                    if(task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) {
+                        parsec_node_mig_inc_gpu_task_executed();
+                    }
+                }
+
+            }
 
         #if defined(PARSEC_PROF_TRACE)
             assert(*out_task != NULL);
@@ -3212,14 +3220,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
         __parsec_complete_execution( es, gpu_task->ec );
         manager_completing_task = 1;
-
-        if(parsec_runtime_node_migrate_stats)
-        {
-            if(gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
-            {
-                parsec_node_mig_inc_gpu_task_executed();
-            }
-        }
     
     #if defined(PARSEC_PROF_TRACE)
         gpu_task->complete_time_end = time_stamp();
@@ -3265,14 +3265,6 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
         __parsec_complete_execution( es, gpu_task->ec );
         manager_completing_task = 1;
-
-        if(parsec_runtime_node_migrate_stats)
-        {
-            if(gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL)
-            {
-                parsec_node_mig_inc_gpu_task_executed();
-            }
-        }
 
     #if defined(PARSEC_PROF_TRACE)
         gpu_task->complete_time_end = time_stamp();

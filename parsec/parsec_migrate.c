@@ -832,10 +832,6 @@ int process_steal_request(parsec_execution_stream_t *es)
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, steal_request->msg.root);
                     }
-
-                    /** release the resources held by the migrated task */
-                    //migrated_task_cleanup(es, gpu_task);
-                    //free(gpu_task); 
                 }
             }
         
@@ -1618,7 +1614,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     }
     task->repo_entry = NULL;
     task->mig_status = PARSEC_MIGRATED_TASK;
-    task->status = PARSEC_TASK_STATUS_EVAL; /** Skip the prepare input step */
+    task->status = PARSEC_TASK_STATUS_HOOK; /** Skip the prepare input step */
 
     for (flow_index = 0; flow_index < task->task_class->nb_flows; flow_index++) {
         task->data[flow_index].source_repo = NULL;
@@ -1642,6 +1638,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     /** Update the task count on this node */
     origin->taskpool->tdm.module->taskpool_addto_nb_tasks(origin->taskpool, 1);
+
     /** Schedule the task on this node */
     parsec_list_item_singleton((parsec_list_item_t *)task);
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
