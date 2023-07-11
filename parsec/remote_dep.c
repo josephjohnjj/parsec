@@ -161,7 +161,7 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
         remote_deps->taskpool = NULL;
         ptr = (char*)(&(remote_deps->output[parsec_remote_dep_context.max_dep_count]));
         rank_bit_size = sizeof(uint32_t) * ((parsec_remote_dep_context.max_nodes_number + 31) / 32);
-        memset(ptr, 0, rank_bit_size * parsec_remote_dep_context.max_dep_count);
+        memset(ptr, 0, 2 * rank_bit_size * parsec_remote_dep_context.max_dep_count);
         for( i = 0; i < parsec_remote_dep_context.max_dep_count; i++ ) {
             PARSEC_OBJ_CONSTRUCT(&remote_deps->output[i].super, parsec_list_item_t);
             remote_deps->output[i].parent     = remote_deps;
