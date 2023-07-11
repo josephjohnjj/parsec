@@ -92,14 +92,14 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
 static parsec_remote_deps_t *get_mig_task_data_complete(parsec_execution_stream_t *es,
                                                         int idx, parsec_remote_deps_t *origin);
 parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
-                                          parsec_task_t *mig_task, int dst_rank, int src_rank);
+                                          parsec_gpu_task_t *gpu_task, int dst_rank, int src_rank);
 static int migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg, size_t msg_size,
                                        int src, void *cb_data);
 static void migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item);
 static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_reg_handle_t lreg, ptrdiff_t ldispl,
                                       parsec_ce_mem_reg_handle_t rreg, ptrdiff_t rdispl, size_t size,
                                       int remote, void *cb_data);
-parsec_remote_deps_t*  prepare_task_details_msg(parsec_execution_stream_t *es, parsec_task_t *this_task, int root,
+parsec_remote_deps_t*  prepare_task_details_msg(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_task, int root,
                              void* buf, int length, int *position);
 int  migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_task);
 int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request);
@@ -824,7 +824,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                 if (NULL != gpu_task) {
                     /** for each task add the details of the task to be migrated to the buff */
                     parsec_remote_deps_t *deps = NULL;
-                    deps = prepare_task_details_msg(es, gpu_task->ec, steal_request->msg.root, buff, buffer_size, &position );
+                    deps = prepare_task_details_msg(es, gpu_task, steal_request->msg.root, buff, buffer_size, &position );
 
                     if(parsec_runtime_task_mapping) {
                         /** send the new task mapping to the predecessors*/
@@ -834,8 +834,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                     }
 
                     /** release the resources held by the migrated task */
-                    migrated_task_cleanup(es, gpu_task);
-                    free(gpu_task); 
+                    //migrated_task_cleanup(es, gpu_task);
+                    //free(gpu_task); 
                 }
             }
         
@@ -874,9 +874,11 @@ int process_steal_request(parsec_execution_stream_t *es)
 }
 
 
-parsec_remote_deps_t* prepare_task_details_msg(parsec_execution_stream_t *es, parsec_task_t *this_task, int root,
+parsec_remote_deps_t* prepare_task_details_msg(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_task, int root,
     void* packed_buffer, int length, int *position)
 {
+    
+    parsec_task_t *this_task = gpu_task->ec;
     parsec_remote_deps_t *deps = NULL;
     int src_rank = 0, dst_rank = 0;
     int dsize = 0, saved_position = *position;
@@ -887,7 +889,7 @@ parsec_remote_deps_t* prepare_task_details_msg(parsec_execution_stream_t *es, pa
     dst_rank = root;
     src_rank = my_rank;
 
-    deps = prepare_remote_deps(es, this_task, dst_rank, src_rank);
+    deps = prepare_remote_deps(es, gpu_task, dst_rank, src_rank);
     assert(deps->taskpool != NULL && this_task->taskpool == deps->taskpool);
 
     /** Size of the data to be send  */
@@ -1212,9 +1214,9 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
 }
 
 parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
-                                          parsec_task_t *mig_task, int dst_rank, int src_rank)
+                                          parsec_gpu_task_t *gpu_task, int dst_rank, int src_rank)
 {
-
+    parsec_task_t *mig_task = gpu_task->ec;
     parsec_remote_deps_t *deps = NULL;
     struct remote_dep_output_param_s *output = NULL;
     int i = 0, _array_mask = 0, _array_pos = 0;
@@ -1229,6 +1231,7 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     deps->msg.deps = (uintptr_t)deps;
     deps->msg.root = deps->root;
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
+    deps->eager_msg = gpu_task; /** temp storage */
 
     assert(deps->taskpool == mig_task->taskpool);
     assert(NULL != deps->taskpool);
@@ -1827,6 +1830,13 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
     TAKE_TIME(parsec_comm_es.es_profile, MPI_Data_plds_ek, ((remote_dep_cb_data_t *)cb_data)->k);
 #endif
 
+    if( 1 == deps->pending_ack) { /** last put */
+        parsec_gpu_task_t *gpu_task = (parsec_gpu_task_t *)deps->eager_msg; /** temp storage */
+        /** release the resources held by the migrated task */
+        parsec_execution_stream_t* es = &parsec_comm_es;
+        migrated_task_cleanup(es, gpu_task);
+        free(gpu_task);
+    }
     remote_dep_complete_and_cleanup(&deps, 1);
 
     ce->mem_unregister(&lreg);
