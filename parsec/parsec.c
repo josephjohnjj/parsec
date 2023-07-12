@@ -1785,6 +1785,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
         assert(NULL != sources);
 
         if(NULL != arg->remote_deps) {
+
             /** This flow has a remote deps */
             if(-1 == arg->remote_deps->from) {
                 /** From has not been set which means the flow is from me */
@@ -2167,7 +2168,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             if(was_received != -1) { /** The task was received */
                 /** newcontext was migrated to this node */
                 assert(was_received == dst_rank);
-                assert(new_mapping == src_rank || new_mapping == -1);
+                assert(new_mapping == src_rank);
                 dst_rank = src_rank;
 
                 rc = find_direct_msg(oldcontext);

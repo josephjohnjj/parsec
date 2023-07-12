@@ -426,11 +426,11 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
         }
     }
     else { /** I have information about this task being migrated */
+        dst_rank = new_mapping;
+        assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
-        assert(0 <= new_mapping && new_mapping < get_nb_nodes());
-
-        _array_pos  = new_mapping / (8 * sizeof(uint32_t));
-        _array_mask = 1 << (new_mapping % (8 * sizeof(uint32_t)));
+        _array_pos  = dst_rank / (8 * sizeof(uint32_t));
+        _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
 
         if( !(output->rank_bits_direct[_array_pos] & _array_mask) ) {  /* new participant */
             output->rank_bits_direct[_array_pos] |= _array_mask;
@@ -506,6 +506,9 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
 #endif
 
     remote_dep_reset_forwarded(es, remote_deps);
+    if(parsec_runtime_task_mapping) {
+        remote_dep_reset_forwarded_direct(es, remote_deps);
+    }
     remote_deps->taskpool    = task->taskpool;
     /* Safe-keep the propagation mask (it must be packed in the message) */
     remote_deps->msg.output_mask = propagation_mask;

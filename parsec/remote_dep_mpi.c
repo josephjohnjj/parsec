@@ -1028,7 +1028,7 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
             complete_mask, action_mask);
     (void)task.task_class->release_deps(es, &task,
                                         action_mask | PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
-                                        NULL);
+                                        origin);
     assert(0 == (origin->incoming_mask & complete_mask));
 
     if(0 != origin->incoming_mask)  /* not done receiving */

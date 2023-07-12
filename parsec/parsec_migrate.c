@@ -2091,8 +2091,7 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
             return -1;
         }
         item->rank = new_rank;
-        item->ht_item.key = key;
-        item->task_class_id = task_class_id;
+
         return item->rank;
     }
 
@@ -2142,6 +2141,7 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     assert(0 <= mapping_info->mig_rank && mapping_info->mig_rank < get_nb_nodes());
 
     update_task_mapping(mapping_info);
+    assert(mapping_info->mig_rank != my_rank);
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
     
     return 0;
@@ -2676,6 +2676,15 @@ int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
     PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "fw test\tREMOTE rank %d (value=%x)", rank, (int) (rdeps->remote_dep_fw_mask[boffset] & mask));
     (void)es;
     return (int) ((rdeps->remote_dep_fw_mask_direct[boffset] & mask) != 0);
+}
+
+void
+remote_dep_reset_forwarded_direct(parsec_execution_stream_t* es,
+                           parsec_remote_deps_t* rdeps)
+{
+    PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "fw reset\tcontext %p deps %p", (void*)es, rdeps);
+    memset(rdeps->remote_dep_fw_mask_direct, 0,
+           es->virtual_process->parsec_context->remote_dep_fw_mask_sizeof);
 }
 
 static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg,
