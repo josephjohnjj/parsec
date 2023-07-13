@@ -828,13 +828,9 @@ int process_steal_request(parsec_execution_stream_t *es)
 
                     if(parsec_runtime_task_mapping) {
                         /** send the new task mapping to the predecessors*/
-                        int total_info_send = send_task_mapping_info_to_predecessor(es, gpu_task->ec, steal_request->msg.root);
+                        send_task_mapping_info_to_predecessor(es, gpu_task->ec, steal_request->msg.root);
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, steal_request->msg.root);
-
-                        int flying = 0;
-                        for(flying = 0; flying < total_info_send; flying++)
-                            remote_dep_dec_flying_messages(gpu_task->ec->taskpool);
                     }
                 }
             }
@@ -1928,7 +1924,7 @@ int insert_migrated_tasks_details(parsec_task_t *task, int rank)
     {
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
-        item->rank = rank;
+        item->rank = rank; /** Thief Node */
         item->task_class_id  = task->task_class->task_class_id;
         parsec_hash_table_lock_bucket(migrated_task_ht, key);
         parsec_hash_table_nolock_insert(migrated_task_ht, &item->ht_item);
@@ -1970,7 +1966,7 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
     {
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
-        item->rank = rank;
+        item->rank = rank; /* victim node */
         item->task_class_id = task->task_class->task_class_id;
         parsec_hash_table_lock_bucket(received_task_ht, key);
         parsec_hash_table_nolock_insert(received_task_ht, &item->ht_item);
@@ -2067,9 +2063,9 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
         }
         else {
             send_task_mapping_info(es, task, &mapping_info, src_rank);
+            total_info_send++;
         }
-        remote_dep_inc_flying_messages(task->taskpool);
-        total_info_send++;
+        
     }
 
     return total_info_send;
