@@ -134,4 +134,6 @@ int find_direct_msg(parsec_task_t *task);
 int whoami();
 int progress_direct_activation(parsec_execution_stream_t* es);
 int direct_activation_fifo_status(parsec_execution_stream_t* es);
+int create_direct_msg_hashtables(parsec_taskpool_t* tp);
+int release_direct_msg_hashtables(parsec_taskpool_t* tp);
 #endif

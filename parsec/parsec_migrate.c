@@ -66,8 +66,6 @@ static parsec_hash_table_t *task_map_ht = NULL;
 static parsec_hash_table_t *received_task_ht = NULL; 
 /** hashtable for storing details of migrated tasks */
 static parsec_hash_table_t *migrated_task_ht = NULL; 
-/** hashtable of direct messages */
-static parsec_hash_table_t *direct_msg_ht = NULL; 
 
 static parsec_key_fn_t node_task_mapping_table_generic_key_fn = {
     .key_equal = parsec_hash_table_generic_64bits_key_equal,
@@ -138,6 +136,31 @@ PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
 int get_nb_nodes() 
 {
     return nb_nodes;
+}
+
+int create_direct_msg_hashtables(parsec_taskpool_t* tp)
+{
+   int i = 0, nb_task_classes = tp->nb_task_classes;
+
+   tp->direct_msg_ht  = malloc(sizeof(parsec_hash_table_t*) * nb_task_classes);
+
+   for (i = 0; i < tp->nb_task_classes; i++) {
+        tp->direct_msg_ht[i] = PARSEC_OBJ_NEW(parsec_hash_table_t);
+        parsec_hash_table_init(tp->direct_msg_ht[i], offsetof(mig_task_mapping_item_t, ht_item), 16, 
+            node_task_mapping_table_generic_key_fn, NULL); 
+   }
+}
+
+int release_direct_msg_hashtables(parsec_taskpool_t* tp)
+{
+    int i = 0, nb_task_classes = tp->nb_task_classes;
+    
+    for (i = 0; i < tp->nb_task_classes; i++) {
+        parsec_hash_table_for_all(tp->direct_msg_ht[i], task_mapping_free_elt, tp->direct_msg_ht[i]);
+        parsec_hash_table_fini(tp->direct_msg_ht[i]);
+        PARSEC_OBJ_RELEASE(tp->direct_msg_ht[i]);
+        tp->direct_msg_ht[i] = NULL;
+    }
 }
 
 int parsec_node_mig_inc_gpu_task_executed()
@@ -360,13 +383,8 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
         migrated_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
         parsec_hash_table_init(migrated_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
-            node_task_mapping_table_generic_key_fn, NULL);
-
-        direct_msg_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
-        parsec_hash_table_init(direct_msg_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
-            node_task_mapping_table_generic_key_fn, NULL);     
+            node_task_mapping_table_generic_key_fn, NULL); 
     }
-    
     return 0;
 }
 
@@ -527,14 +545,7 @@ int parsec_node_migrate_fini()
         parsec_hash_table_for_all(migrated_task_ht, task_mapping_free_elt, migrated_task_ht);
         parsec_hash_table_fini(migrated_task_ht);
         PARSEC_OBJ_RELEASE(migrated_task_ht);
-        migrated_task_ht = NULL;
-
-        parsec_hash_table_for_all(direct_msg_ht, task_mapping_free_elt, direct_msg_ht);
-        parsec_hash_table_fini(direct_msg_ht);
-        PARSEC_OBJ_RELEASE(direct_msg_ht);
-        direct_msg_ht = NULL;
-
-        
+        migrated_task_ht = NULL;        
     }
 
     return parsec_migration_engine_up;
@@ -1986,6 +1997,12 @@ int insert_direct_msg(parsec_task_t *task, int rank)
     parsec_key_t key;
     mig_task_mapping_item_t *item;
 
+    parsec_taskpool_t *tp = task->taskpool;
+    assert(NULL != tp);
+    parsec_hash_table_t *ht =  tp->direct_msg_ht[task->task_class->task_class_id];
+    assert(NULL != ht);
+ 
+
     assert(0 <= rank && rank < get_nb_nodes());
     key = task->task_class->make_key(task->taskpool, task->locals);
 
@@ -1993,15 +2010,15 @@ int insert_direct_msg(parsec_task_t *task, int rank)
      * @brief Entry NULL imples that this task has never been received
      * till now in any of the iteration. So we start a new entry.
      */
-    if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key)))
+    if (NULL == (item = parsec_hash_table_nolock_find(ht, key)))
     {
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
         item->rank = rank;
         item->task_class_id = task->task_class->task_class_id;
-        parsec_hash_table_lock_bucket(direct_msg_ht, key);
-        parsec_hash_table_nolock_insert(direct_msg_ht, &item->ht_item);
-        parsec_hash_table_unlock_bucket(direct_msg_ht, key);
+        parsec_hash_table_lock_bucket(ht, key);
+        parsec_hash_table_nolock_insert(ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(ht, key);
     }
     return 1;
 }
@@ -2011,14 +2028,17 @@ int find_direct_msg(parsec_task_t *task)
     parsec_key_t key;
     mig_task_mapping_item_t *item;
 
-    key = task->task_class->make_key(task->taskpool, task->locals);
-    if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key))) {
-        return -1;
-    }
-    if(task->task_class->task_class_id != item->task_class_id) {
-        return -1;
-    }
+    parsec_taskpool_t *tp = task->taskpool;
+    assert(NULL != tp);
+    parsec_hash_table_t *ht =  tp->direct_msg_ht[task->task_class->task_class_id];
+    assert(NULL != ht);
 
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    if (NULL == (item = parsec_hash_table_nolock_find(ht, key))) {
+        return -1;
+    }
+    
+    assert(task->task_class->task_class_id == item->task_class_id);
     assert(0 <= item->rank && item->rank < get_nb_nodes());
 
     return item->rank;
