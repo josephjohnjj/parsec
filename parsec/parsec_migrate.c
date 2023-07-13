@@ -1848,11 +1848,30 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
     return 1;
 }
 
-parsec_dependency_t*
-parsec_hash_find_sources(const parsec_taskpool_t *tp,
-                      parsec_execution_stream_t *es,
-                      const parsec_task_t* restrict task)
+parsec_dependency_t
+parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es,
+    const parsec_task_t* restrict task, parsec_release_dep_fct_arg_t *arg, int src_rank)
 {
+    int current_source = -1;
+
+    if(NULL != arg->remote_deps) {
+        /** This flow has a remote deps */
+        if(-1 == arg->remote_deps->from) {
+            /** From has not been set which means the flow is from me */
+            current_source = src_rank;
+        }
+        else {
+            /** This flow is from an intermediate node */
+            current_source = arg->remote_deps->from;
+        }
+    }
+    else {
+        /** This flow has no remote deps till now, so it is from me. */
+        current_source = src_rank;
+    }
+    /** Update the sources of dataflow of the task */
+    assert(0 <= current_source && current_source < get_nb_nodes());
+  
     parsec_hashable_sources_t *hs;
     parsec_key_handle_t kh;
     parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
@@ -1867,26 +1886,23 @@ parsec_hash_find_sources(const parsec_taskpool_t *tp,
         hs->ht_item.key = key;
         parsec_hash_table_nolock_insert_handle(ht, &kh, &hs->ht_item);
     }
-    parsec_hash_table_unlock_bucket_handle(ht, &kh);
-    return &(hs->sources);
-}
 
-parsec_dependency_t
-parsec_update_sources(parsec_taskpool_t *tp, parsec_dependency_t *sources, int src)
-{
-    parsec_dependency_t source_new_value;
+    parsec_dependency_t source_new_value =  (parsec_dependency_t)0;
+    parsec_dependency_t *source_mask = &(hs->sources);
 
-    assert(NULL != sources);
-
-    if ( 0 != (*sources & (1 << src)) ) {
+    if ( 0 != (*source_mask & (1 << current_source)) ) {
         /** this source has already been set */
-        return *sources;
+        return *source_mask;
     }
 
-    source_new_value = (*sources | (1 << src));
-    parsec_atomic_fetch_or_int32( sources, source_new_value );
-    return *sources;
+    source_new_value = (*source_mask | (1 << current_source));
+    parsec_atomic_fetch_or_int32( source_mask, source_new_value );
+
+    parsec_hash_table_unlock_bucket_handle(ht, &kh);
+    assert(*source_mask == hs->sources);
+    return *source_mask;
 }
+
 
 static void task_mapping_free_elt(void *_item, void *table)
 {

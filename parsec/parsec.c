@@ -1767,7 +1767,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
     parsec_task_t** pready_ring = &arg->ready_lists[dst_vpid];
     parsec_dependency_t *deps;
     int completed;
-    parsec_dependency_t *sources = NULL;
+    parsec_dependency_t source_mask = (parsec_dependency_t)0;
     int source = -1;
 #if defined(PARSEC_DEBUG_NOISIER)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
@@ -1781,31 +1781,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
 
     if(parsec_runtime_task_mapping) {
         /** Find the sources of dataflow of the task */
-        sources = parsec_hash_find_sources(origin->taskpool, es, task);
-        assert(NULL != sources);
-
-        if(NULL != arg->remote_deps) {
-
-            /** This flow has a remote deps */
-            if(-1 == arg->remote_deps->from) {
-                /** From has not been set which means the flow is from me */
-                source = src_rank;
-                assert(0 <= source && source < get_nb_nodes());
-            }
-            else {
-                /** This flow is from an intermediate node */
-                source = arg->remote_deps->from;
-                assert(0 <= source && source < get_nb_nodes());
-            }
-        }
-        else {
-            /** This flow has no remote deps till now, so it is from me. */
-            source = src_rank;
-            assert(0 <= source && source < get_nb_nodes());
-        }
-        /** Update the sources of dataflow of the task */
-        assert(0 <= source && source < get_nb_nodes());
-        parsec_update_sources(origin->taskpool, sources, source);
+        source_mask = parsec_update_sources(origin->taskpool, es, task, arg, src_rank);
     }
 
 #if defined(PARSEC_PROF_GRAPHER)
@@ -1849,10 +1825,8 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             if (parsec_runtime_task_mapping ) {
                 if( -1 != find_received_tasks_details(task)) {
                     new_context->mig_status = PARSEC_MIGRATED_TASK;
-                    printf("I am %d \n", new_context->task_class->task_class_id );
                 }
-
-                new_context->sources = *sources; /** Set the intermediate dataflow sources */
+                new_context->sources = source_mask; /** Set the intermediate dataflow sources */
             }
 
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
