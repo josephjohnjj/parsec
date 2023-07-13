@@ -1888,6 +1888,7 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
 
     if ( 0 != (*source_mask & (1 << current_source)) ) {
         /** this source has already been set */
+        parsec_hash_table_unlock_bucket_handle(ht, &kh);
         return *source_mask;
     }
 
@@ -1897,6 +1898,51 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
     parsec_hash_table_unlock_bucket_handle(ht, &kh);
     assert(*source_mask == hs->sources);
     return *source_mask;
+}
+
+parsec_dependency_t
+parsec_find_sources( parsec_execution_stream_t *es, parsec_task_t*  task)
+{
+   
+    const parsec_taskpool_t *tp = task->taskpool;
+    parsec_hashable_sources_t *hs;
+    parsec_key_handle_t kh;
+    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
+    assert(NULL != ht);
+
+    parsec_key_t key = task->task_class->make_key(tp, task->locals);
+    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
+    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
+
+    assert(NULL != hs);
+    assert(0 != hs->sources);
+
+    parsec_hash_table_unlock_bucket_handle(ht, &kh);
+
+    return hs->sources;
+}
+
+parsec_dependency_t
+parsec_reset_sources( parsec_execution_stream_t *es, parsec_task_t*  task)
+{
+   
+    const parsec_taskpool_t *tp = task->taskpool;
+    parsec_hashable_sources_t *hs;
+    parsec_key_handle_t kh;
+    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
+    assert(NULL != ht);
+
+    parsec_key_t key = task->task_class->make_key(tp, task->locals);
+    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
+    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
+
+    assert(NULL != hs);
+    assert(0 != hs->sources);
+
+    parsec_hash_table_unlock_bucket_handle(ht, &kh);
+    hs->sources = (parsec_dependency_t)0;
+
+    return hs->sources;
 }
 
 
@@ -2044,6 +2090,8 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     mig_task_mapping_info_t mapping_info;
     int total_info_send =  0;
 
+    assert(source_mask == parsec_find_sources(es, task));
+
     parsec_taskpool_t *tp = task->taskpool;
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
     mapping_info.mig_rank       = rank;
@@ -2153,7 +2201,6 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     assert(0 <= mapping_info->mig_rank && mapping_info->mig_rank < get_nb_nodes());
 
     update_task_mapping(mapping_info);
-    assert(mapping_info->mig_rank != my_rank);
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
     
     return 0;
@@ -2172,6 +2219,8 @@ int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_d
     (void)es;
     char packed_buffer[SINGLE_ACTIVATE_MSG_SIZE];
     int  position = 0, saved_position = 0, dsize = 0;
+
+    assert(0);
 
     /** Size of the data to be send  */
     parsec_ce.pack_size(&parsec_ce, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t, &dsize);
