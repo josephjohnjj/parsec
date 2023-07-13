@@ -1916,62 +1916,12 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     }
 
     if(parsec_runtime_task_mapping) {
+        int action = 0;
+        action = modify_action(oldcontext, newcontext, &src_rank, &dst_rank,
+            new_mapping, arg);
 
-        /** This is a local activation */
-        if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-                
-            was_received = find_received_tasks_details(newcontext);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was received */
-                /** newcontext was migrated to this node */
-                assert(was_received == dst_rank);
-                assert(new_mapping == src_rank || new_mapping == -1);
-                dst_rank = src_rank;
-
-                rc = find_direct_msg(oldcontext);
-                if(-1 == rc) {
-                    insert_direct_msg(oldcontext, src_rank);
-                }
-                else {
-                    assert(rc == src_rank);
-                }
-            }
-        }
-        /** This is a remote activation through direct dataflow */
-        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-            was_received = find_received_tasks_details(newcontext);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was received */
-                /** newcontext was migrated to this node */
-                assert(was_received == dst_rank);
-                dst_rank = src_rank;
-            }
-            else {
-                /** we are only intrested in task that were migrated to this node */
-                return PARSEC_ITERATE_CONTINUE;
-            }
-        }
-        /** This is a remote activation through normal dataflow */
-        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-                
-            was_received = find_received_tasks_details(newcontext);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) {
-                /** Direct dataflow will take care of this. As dst_rank != src_rank and
-                 * action mask does not have PARSEC_ACTION_SEND_INIT_REMOTE_DEPS
-                 * no action will be tasken. 
-                */
-                assert(dst_rank != src_rank);
-                assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
-            }
-        }
-        else
-        {
-            assert(0);
+        if(0 == action) {
+            return PARSEC_ITERATE_CONTINUE;
         }
     }
 
@@ -2158,63 +2108,12 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     assert(0 <= new_mapping && new_mapping < get_nb_nodes());
 
     if(parsec_runtime_task_mapping) {
+        int action = 0;
+        action = modify_action(oldcontext, newcontext, &src_rank, &dst_rank,
+            new_mapping, arg);
 
-        /** This is a local activation */
-        if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-                
-            was_received = find_received_tasks_details(newcontext);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was received */
-                /** newcontext was migrated to this node */
-                assert(was_received == dst_rank);
-                assert(new_mapping == src_rank);
-                dst_rank = src_rank;
-
-                rc = find_direct_msg(oldcontext);
-                if(-1 == rc) {
-                    insert_direct_msg(oldcontext, src_rank);
-                }
-                else {
-                    assert(rc == src_rank);
-                }
-                
-            }
-        }
-        /** This is a remote activation through direct dataflow */
-        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-            was_received = find_received_tasks_details(newcontext);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was received */
-                /** newcontext was migrated to this node */
-                assert(was_received == dst_rank);
-                dst_rank = src_rank;
-            }
-            else {
-                /** we are only intrested in task that were migrated to this node */
-                return PARSEC_ITERATE_CONTINUE;
-            }
-        }
-        /** This is a remote activation through normal dataflow */
-        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-                
-            was_received = find_received_tasks_details(newcontext);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) {
-                /** Direct dataflow will take care of this. As dst_rank != src_rank and
-                 * action mask does not have PARSEC_ACTION_SEND_INIT_REMOTE_DEPS
-                 * no action will be tasken. 
-                */
-                assert(dst_rank != src_rank);
-                assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
-            }
-        }
-        else
-        {
-            assert(0);
+        if(0 == action) {
+            return PARSEC_ITERATE_CONTINUE;
         }
     }
 
