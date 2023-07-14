@@ -3018,9 +3018,11 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             /** The task was not migrated to this node but new_mapping != -1.
              * This  means that this node is one of the intermediate nodes. 
              * The data will be forwarded to the new_mapping during collective 
-             * operation. This modee handles only local task activation.
+             * operation. This mode handles only local task activation.
              */
             assert(new_mapping != *dst_rank);
+
+            return 0; // return PARSEC_ITERATE_CONTINUE;
         }
     }
     else
