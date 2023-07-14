@@ -2089,13 +2089,6 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         if(0 == action) {
             return PARSEC_ITERATE_CONTINUE;
         }
-        else {
-            if(original_dst == dst_rank)
-                printf("SRC_RANK %d DST_RANK %d DST_RANK_ORIGINAL %d MAPPING %d \n", 
-                src_rank, dst_rank, original_dst, new_mapping);
-           assert(original_dst != dst_rank); 
-           assert(dst_rank == new_mapping);
-        }
     }
 
     data_repo_t        *target_repo = arg->output_repo;

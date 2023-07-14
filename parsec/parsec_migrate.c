@@ -2927,7 +2927,10 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
             return 0; // return PARSEC_ITERATE_CONTINUE;
         }
         else {
-            /** This is normal task activation, we have no action to take */
+            /** The task was not migrated to this node and new_mapping == -1.
+             * This  means that this node is not one of the intermediate nodes. We have 
+             * no action to take and this mode handles only local task activation.
+             */
         }
     }
     else
@@ -2962,11 +2965,15 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
              * So succecessor is expecting a direct message from me. 
              */
             assert(new_mapping == *src_rank);
-            *dst_rank = *src_rank;  
+            *dst_rank = new_mapping;  
         }
         else {
-            /** This is normal task activation, we have no action to take.
-            */
+            /** The task was not migrated to this node. But we found that new_mapping != 1.
+             * which implies that I should be one of the intermmediate node.
+             */
+            assert(new_mapping != *dst_rank);
+            assert(new_mapping != *src_rank);
+            *dst_rank = new_mapping;
         }
     }
     /** This is a remote activation through direct dataflow */
@@ -2984,7 +2991,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
              * should be executed in this node.
             */
             assert(new_mapping == *src_rank);
-            *dst_rank = *src_rank;
+            *dst_rank = new_mapping;
         }
         else {
             /** In direct dataflow we are only interested in succecessor that were migrated 
@@ -3008,7 +3015,12 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             return 0; // return PARSEC_ITERATE_CONTINUE;
         }
         else {
-            /** This is normal task activation, we have no action to take */
+            /** The task was not migrated to this node but new_mapping != -1.
+             * This  means that this node is one of the intermediate nodes. 
+             * The data will be forwarded to the new_mapping during collective 
+             * operation. This modee handles only local task activation.
+             */
+            assert(new_mapping != *dst_rank);
         }
     }
     else
