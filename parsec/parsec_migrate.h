@@ -132,4 +132,9 @@ int find_direct_msg(parsec_task_t *task);
 int whoami();
 int progress_direct_activation(parsec_execution_stream_t* es);
 int direct_activation_fifo_status(parsec_execution_stream_t* es);
+int modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
+    int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg);
+int modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
+    int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg);
+
 #endif

@@ -1891,7 +1891,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 
     if(parsec_runtime_task_mapping) {
         int action = 0;
-        action = modify_action(oldcontext, newcontext, &src_rank, &dst_rank,
+        action = modify_action_for_no_new_mapping(oldcontext, newcontext, &src_rank, &dst_rank,
             new_mapping, arg);
 
         if(0 == action) {
@@ -2083,11 +2083,18 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
 
     if(parsec_runtime_task_mapping) {
         int action = 0;
-        action = modify_action(oldcontext, newcontext, &src_rank, &dst_rank,
+        action = modify_action_for_new_mapping(oldcontext, newcontext, &src_rank, &dst_rank,
             new_mapping, arg);
 
         if(0 == action) {
             return PARSEC_ITERATE_CONTINUE;
+        }
+        else {
+            if(original_dst == dst_rank)
+                printf("SRC_RANK %d DST_RANK %d DST_RANK_ORIGINAL %d MAPPING %d \n", 
+                src_rank, dst_rank, original_dst, new_mapping);
+           assert(original_dst != dst_rank); 
+           assert(dst_rank == new_mapping);
         }
     }
 
@@ -2143,7 +2150,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             /** This is important. The collective operation will be done based on root*/
             arg->remote_deps->root = src_rank;
             arg->remote_deps->outgoing_mask |= (1 << dep->dep_datatype_index);
-            
+
             _array_pos = dst_rank / (8 * sizeof(uint32_t)); 
             _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
 

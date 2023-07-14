@@ -1367,6 +1367,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
                 mig_direct_no_get_start(es, deps);
                 deps->incoming_mask = deps->outgoing_mask = 0;
                 remote_deps_free(deps);
+
+                printf("check_deps_received 2 \n");
             }
             else {
                 mig_direct_recv_activate(es, deps, buffer, position + deps->msg.length, &position);
@@ -2220,8 +2222,6 @@ int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_d
     char packed_buffer[SINGLE_ACTIVATE_MSG_SIZE];
     int  position = 0, saved_position = 0, dsize = 0;
 
-    assert(0);
-
     /** Size of the data to be send  */
     parsec_ce.pack_size(&parsec_ce, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t, &dsize);
     /** one task details  size. It is important to set this here, so as to be used on the receiver */
@@ -2274,6 +2274,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
             memcpy(packed_buffer, msg + saved_position, deps->msg.length);
             deps->taskpool = (parsec_taskpool_t*)packed_buffer;  /* temporary storage */
             parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
+            printf("To_direct_msg_fifo \n");
         } 
         else {
             int check_reception = 0;
@@ -2283,6 +2284,8 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
                 mig_direct_no_get_start(es, deps);
                 deps->incoming_mask = deps->outgoing_mask = 0;
                 remote_deps_free(deps);
+
+                printf("check_deps_received 1 \n");
             }
             else {
                 mig_direct_recv_activate(es, deps, msg, saved_position + deps->msg.length, &position);
@@ -2373,7 +2376,7 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 
     int was_received = find_received_tasks_details(newcontext);
 
-    /** we are only intrested in task that were migrated in the previous iteeration */
+    /** we are only interested in task that were migrated in the previous iteeration */
     if( -1 ==  was_received) {
         return PARSEC_ITERATE_CONTINUE;
     }
@@ -2853,8 +2856,9 @@ int whoami()
     return my_rank;
 }
 
+
 int 
-modify_action(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
+modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
     int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg)
 {
     int was_migrated = -1;
@@ -2862,65 +2866,158 @@ modify_action(const parsec_task_t *predecessor, const parsec_task_t *succecessor
     int original_dst = *dst_rank;
     int rc = 0;
 
+    assert(new_mapping == -1);
+
     /** This is a local activation */
-        if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-                
-            was_received = find_received_tasks_details(succecessor);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was received */
-                /** newcontext was migrated to this node */
-                assert(was_received == *dst_rank);
-                assert(new_mapping == *src_rank || new_mapping == -1);
-                *dst_rank = *src_rank;
+    if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-                rc = find_direct_msg(succecessor);
-                if(-1 == rc) {
-                    insert_direct_msg(succecessor, *src_rank);
-                }
-                else {
-                    assert(rc == *src_rank);
-                }
-            }
-        }
-        /** This is a remote activation through direct dataflow */
-        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+        was_received = find_received_tasks_details(succecessor);
 
-            was_received = find_received_tasks_details(succecessor);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) { /** The task was received */
-                /** newcontext was migrated to this node */
-                assert(was_received == *dst_rank);
-                *dst_rank = *src_rank;
-            }
-            else {
-                /** we are only intrested in task that were migrated to this node */
-                return 0; // return PARSEC_ITERATE_CONTINUE;
-            }
-        }
-        /** This is a remote activation through normal dataflow */
-        else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-            (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-                
-            was_received = find_received_tasks_details(succecessor);
-            /** newcontext was migrated to this node */
-            if(was_received != -1) {
-                /** Direct dataflow will take care of this. As dst_rank != src_rank and
-                 * action mask does not have PARSEC_ACTION_SEND_INIT_REMOTE_DEPS
-                 * no action will be tasken. 
-                */
-                assert(*dst_rank != *src_rank);
-                assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
-            }
-        }
-        else
-        {
-            assert(0);
-        }
+        /** succecessor was migrated to this node */
+        if(was_received != -1) { 
+            assert(was_received == *dst_rank);
 
-        return 1;
-    
+            /** new_mapping == -1 which implies that I was not the intermmediate node.
+             * So succecessor is expecting a direct message from some other node 
+             * for this same predecessor. 
+             */
+            return 0; // return PARSEC_ITERATE_CONTINUE;   
+        }
+        else {
+            /** This is normal task activation, we have no action to take.
+            */
+        }
+    }
+    /** This is a remote activation through direct dataflow */
+    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        was_received = find_received_tasks_details(succecessor);
+        /** succecessor was migrated to this node */
+        if(was_received != -1) { 
+            assert(was_received == *dst_rank);
+            assert(*dst_rank != *src_rank);
+
+            /** succecessor was migrated to this node and we have received a 
+             * direct dataflow from one of the intermmediate nodes. So the task 
+             * should be executed in this node.
+            */
+            *dst_rank = *src_rank;
+        }
+        else {
+            /** In direct dataflow we are only interested in succecessor that were migrated 
+             * to this node 
+             */
+            return 0; // return PARSEC_ITERATE_CONTINUE;
+        }
+    }
+    /** This is a remote activation through normal dataflow */
+    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+            
+        was_received = find_received_tasks_details(succecessor);
+        /** succecessor was migrated to this node */
+        if(was_received != -1) {
+            /** The succecessor was migrated to this node. But we have a direct incoming dataflow
+             * for succecessor. 
+             */
+            assert(*dst_rank != *src_rank);
+            assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
+            return 0; // return PARSEC_ITERATE_CONTINUE;
+        }
+        else {
+            /** This is normal task activation, we have no action to take */
+        }
+    }
+    else
+    {
+        assert(0);
+    }
+
+    return 1;
 }
+
+int 
+modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
+    int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg)
+{
+    int was_migrated = -1;
+    int was_received = -1;
+    int original_dst = *dst_rank;
+    int rc = 0;
+
+    assert(new_mapping != -1);
+
+    /** This is a local activation */
+    if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        was_received = find_received_tasks_details(succecessor);
+        /** succecessor was migrated to this node */
+        if(was_received != -1) { 
+            assert(was_received == *dst_rank);
+
+            /** new_mapping != -1 which implies that I should be one of the intermmediate node.
+             * So succecessor is expecting a direct message from me. 
+             */
+            assert(new_mapping == *src_rank);
+            *dst_rank = *src_rank;  
+        }
+        else {
+            /** This is normal task activation, we have no action to take.
+            */
+        }
+    }
+    /** This is a remote activation through direct dataflow */
+    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        was_received = find_received_tasks_details(succecessor);
+        /** succecessor was migrated to this node */
+        if(was_received != -1) { 
+            assert(was_received == *dst_rank);
+            assert(*dst_rank != *src_rank);
+
+            /** succecessor was migrated to this node and we have received a 
+             * direct dataflow from one of the intermmediate nodes. So the task 
+             * should be executed in this node.
+            */
+            assert(new_mapping == *src_rank);
+            *dst_rank = *src_rank;
+        }
+        else {
+            /** In direct dataflow we are only interested in succecessor that were migrated 
+             * to this node 
+             */
+            return 0; // return PARSEC_ITERATE_CONTINUE;
+        }
+    }
+    /** This is a remote activation through normal dataflow */
+    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+            
+        was_received = find_received_tasks_details(succecessor);
+        /** succecessor was migrated to this node */
+        if(was_received != -1) {
+            /** The succecessor was migrated to this node. But we have a direct incoming dataflow
+             * for succecessor. 
+             */
+            assert(*dst_rank != *src_rank);
+            assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
+            return 0; // return PARSEC_ITERATE_CONTINUE;
+        }
+        else {
+            /** This is normal task activation, we have no action to take */
+        }
+    }
+    else
+    {
+        assert(0);
+    }
+
+    return 1;
+}
+
 
 
