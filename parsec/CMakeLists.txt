@@ -303,6 +303,7 @@ if( BUILD_PARSEC )
           ${CMAKE_CURRENT_SOURCE_DIR}/private_mempool.h
           ${CMAKE_CURRENT_SOURCE_DIR}/bindthread.h
           ${CMAKE_CURRENT_SOURCE_DIR}/parsec_comm_engine.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/parsec_migrate.h
           ${CMAKE_CURRENT_SOURCE_DIR}/include/parsec/deprecated.h
           DESTINATION ${PARSEC_INSTALL_INCLUDEDIR}/parsec)
 
@@ -352,7 +353,12 @@ if( PARSEC_WITH_DEVEL_HEADERS )
   install(FILES
           ${CMAKE_CURRENT_SOURCE_DIR}/mca/pins/pins_papi_utils.h
           ${CMAKE_CURRENT_SOURCE_DIR}/mca/pins/pins_tau_utils.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/mca/sched/sched.h
           DESTINATION ${PARSEC_INSTALL_INCLUDEDIR}/parsec/mca/pins )
+
+  install(FILES
+          ${CMAKE_CURRENT_SOURCE_DIR}/mca/sched/sched.h
+          DESTINATION ${PARSEC_INSTALL_INCLUDEDIR}/parsec/mca/sched )
 
   install(FILES
           ${CMAKE_CURRENT_SOURCE_DIR}/utils/argv.h
