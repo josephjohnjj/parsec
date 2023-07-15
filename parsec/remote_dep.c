@@ -13,8 +13,9 @@
 #include "parsec/arena.h"
 #include "parsec/interfaces/dtd/insert_function_internal.h"
 #include "parsec/utils/debug.h"
-#include "parsec/parsec_migrate.h"
 #include <stdio.h>
+#include "parsec/parsec_migrate.h"
+
 
 /**
  * Indicator for the status of the communication engine. The following values are valid:
