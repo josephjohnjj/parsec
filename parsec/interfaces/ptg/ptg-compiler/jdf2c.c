@@ -1404,6 +1404,7 @@ static void jdf_generate_header_file(const jdf_t* jdf)
             jdf_basename, jdf_basename);
     houtput("#include \"parsec.h\"\n"
             "#include \"parsec/parsec_internal.h\"\n"
+            "#include \"parsec/parsec_migrate.h\"\n"
             "#include \"parsec/remote_dep.h\"\n\n"
             );
     houtput("BEGIN_C_DECLS\n\n");
@@ -1505,6 +1506,7 @@ static void jdf_minimal_code_before_prologue(const jdf_t *jdf)
     JDF_COUNT_LIST_ENTRIES(jdf->functions, jdf_function_entry_t, next, nbfunctions);
     JDF_COUNT_LIST_ENTRIES(jdf->data, jdf_data_entry_t, next, nbdata);
     coutput("#include \"parsec.h\"\n"
+            "#include \"parsec/parsec_migrate.h\"\n"
             "#include \"parsec/parsec_internal.h\"\n"
             "#include \"parsec/ayudame.h\"\n"
             "#include \"parsec/execution_stream.h\"\n"
@@ -7714,7 +7716,7 @@ jdf_generate_code_iterate_successors_or_predecessors(const jdf_t *jdf,
             "  nc.chore_mask  = PARSEC_DEV_ALL;\n");
     coutput("#if defined(DISTRIBUTED)\n"
             "  rank_src = rank_of_%s(%s);\n"
-            "if(remote_dep_mpi_retrieve_datatype == ontask || parsec_gather_collective_pattern == ontask) \n"
+            "if(remote_dep_mpi_retrieve_datatype == ontask || parsec_gather_collective_pattern == ontask || mig_dep_mpi_retrieve_datatype == ontask) \n"
             "  rank_src = ((parsec_remote_deps_t *) ontask_arg)->root; \n"
             "else"
             "  rank_src = es->virtual_process->parsec_context->my_rank; \n"
