@@ -2953,16 +2953,26 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         /** We have information on the new task mapping of the successor 
          * (as new_mapping != -1) and we also know the that the predecessor 
          * was executed on this node . So this node is a source
-         * of the successor and the successor was migrated to this node.
+         * of the successor.
         */
-        assert(-1 != was_received);
-        /** succecessor was migrated to this node */
-        assert(was_received == *dst_rank);
-        assert(new_mapping == *src_rank);
+        if(-1 != was_received) {
+            /** The succecessor was migrated to this node. As the predecessor
+            was also executed in this node we can modify the successor activation 
+            into a local activation*/
 
-        /** The successor will again me mapped to this node. */
-        *dst_rank = new_mapping;  
-        
+            assert(was_received == *dst_rank);
+            assert(new_mapping == *src_rank);
+        }
+        else {
+
+            /** The task was migrated to some other node. Other than me.
+             *  We have to make sure that the direct deps taskes care of it.
+             */
+            
+            assert(new_mapping != *src_rank);
+        }     
+
+        *dst_rank = new_mapping;   
     }
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
