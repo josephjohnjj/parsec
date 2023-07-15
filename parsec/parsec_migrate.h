@@ -136,5 +136,10 @@ int modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const par
     int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg);
 int modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
     int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg);
+parsec_ontask_iterate_t parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
+    const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
+    const parsec_dep_t* dep, parsec_dep_data_description_t* data,
+    int src_rank, int dst_rank, int dst_vpid,data_repo_t *successor_repo, 
+    parsec_key_t successor_repo_key, void *param);
 
 #endif

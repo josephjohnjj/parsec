@@ -13,6 +13,7 @@
 #include "parsec/arena.h"
 #include "parsec/interfaces/dtd/insert_function_internal.h"
 #include "parsec/utils/debug.h"
+#include "parsec/parsec_migrate.h"
 #include <stdio.h>
 
 /**
@@ -167,9 +168,11 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
             remote_deps->output[i].parent     = remote_deps;
             remote_deps->output[i].deps_mask  = 0;
             remote_deps->output[i].priority   = 0xffffffff;
+
             remote_deps->output[i].rank_bits  = (uint32_t*)ptr;
             remote_deps->output[i].count_bits = 0;
             ptr += rank_bit_size;
+
             remote_deps->output[i].rank_bits_direct  = (uint32_t*)ptr;
             remote_deps->output[i].count_bits_direct = 0;
             ptr += rank_bit_size;
@@ -413,30 +416,20 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
         assert(dst_rank != new_mapping);
     }
 
-    /** I have no information about this task being migrated */
-    if( -1 == new_mapping) {
-
-        _array_pos  = dst_rank / (8 * sizeof(uint32_t));
-        _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
-
-        if( !(output->rank_bits[_array_pos] & _array_mask) ) {  /* new participant */
-            output->rank_bits[_array_pos] |= _array_mask;
-            output->deps_mask |= (1 << dep->dep_index);
-            output->count_bits++;
-        }
+    if( -1 != new_mapping) {
+        /** I have  information about this task being migrated.
+         * I am only intrested in task without a new mapping.
+         */
+        return PARSEC_ITERATE_CONTINUE;
     }
-    else { /** I have information about this task being migrated */
-        dst_rank = new_mapping;
-        assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
-        _array_pos  = dst_rank / (8 * sizeof(uint32_t));
-        _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+    _array_pos  = dst_rank / (8 * sizeof(uint32_t));
+    _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
 
-        if( !(output->rank_bits_direct[_array_pos] & _array_mask) ) {  /* new participant */
-            output->rank_bits_direct[_array_pos] |= _array_mask;
-            output->deps_mask |= (1 << dep->dep_index);
-            output->count_bits_direct++;
-        }
+    if( !(output->rank_bits[_array_pos] & _array_mask) ) {  /* new participant */
+        output->rank_bits[_array_pos] |= _array_mask;
+        output->deps_mask |= (1 << dep->dep_index);
+        output->count_bits++;
     }
 
     if(newcontext->priority > output->priority) {  /* select the priority */
@@ -480,6 +473,13 @@ int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
                            dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
                            parsec_gather_collective_pattern,
                            deps);
+
+    if(parsec_runtime_task_mapping) {
+        tc->iterate_successors(es, task,
+                           dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
+                           parsec_gather_direct_collective_pattern,
+                           deps);
+    }
 
     return parsec_remote_dep_activate(es, task, deps, deps->msg.output_mask);
 }
@@ -705,11 +705,11 @@ void remote_deps_allocation_init(int np, int max_output_deps)
             ((intptr_t)&fake_rdep.output[parsec_remote_dep_context.max_dep_count])-(intptr_t)&fake_rdep +
             /* One rankbits fw array per output param */
             parsec_remote_dep_context.max_dep_count * rankbits_size +
-            /* One direct rankbits fw array per output param */
+           /* One rankbits fw array per output param for direct flow*/
             parsec_remote_dep_context.max_dep_count * rankbits_size +
             /* One extra rankbit to track the delivery of Activates */
             rankbits_size +
-            /* One extra rankbit to track the delivery of Activates */
+            /* One extra rankbit to track the delivery of direct Activates */
             rankbits_size;
         PARSEC_OBJ_CONSTRUCT(&parsec_remote_dep_context.freelist, parsec_lifo_t);
         PARSEC_VALGRIND_CREATE_MEMPOOL(&parsec_remote_dep_context.freelist, 0, 1);

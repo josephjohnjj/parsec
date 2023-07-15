@@ -2089,6 +2089,9 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         if(0 == action) {
             return PARSEC_ITERATE_CONTINUE;
         }
+        else {
+            assert(dst_rank == new_mapping);
+        }
     }
 
     data_repo_t        *target_repo = arg->output_repo;

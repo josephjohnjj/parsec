@@ -1884,22 +1884,23 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
         hs->ht_item.key = key;
         parsec_hash_table_nolock_insert_handle(ht, &kh, &hs->ht_item);
     }
-
-    parsec_dependency_t source_new_value =  (parsec_dependency_t)0;
-    parsec_dependency_t *source_mask = &(hs->sources);
-
-    if ( 0 != (*source_mask & (1 << current_source)) ) {
-        /** this source has already been set */
-        parsec_hash_table_unlock_bucket_handle(ht, &kh);
-        return *source_mask;
+    else {
+        assert(0 != hs->sources);
     }
 
-    source_new_value = (*source_mask | (1 << current_source));
-    parsec_atomic_fetch_or_int32( source_mask, source_new_value );
+    if ( 0 != (hs->sources & (1 << current_source)) ) {
+        /** this source has already been set */
+        parsec_hash_table_unlock_bucket_handle(ht, &kh);
+        return hs->sources;
+    }
+
+    parsec_dependency_t source_new_value =  (parsec_dependency_t)0;
+    source_new_value = (hs->sources | (1 << current_source));
+    parsec_atomic_fetch_or_int32( &(hs->sources), source_new_value );
 
     parsec_hash_table_unlock_bucket_handle(ht, &kh);
-    assert(*source_mask == hs->sources);
-    return *source_mask;
+    assert(0 != hs->sources);
+    return  hs->sources;
 }
 
 parsec_dependency_t
@@ -2861,11 +2862,9 @@ int
 modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
     int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg)
 {
-    int was_migrated = -1;
     int was_received = -1;
-    int original_dst = *dst_rank;
-    int rc = 0;
 
+    /** I am not aware of any new task mapping for the succecessor */
     assert(new_mapping == -1);
 
     /** This is a local activation */
@@ -2874,53 +2873,24 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
 
         was_received = find_received_tasks_details(succecessor);
 
-        /** succecessor was migrated to this node */
-        if(was_received != -1) { 
-            assert(was_received == *dst_rank);
+        /** If this is a local task activation and the predecessor was executed in this node
+         * then it is guaranteed that this node was informed about the new task mapping. 
+        */
 
-            /** new_mapping == -1 which implies that I was not the intermmediate node.
-             * So succecessor is expecting a direct message from some other node 
-             * for this same predecessor. 
-             */
-            return 0; // return PARSEC_ITERATE_CONTINUE;   
-        }
-        else {
-            /** This is normal task activation, we have no action to take.
-            */
-        }
-    }
-    /** This is a remote activation through direct dataflow */
-    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+       assert(-1 == was_received);
 
-        was_received = find_received_tasks_details(succecessor);
-        /** succecessor was migrated to this node */
-        if(was_received != -1) { 
-            assert(was_received == *dst_rank);
-            assert(*dst_rank != *src_rank);
-
-            /** succecessor was migrated to this node and we have received a 
-             * direct dataflow from one of the intermmediate nodes. So the task 
-             * should be executed in this node.
-            */
-            *dst_rank = *src_rank;
-        }
-        else {
-            /** In direct dataflow we are only interested in succecessor that were migrated 
-             * to this node 
-             */
-            return 0; // return PARSEC_ITERATE_CONTINUE;
-        }
+        /** This is normal task activation, we have no action to take. */
     }
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
             
         was_received = find_received_tasks_details(succecessor);
-        /** succecessor was migrated to this node */
         if(was_received != -1) {
-            /** The succecessor was migrated to this node. But we have a direct incoming dataflow
-             * for succecessor. 
+            /** The succecessor was migrated to this node. But we have no information on the new task
+             * mapping. This means that the source for this task is some other node (probably the
+             * node that send the remote activation). This means that there is also direct activation
+             * expected from the source. So we can skip and action on this successor. 
              */
             assert(*dst_rank != *src_rank);
             assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
@@ -2931,6 +2901,30 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
              * This  means that this node is not one of the intermediate nodes. We have 
              * no action to take and this mode handles only local task activation.
              */
+        }
+    }
+    /** This is a remote activation through direct dataflow */
+    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        was_received = find_received_tasks_details(succecessor);
+
+        if(was_received != -1) { 
+            assert(was_received == *dst_rank);
+            assert(*dst_rank != *src_rank);
+
+            /** succecessor was migrated to this node, but we have no information of 
+             * the new task mapping. Which means that the succecessor did not have any 
+             * source from this node.
+             */
+            *dst_rank = *src_rank;
+        }
+        else {
+            /** The predecessor can have more than one successor. But direct messages are 
+             * meant ony for tasks that were mapped to this node. This successor was not
+             * migrated to this node so we skip and action related to this successor.  
+             */
+            return 0; // return PARSEC_ITERATE_CONTINUE;
         }
     }
     else
@@ -2945,11 +2939,9 @@ int
 modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
     int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg)
 {
-    int was_migrated = -1;
     int was_received = -1;
-    int original_dst = *dst_rank;
-    int rc = 0;
 
+    /** we have information on the new task mapping for the succecessor. */
     assert(new_mapping != -1);
 
     /** This is a local activation */
@@ -2957,58 +2949,33 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
         was_received = find_received_tasks_details(succecessor);
+
+        /** We have information on the new task mapping of the successor 
+         * (as new_mapping != -1) and we also know the that the predecessor 
+         * was executed on this node . So this node is a source
+         * of the successor and the successor was migrated to this node.
+        */
+        assert(-1 != was_received);
         /** succecessor was migrated to this node */
-        if(was_received != -1) { 
-            assert(was_received == *dst_rank);
+        assert(was_received == *dst_rank);
+        assert(new_mapping == *src_rank);
 
-            /** new_mapping != -1 which implies that I should be one of the intermmediate node.
-             * So succecessor is expecting a direct message from me. 
-             */
-            assert(new_mapping == *src_rank);
-            *dst_rank = new_mapping;  
-        }
-        else {
-            /** The task was not migrated to this node. But we found that new_mapping != 1.
-             * which implies that I should be one of the intermmediate node.
-             */
-            assert(new_mapping != *dst_rank);
-            assert(new_mapping != *src_rank);
-            *dst_rank = new_mapping;
-        }
-    }
-    /** This is a remote activation through direct dataflow */
-    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        was_received = find_received_tasks_details(succecessor);
-        /** succecessor was migrated to this node */
-        if(was_received != -1) { 
-            assert(was_received == *dst_rank);
-            assert(*dst_rank != *src_rank);
-
-            /** succecessor was migrated to this node and we have received a 
-             * direct dataflow from one of the intermmediate nodes. So the task 
-             * should be executed in this node.
-            */
-            assert(new_mapping == *src_rank);
-            *dst_rank = new_mapping;
-        }
-        else {
-            /** In direct dataflow we are only interested in succecessor that were migrated 
-             * to this node 
-             */
-            return 0; // return PARSEC_ITERATE_CONTINUE;
-        }
+        /** The successor will again me mapped to this node. */
+        *dst_rank = new_mapping;  
+        
     }
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
             
         was_received = find_received_tasks_details(succecessor);
-        /** succecessor was migrated to this node */
         if(was_received != -1) {
-            /** The succecessor was migrated to this node. But we have a direct incoming dataflow
-             * for succecessor. 
+            /** The succecessor was migrated to this node. And we also have information on the new task
+             * mapping. This means that the atleast one  source for this task is this node. At the same 
+             * time atleast one source is some other node (probably the node that send the remote 
+             * activation). This means that there is also direct activation expected from the source. 
+             * So the dataflow will be tajen care of by that direct activation. 
+             * So we can skip and action on this successor. 
              */
             assert(*dst_rank != *src_rank);
             assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
@@ -3021,7 +2988,33 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
              * operation. This mode handles only local task activation.
              */
             assert(new_mapping != *dst_rank);
+            assert(new_mapping != *src_rank);
 
+            return 0; // return PARSEC_ITERATE_CONTINUE;
+        }
+    }
+    /** This is a remote activation through direct dataflow */
+    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        was_received = find_received_tasks_details(succecessor);
+        if(was_received != -1) { 
+            assert(was_received == *dst_rank);
+            assert(*dst_rank != *src_rank);
+
+            /** succecessor was migrated to this node and we have received a 
+             * direct dataflow from one of the intermmediate nodes. So the task 
+             * should be executed in this node. new_mapping != -1 implies that
+             * the task had another flow that originated from this node. 
+            */
+            assert(new_mapping == *src_rank);
+            *dst_rank = new_mapping;
+        }
+        else {
+            /** The predecessor can have more than one successor. But direct messages are 
+             * meant ony for tasks that were mapped to this node. This successor was not
+             * migrated to this node so we skip and action related to this successor.  
+             */
             return 0; // return PARSEC_ITERATE_CONTINUE;
         }
     }
@@ -3031,6 +3024,70 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     }
 
     return 1;
+}
+
+
+parsec_ontask_iterate_t
+parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
+                                 const parsec_task_t *newcontext,
+                                 const parsec_task_t *oldcontext,
+                                 const parsec_dep_t* dep,
+                                 parsec_dep_data_description_t* data,
+                                 int src_rank, int dst_rank, int dst_vpid,
+                                 data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                                 void *param)
+{
+    (void)successor_repo; (void) successor_repo_key;
+    parsec_remote_deps_t* deps = (parsec_remote_deps_t*)param;
+    struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
+    int _array_pos  = 0;
+    int _array_mask = 0;
+    int new_mapping = -1;
+
+    if(!parsec_runtime_task_mapping) {
+        return PARSEC_ITERATE_STOP;
+    }
+
+    if( dst_rank == es->virtual_process->parsec_context->my_rank )
+        deps->outgoing_mask |= (1 << dep->dep_datatype_index);
+
+    new_mapping = find_task_mapping(newcontext);
+    assert(dst_rank != new_mapping);
+    if( -1 == new_mapping) {
+        /** I have no information about this task being migrated.
+         * I am only intrested in task with a new mapping.
+         */
+        return PARSEC_ITERATE_CONTINUE;
+    }
+
+    /** I was one of the intermediate nodes. */
+    if(new_mapping == es->virtual_process->parsec_context->my_rank) {
+        /** This case i already taken care by a direct dataflow from
+         * some other node or a local activation from this node.
+        */
+       return PARSEC_ITERATE_CONTINUE;
+    }
+        
+    dst_rank = new_mapping;
+    assert(0 <= dst_rank && dst_rank < get_nb_nodes());
+
+    _array_pos  = dst_rank / (8 * sizeof(uint32_t));
+    _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
+
+    if( !(output->rank_bits_direct[_array_pos] & _array_mask) ) {  /* new participant */
+        output->rank_bits_direct[_array_pos] |= _array_mask;
+        output->deps_mask |= (1 << dep->dep_index);
+        output->count_bits_direct++;
+    }
+    
+
+    if(newcontext->priority > output->priority) {  /* select the priority */
+        output->priority = newcontext->priority;
+        if(newcontext->priority > deps->max_priority)
+            deps->max_priority = newcontext->priority;
+    }
+    (void)oldcontext; (void)dst_vpid; (void)data; (void)src_rank;
+    return PARSEC_ITERATE_CONTINUE;
 }
 
 
