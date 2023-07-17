@@ -828,6 +828,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
                     if(parsec_runtime_task_mapping) {
                         /** send the new task mapping to the predecessors*/
+                        assert(steal_request->msg.root != my_rank);
                         send_task_mapping_info_to_predecessor(es, gpu_task->ec, steal_request->msg.root);
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, steal_request->msg.root);
@@ -2027,7 +2028,7 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
 int find_received_tasks_details(parsec_task_t *task)
 {
     parsec_key_t key;
-    mig_task_mapping_item_t *item;
+    mig_task_mapping_item_t *item = NULL;
 
     key = task->task_class->make_key(task->taskpool, task->locals);
     if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key))) {
@@ -2094,8 +2095,9 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     int total_info_send =  0;
 
     assert(source_mask == parsec_find_sources(es, task));
+    assert(source_mask != 0);
 
-    parsec_taskpool_t *tp = task->taskpool;
+    parsec_taskpool_t *tp       = task->taskpool;
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
     mapping_info.mig_rank       = rank;
     mapping_info.task_class_id  = task->task_class->task_class_id;
@@ -2153,7 +2155,7 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
         if(item->task_class_id != task_class_id) {
             return -1;
         }
-        item->rank = new_rank;
+        assert(item->rank == new_rank);
 
         return item->rank;
     }
@@ -2185,8 +2187,15 @@ int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *t
     mig_task_mapping_info_t *mapping_info, int src)
                                  
 {
+    char packed_buffer[MAPPING_INFO_SIZE];
+    int saved_position = 0, dsize = 0;
+
+    parsec_ce.pack_size(&parsec_ce, MAPPING_INFO_SIZE, parsec_datatype_int8_t, &dsize);
+    parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, SINGLE_ACTIVATE_MSG_SIZE, &saved_position);
+    assert(saved_position == dsize);
+
     task->taskpool->tdm.module->outgoing_message_start(task->taskpool, mapping_info->mig_rank, NULL);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, src, mapping_info, MAPPING_INFO_SIZE);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, src, packed_buffer, saved_position);
 
     return 0;
 }
@@ -2195,15 +2204,19 @@ static int
 update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data)
 {
-    mig_task_mapping_info_t *mapping_info = (mig_task_mapping_info_t *)msg;
+    int position = 0, length = msg_size, rc;
+
+    mig_task_mapping_info_t mapping_info;
     assert( MAPPING_INFO_SIZE == msg_size );
-    parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info->taskpool_id);
+
+    parsec_ce.unpack(&parsec_ce, msg, length, &position, &mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t);
+    assert(0 <= mapping_info.mig_rank && mapping_info.mig_rank < get_nb_nodes());
+
+    parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info.taskpool_id);
     assert(NULL != taskpool);
 
     taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
-    assert(0 <= mapping_info->mig_rank && mapping_info->mig_rank < get_nb_nodes());
-
-    update_task_mapping(mapping_info);
+    update_task_mapping(&mapping_info);
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
     
     return 0;
@@ -2331,6 +2344,10 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
          * be able to identify the dep_index for each particular datatype index, and
          * call the iterate_successors on each of the dep_index sets.
          */
+
+        assert(origin->msg.output_mask != 0);
+
+        origin->outgoing_mask = 0; /** temp storage */
         for(k = 0; origin->msg.output_mask>>k; k++) {
             if(!(origin->msg.output_mask & (1U<<k))) continue;
             for(local_mask = i = 0; NULL != task.task_class->out[i]; i++ ) {
@@ -2354,6 +2371,9 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
         assert(0);
     }
 
+    /** make sure we have atleast one migrated task  with this
+     * task as the predecessor */
+    assert(origin->outgoing_mask != 0); /** temp storage */
     /**
      * At this point the msg->output_mask contains the root mask, and should be
      * keep as is and be propagated down the communication pattern. On the
@@ -2383,6 +2403,7 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     }
 
     parsec_remote_deps_t *deps               = (parsec_remote_deps_t*)param;
+    deps->outgoing_mask++;
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
     const parsec_task_class_t* fct           = newcontext->task_class;
     uint32_t flow_mask                       = (1U << dep->flow->flow_index) | 0x80000000;  /* in flow */
