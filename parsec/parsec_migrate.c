@@ -820,6 +820,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                 gpu_task = (parsec_gpu_task_t *)item;
                 item = parsec_list_nolock_remove(ring, item);
                 PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
+                assert(gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK);
 
                 if (NULL != gpu_task) {
                     /** for each task add the details of the task to be migrated to the buff */
@@ -1618,6 +1619,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     for (i = 0; i < task->task_class->nb_locals; i++) {
         task->locals[i] = origin->msg.locals[i];
     }
+
     task->repo_entry = NULL;
     task->mig_status = PARSEC_MIGRATED_TASK;
     task->status = PARSEC_TASK_STATUS_HOOK; /** Skip the prepare input step */
@@ -1655,8 +1657,10 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     }
 
     if(parsec_runtime_task_mapping) {
+        assert(-1 == find_migrated_tasks_details(task));
         insert_received_tasks_details(task, origin->from);
         assert(0 <= origin->from && origin->from < get_nb_nodes());
+        assert(5 == task->task_class->task_class_id );
     }
 
     /** schedule the migrated tasks */
@@ -2927,9 +2931,21 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
          * then it is guaranteed that this node was informed about the new task mapping. 
         */
 
-       assert(-1 == was_received);
+       if(-1 != was_received) {
 
-        /** This is normal task activation, we have no action to take. */
+        /** The succecessor was migrated to this node. But we have no information on the new task
+         * mapping. This means that the source for this task is some other node (probably the
+         * node that send the remote activation). This means that there is also direct activation
+         * expected from the source. So we can skip and action on this successor. 
+         * 
+         * So we allow it to preceed like a normal remote task activation.
+         */
+            assert(*src_rank != *dst_rank);
+       }
+       
+       /** This is normal task activation, we have no action to take. */
+
+        
     }
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
