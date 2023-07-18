@@ -1780,7 +1780,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
     completed = tc->update_deps(origin->taskpool, task, deps, origin, origin_flow, dest_flow);
 
     if(parsec_runtime_task_mapping) {
-        /** Find the sources of dataflow of the task */
+        /** Update the sources of dataflow of the task */
         source_mask = parsec_update_sources(origin->taskpool, es, task, arg, src_rank);
     }
 
@@ -1889,6 +1889,10 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         } 
     }
 
+    if(arg->remote_deps != NULL && (arg->remote_deps->root == -1)) {
+        assert(0 <= arg->remote_deps->root && arg->remote_deps->root < get_nb_nodes());   
+    }
+
     if(parsec_runtime_task_mapping) {
         int action = 0;
         action = modify_action_for_no_new_mapping(oldcontext, newcontext, &src_rank, &dst_rank,
@@ -1898,6 +1902,9 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             return PARSEC_ITERATE_CONTINUE;
         }
     }
+
+    assert(0 <= src_rank && src_rank < get_nb_nodes());
+    assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
     data_repo_t        *target_repo = arg->output_repo;
     assert(NULL != target_repo);
@@ -2093,6 +2100,9 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             assert(dst_rank == new_mapping);
         }
     }
+
+    assert(0 <= src_rank && src_rank < get_nb_nodes());
+    assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
     data_repo_t        *target_repo = arg->output_repo;
     data_repo_entry_t  *target_repo_entry = arg->output_entry;

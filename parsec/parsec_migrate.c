@@ -1225,6 +1225,7 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     deps->root = src_rank;
     deps->msg.task_class_id = mig_task->task_class->task_class_id;
     deps->msg.taskpool_id = mig_task->taskpool->taskpool_id;
+    assert(5 == deps->msg.task_class_id);
     deps->msg.deps = (uintptr_t)deps;
     deps->msg.root = deps->root;
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
@@ -1302,6 +1303,7 @@ recieve_mig_task_details(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
         parsec_ce.unpack(&parsec_ce, msg, length, &position, &deps->msg, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t);
         deps->from = src;
+        assert(0 <= deps->from && deps->from < get_nb_nodes());
         deps->root = deps->msg.root;
         assert(deps->root == src);
         deps->eager_msg = NULL;
@@ -1401,6 +1403,7 @@ static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
     for (i = 0; i < task.task_class->nb_locals; i++) {
         task.locals[i] = deps->msg.locals[i];
     }
+    assert(5 == task.task_class->task_class_id);
 
     for (flow_index = 0; flow_index < task.task_class->nb_flows; flow_index++) {
         if (task.task_class->in[flow_index] == NULL) {
@@ -1653,6 +1656,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     if(parsec_runtime_task_mapping) {
         insert_received_tasks_details(task, origin->from);
+        assert(0 <= origin->from && origin->from < get_nb_nodes());
     }
 
     /** schedule the migrated tasks */
@@ -1854,22 +1858,31 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
     int current_source = -1;
 
     if(NULL != arg->remote_deps) {
-        /** This flow has a remote deps */
         if(-1 == arg->remote_deps->from) {
             /** From has not been set which means the flow is from me */
             current_source = src_rank;
+            
+            assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
+            assert(0 <= current_source && current_source < get_nb_nodes());
         }
         else {
             /** This flow is from an intermediate node */
             current_source = arg->remote_deps->from;
+            assert(current_source != my_rank);
+            assert(0 <= current_source && current_source < get_nb_nodes());
         }
     }
     else {
         /** This flow has no remote deps till now, so it is from me. */
         current_source = src_rank;
+
+        assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+                (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
+        assert(0 <= current_source && current_source < get_nb_nodes());
     }
-    /** Update the sources of dataflow of the task */
-    assert(0 <= current_source && current_source < get_nb_nodes());
+    
+    
   
     parsec_hashable_sources_t *hs;
     parsec_key_handle_t kh;
@@ -2007,6 +2020,7 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
 
     assert(0 <= rank && rank < get_nb_nodes());
     key = task->task_class->make_key(task->taskpool, task->locals);
+    assert(rank != my_rank);
 
     /**
      * @brief Entry NULL imples that this task has never been received
@@ -2018,9 +2032,13 @@ int insert_received_tasks_details(parsec_task_t *task, int rank)
         item->ht_item.key = key;
         item->rank = rank; /* victim node */
         item->task_class_id = task->task_class->task_class_id;
+        assert(5 == task->task_class->task_class_id);
         parsec_hash_table_lock_bucket(received_task_ht, key);
         parsec_hash_table_nolock_insert(received_task_ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(received_task_ht, key);
+    }
+    else {
+        assert(0);
     }
     return 1;
 }
@@ -2035,7 +2053,7 @@ int find_received_tasks_details(parsec_task_t *task)
         return -1;
     }
     if(task->task_class->task_class_id != item->task_class_id) {
-        return -1;
+        assert(5 == item->task_class_id);
     }
 
     assert(0 <= item->rank && item->rank < get_nb_nodes());
@@ -2090,7 +2108,7 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     int rank)
 {
     int src_rank = 0;
-    int32_t source_mask = task->sources;
+    int32_t source_mask = (int32_t)task->sources;
     mig_task_mapping_info_t mapping_info;
     int total_info_send =  0;
 
@@ -2153,7 +2171,7 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
     }
     else {
         if(item->task_class_id != task_class_id) {
-            return -1;
+            assert(0);
         }
         assert(item->rank == new_rank);
 
@@ -2275,8 +2293,10 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         saved_position = position;
         parsec_ce.unpack(&parsec_ce, msg, length, &position, &deps->msg, SINGLE_ACTIVATE_MSG_SIZE, parsec_datatype_int8_t);
         deps->from = src;
+        assert(0 <= deps->from && deps->from < get_nb_nodes());
         deps->eager_msg = msg;
         deps->root = deps->msg.root;
+        assert(0 <= deps->root && deps->root < get_nb_nodes());
 
         /* Retrieve the data arenas and update the msg.incoming_mask to reflect
          * the data we should be receiving from the predecessor.
@@ -2726,6 +2746,10 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
     }
     PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MPI:\tTranslate mask from 0x%lx to 0x%x (remote_dep_release_incoming)",
             complete_mask, action_mask);
+    
+    assert(0 <= origin->root && origin->root < get_nb_nodes());
+    assert(0 <= origin->from && origin->from < get_nb_nodes());
+
     (void)task.task_class->release_deps(es, &task,
         action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
         origin);
@@ -2864,6 +2888,7 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
             return 1;
         }
         insert_direct_msg(&task, origin->from);
+        assert(0 <= origin->from && origin->from < get_nb_nodes());
         assert(origin->from != is_received);
     }
     else {
@@ -2892,6 +2917,8 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
     if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
+        (arg->remote_deps == NULL || arg->remote_deps->from == -1);
+
         was_received = find_received_tasks_details(succecessor);
 
         /** If this is a local task activation and the predecessor was executed in this node
@@ -2905,7 +2932,9 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-            
+
+        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+
         was_received = find_received_tasks_details(succecessor);
         if(was_received != -1) {
             /** The succecessor was migrated to this node. But we have no information on the new task
@@ -2927,6 +2956,8 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
     /** This is a remote activation through direct dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
         was_received = find_received_tasks_details(succecessor);
 
@@ -2969,6 +3000,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
+        (arg->remote_deps == NULL || arg->remote_deps->from == -1);
+
         was_received = find_received_tasks_details(succecessor);
 
         /** We have information on the new task mapping of the successor 
@@ -2998,7 +3031,9 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-            
+
+        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+
         was_received = find_received_tasks_details(succecessor);
         if(was_received != -1) {
             /** The succecessor was migrated to this node. And we also have information on the new task
@@ -3027,6 +3062,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     /** This is a remote activation through direct dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
+
+        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
         was_received = find_received_tasks_details(succecessor);
         if(was_received != -1) { 

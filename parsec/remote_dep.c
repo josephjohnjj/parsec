@@ -470,12 +470,19 @@ int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
             if(deps->msg.output_mask & (1U << tc->out[i]->dep_out[j]->dep_datatype_index))
                 dep_mask |= (1U << tc->out[i]->dep_out[j]->dep_index);
 
+    assert(0 <= deps->root && deps->root < get_nb_nodes());
+    assert(0 <= deps->from && deps->from < get_nb_nodes());
+
     tc->iterate_successors(es, task,
                            dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
                            parsec_gather_collective_pattern,
                            deps);
 
     if(parsec_runtime_task_mapping) {
+
+        assert(0 <= deps->root && deps->root < get_nb_nodes());
+        assert(0 <= deps->from && deps->from < get_nb_nodes());
+
         tc->iterate_successors(es, task,
                            dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
                            parsec_gather_direct_collective_pattern,
@@ -517,6 +524,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
     remote_deps->msg.taskpool_id   = task->taskpool->taskpool_id;
     remote_deps->msg.task_class_id = tc->task_class_id;
     remote_deps->msg.root =  remote_deps->root;
+    assert(0 <= remote_deps->root && remote_deps->root < get_nb_nodes());
     for(i = 0; i < tc->nb_locals; i++) {
         remote_deps->msg.locals[i] = task->locals[i];
     }
@@ -664,9 +672,10 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
                         (void)parsec_atomic_fetch_inc_int32(&remote_deps->pending_ack);
                     }
 
-                    task->taskpool->tdm.module->outgoing_message_start(task->taskpool, rank, remote_deps);
-                    assert(0 <= rank && rank < get_nb_nodes());
-                    mig_dep_direct_send(es, rank, remote_deps);
+                    if(task->taskpool->tdm.module->outgoing_message_start(task->taskpool, rank, remote_deps)) {
+                        assert(0 <= rank && rank < get_nb_nodes());
+                        mig_dep_direct_send(es, rank, remote_deps);
+                    }
                     
                     assert(!remote_dep_is_forwarded_direct(es, remote_deps, rank));
                     remote_dep_mark_forwarded_direct(es, remote_deps, rank);
