@@ -1861,6 +1861,7 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
         if(-1 == arg->remote_deps->from) {
             /** From has not been set which means the flow is from me */
             current_source = src_rank;
+            assert(src_rank == my_rank);
             
             assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
                     (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
@@ -1876,6 +1877,7 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
     else {
         /** This flow has no remote deps till now, so it is from me. */
         current_source = src_rank;
+        assert(src_rank == my_rank);
 
         assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
                 (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
@@ -2209,7 +2211,7 @@ int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *t
     int saved_position = 0, dsize = 0;
 
     parsec_ce.pack_size(&parsec_ce, MAPPING_INFO_SIZE, parsec_datatype_int8_t, &dsize);
-    parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, SINGLE_ACTIVATE_MSG_SIZE, &saved_position);
+    parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, MAPPING_INFO_SIZE, &saved_position);
     assert(saved_position == dsize);
 
     task->taskpool->tdm.module->outgoing_message_start(task->taskpool, mapping_info->mig_rank, NULL);
