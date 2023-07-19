@@ -1036,6 +1036,8 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
 
     assert(0 <= fake_deps.root && fake_deps.root < get_nb_nodes());
     assert(0 <= fake_deps.from && fake_deps.from < get_nb_nodes());
+    assert(origin->root != es->virtual_process->parsec_context->my_rank);
+    assert(origin->from != es->virtual_process->parsec_context->my_rank);
 
     (void)task.task_class->release_deps(es, &task,
                                         action_mask | PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,

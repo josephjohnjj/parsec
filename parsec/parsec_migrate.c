@@ -131,6 +131,9 @@ static void mig_direct_no_get_start(parsec_execution_stream_t* es,
                                      parsec_remote_deps_t* deps);
 static int 
 check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin);
+static int
+receive_task_mapping_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+    void *msg, size_t msg_size, int src, void *cb_data);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -318,6 +321,15 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_ACK_MAPPING, receive_task_mapping_ack_cb, context, MAPPING_INFO_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_ACK_MAPPING (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_ACK_MAPPING);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
     rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context, SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG (error %d)\n", rc);
@@ -2151,6 +2163,7 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
         else {
             send_task_mapping_info(es, task, &mapping_info, src_rank);
             total_info_send++;
+            remote_dep_inc_flying_messages(task->taskpool);
         }
         
     }
@@ -2195,7 +2208,7 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
         return item->rank;
     }
 
-    return -1;
+    return item->rank;
 }
 
 int find_task_mapping(parsec_task_t *task)
@@ -2237,6 +2250,23 @@ int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *t
     return 0;
 }
 
+int send_task_mapping_ack(parsec_execution_stream_t *eu, mig_task_mapping_info_t *mapping_info, 
+    int src)                            
+{
+    char packed_buffer[MAPPING_INFO_SIZE];
+    int saved_position = 0, dsize = 0;
+
+    parsec_ce.pack_size(&parsec_ce, MAPPING_INFO_SIZE, parsec_datatype_int8_t, &dsize);
+    parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, MAPPING_INFO_SIZE, &saved_position);
+
+    assert(saved_position == dsize);
+    assert(MAPPING_INFO_SIZE == dsize);
+
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_ACK_MAPPING, src, packed_buffer, saved_position);
+
+    return 0;
+}
+
 static int
 update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data)
@@ -2256,9 +2286,35 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
     update_task_mapping(&mapping_info);
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
+
+    parsec_execution_stream_t* es = &parsec_comm_es;
+    send_task_mapping_ack(es, &mapping_info, src);
     
     return 0;
 }
+
+static int
+receive_task_mapping_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+    void *msg, size_t msg_size, int src, void *cb_data)
+{
+    int position = 0, length = msg_size, rc;
+
+    mig_task_mapping_info_t mapping_info;
+    assert( MAPPING_INFO_SIZE == length );
+
+    parsec_ce.unpack(&parsec_ce, msg, length, &position, &mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t);
+    assert(0 <= mapping_info.mig_rank && mapping_info.mig_rank < get_nb_nodes());
+    assert( position == length );
+
+    parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info.taskpool_id);
+    assert(NULL != taskpool);
+
+    remote_dep_dec_flying_messages(taskpool);
+
+    return 0;
+
+}
+
 
 
 /**
@@ -3196,6 +3252,4 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     (void)oldcontext; (void)dst_vpid; (void)data; (void)src_rank;
     return PARSEC_ITERATE_CONTINUE;
 }
-
-
 
