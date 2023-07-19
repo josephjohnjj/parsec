@@ -1876,6 +1876,15 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
             current_source = arg->remote_deps->from;
             assert(current_source != my_rank);
             assert(0 <= current_source && current_source < get_nb_nodes());
+
+            assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) 
+                    ||
+                    (PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS)) && 
+                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) &&
+                    (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS))
+
+            );
         }
     }
     else {
@@ -1883,6 +1892,7 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
         current_source = src_rank;
         assert(src_rank == my_rank);
 
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
                 (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
         assert(0 <= current_source && current_source < get_nb_nodes());
@@ -2123,7 +2133,7 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
 
     parsec_taskpool_t *tp       = task->taskpool;
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);;
-    mapping_info.mig_rank       = rank;
+    mapping_info.mig_rank       = rank;/** Thief, ie, the new mapping*/
     mapping_info.task_class_id  = task->task_class->task_class_id;
     mapping_info.taskpool_id    = task->taskpool->taskpool_id;
     assert(0 <= rank && rank < get_nb_nodes());
@@ -2156,18 +2166,19 @@ int update_task_mapping(mig_task_mapping_info_t *mapping_info)
     int task_class_id = mapping_info->task_class_id;
     int new_rank = mapping_info->mig_rank;
 
-    assert(0 <= mapping_info->mig_rank && mapping_info->mig_rank < get_nb_nodes());
+    assert(0 <= new_rank && new_rank < get_nb_nodes());
+    assert(5 == mapping_info->task_class_id);
 
-    /**
-     * @brief Entry NULL imples that this task has never been migrated
-     * till now in any of the iteration. So we start a new entry.
-     */
     if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, key)))
     {
+        /**
+         * @brief Entry NULL imples that we have no information on the task mapping
+         * for this task.
+         */
 
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->rank = new_rank;
-        item->ht_item.key = key;
+        item->ht_item.key = key; /** Thief, ie, new mapping*/
         item->task_class_id = task_class_id;
         parsec_hash_table_lock_bucket(task_map_ht, key);
         parsec_hash_table_nolock_insert(task_map_ht, &item->ht_item);
@@ -2216,9 +2227,11 @@ int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *t
 
     parsec_ce.pack_size(&parsec_ce, MAPPING_INFO_SIZE, parsec_datatype_int8_t, &dsize);
     parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, MAPPING_INFO_SIZE, &saved_position);
-    assert(saved_position == dsize);
 
-    task->taskpool->tdm.module->outgoing_message_start(task->taskpool, mapping_info->mig_rank, NULL);
+    assert(saved_position == dsize);
+    assert(MAPPING_INFO_SIZE == dsize);
+
+    task->taskpool->tdm.module->outgoing_message_start(task->taskpool, src, NULL);
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, src, packed_buffer, saved_position);
 
     return 0;
@@ -2231,10 +2244,11 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     int position = 0, length = msg_size, rc;
 
     mig_task_mapping_info_t mapping_info;
-    assert( MAPPING_INFO_SIZE == msg_size );
+    assert( MAPPING_INFO_SIZE == length );
 
     parsec_ce.unpack(&parsec_ce, msg, length, &position, &mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t);
     assert(0 <= mapping_info.mig_rank && mapping_info.mig_rank < get_nb_nodes());
+    assert( position == length );
 
     parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info.taskpool_id);
     assert(NULL != taskpool);
@@ -2923,7 +2937,8 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
     if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-        (arg->remote_deps == NULL || arg->remote_deps->from == -1);
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
+        assert(arg->remote_deps == NULL || arg->remote_deps->from == -1);
 
         was_received = find_received_tasks_details(succecessor);
 
@@ -2951,7 +2966,9 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+        
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
+        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
         was_received = find_received_tasks_details(succecessor);
         if(was_received != -1) {
@@ -2975,7 +2992,8 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
+        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
         was_received = find_received_tasks_details(succecessor);
 
@@ -3018,7 +3036,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-        (arg->remote_deps == NULL || arg->remote_deps->from == -1);
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
+        assert(arg->remote_deps == NULL || arg->remote_deps->from == -1);
 
         was_received = find_received_tasks_details(succecessor);
 
@@ -3050,7 +3069,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
+        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
         was_received = find_received_tasks_details(succecessor);
         if(was_received != -1) {
@@ -3081,7 +3101,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
         (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
 
-        (arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
+        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
         was_received = find_received_tasks_details(succecessor);
         if(was_received != -1) { 
