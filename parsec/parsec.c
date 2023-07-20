@@ -1901,6 +1901,9 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         if(0 == action) {
             return PARSEC_ITERATE_CONTINUE;
         }
+        else {
+            assert(original_dst == dst_rank);
+        }
     }
 
     assert(0 <= src_rank && src_rank < get_nb_nodes());
@@ -1948,6 +1951,10 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         assert( 0 == (arg->action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS) );
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
+
+            assert(arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS);
+            assert(arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS);
+
             struct remote_dep_output_param_s* output;
             int _array_pos, _array_mask;
 
@@ -2098,6 +2105,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         }
         else {
             assert(dst_rank == new_mapping);
+            assert(original_dst != new_mapping);
         }
     }
 
@@ -2144,6 +2152,10 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         assert( 0 == (arg->action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS) );
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
+
+            assert(arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS);
+            assert(arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS);
+
             struct remote_dep_output_param_s* output;
             int _array_pos, _array_mask;
 

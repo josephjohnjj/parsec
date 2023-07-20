@@ -738,10 +738,6 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
     (void)successor_repo; (void) successor_repo_key;
 
-    ///** The task was received. So we act if we are the original destination */
-    //if( -1 != find_received_tasks_details(newcontext)) {
-    //    dst_rank == eu->virtual_process->parsec_context->my_rank;
-    //}
     if( dst_rank != eu->virtual_process->parsec_context->my_rank )
         return PARSEC_ITERATE_CONTINUE;
 
@@ -1059,6 +1055,19 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     uint32_t mask = origin->outgoing_mask;
     origin->outgoing_mask = 0;
 
+    int t = 0, r = 0;
+    for( t = 0;  t  < MAX_PARAM_COUNT; t++)  {
+        
+        for( r = 0; r < 4; r++) {
+            int _array_pos = r / (8 * sizeof(uint32_t)); 
+            int _array_mask = 1 << (r % (8 * sizeof(uint32_t)));
+            assert(origin->output->rank_bits[_array_pos]  == 0);
+            assert(origin->output->rank_bits_direct[_array_pos]  == 0);
+        }
+        assert(origin->output[t].count_bits == 0);
+        assert(origin->output[t].count_bits_direct == 0);
+        
+    }
 #if defined(PARSEC_DIST_COLLECTIVES)
     if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) /* indicates it is a PTG taskpool */
         parsec_remote_dep_propagate(es, &task, origin);

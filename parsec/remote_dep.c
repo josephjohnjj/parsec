@@ -483,6 +483,17 @@ int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
         assert(0 <= deps->root && deps->root < get_nb_nodes());
         assert(0 <= deps->from && deps->from < get_nb_nodes());
 
+        int t = 0, r = 0;
+        for( t = 0;  t  < MAX_PARAM_COUNT; t++)  {
+            assert(deps->output[t].count_bits_direct == 0);
+
+            for( r = 0; r < 4; r++) {
+                int _array_pos = r / (8 * sizeof(uint32_t)); 
+                int _array_mask = 1 << (r % (8 * sizeof(uint32_t)));
+                assert(deps->output->rank_bits_direct[_array_pos]  == 0); 
+            }
+        }
+
         tc->iterate_successors(es, task,
                            dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
                            parsec_gather_direct_collective_pattern,

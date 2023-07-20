@@ -1670,9 +1670,12 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     if(parsec_runtime_task_mapping) {
         assert(-1 == find_migrated_tasks_details(task));
-        insert_received_tasks_details(task, origin->from);
+        assert(-1 == find_received_tasks_details(task));
         assert(0 <= origin->from && origin->from < get_nb_nodes());
         assert(5 == task->task_class->task_class_id );
+
+        insert_received_tasks_details(task, origin->from);
+        
     }
 
     /** schedule the migrated tasks */
@@ -2044,21 +2047,19 @@ int find_migrated_tasks_details(parsec_task_t *task)
 int insert_received_tasks_details(parsec_task_t *task, int rank)
 {
     parsec_key_t key;
-    mig_task_mapping_item_t *item;
+    mig_task_mapping_item_t *item = NULL;
 
     assert(0 <= rank && rank < get_nb_nodes());
-    key = task->task_class->make_key(task->taskpool, task->locals);
     assert(rank != my_rank);
 
-    /**
-     * @brief Entry NULL imples that this task has never been received
-     * till now in any of the iteration. So we start a new entry.
-     */
-    if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key)))
-    {
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    item = parsec_hash_table_nolock_find(received_task_ht, key);
+
+    if (NULL == item) {
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
         item->rank = rank; /* victim node */
+        assert(rank != my_rank);
         item->task_class_id = task->task_class->task_class_id;
         assert(5 == task->task_class->task_class_id);
         parsec_hash_table_lock_bucket(received_task_ht, key);
@@ -2077,7 +2078,9 @@ int find_received_tasks_details(parsec_task_t *task)
     mig_task_mapping_item_t *item = NULL;
 
     key = task->task_class->make_key(task->taskpool, task->locals);
-    if (NULL == (item = parsec_hash_table_nolock_find(received_task_ht, key))) {
+    item = parsec_hash_table_nolock_find(received_task_ht, key);
+
+    if (NULL == item) {
         return -1;
     }
     if(task->task_class->task_class_id != item->task_class_id) {
@@ -3230,7 +3233,8 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
         */
        return PARSEC_ITERATE_CONTINUE;
     }
-        
+
+    assert(dst_rank != new_mapping);     
     dst_rank = new_mapping;
     assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
