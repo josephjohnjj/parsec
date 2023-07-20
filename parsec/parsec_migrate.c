@@ -155,13 +155,6 @@ int parsec_node_mig_inc_cpu_task_executed()
     return node_info->nb_cpu_tasks_executed;
 }
 
-
-int parsec_node_mig_inc_released()
-{
-    parsec_atomic_fetch_inc_int32(&(node_info->nb_release));
-    return node_info->nb_release;
-}
-
 int parsec_node_mig_inc_selected()
 {
     parsec_atomic_fetch_inc_int32(&(node_info->nb_selected ));
@@ -711,6 +704,7 @@ int process_steal_request(parsec_execution_stream_t *es)
     }
     
     do {
+        steal_request = NULL;
         steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
 
         if(NULL == steal_request) {
@@ -817,9 +811,6 @@ int process_steal_request(parsec_execution_stream_t *es)
             parsec_node_mig_inc_success_req_processed();
 
             int position = 0 /** starting position of the message*/, buffer_size = 0;
-
-            parsec_list_t *tasks_to_free = PARSEC_OBJ_NEW(parsec_list_t);
-            PARSEC_OBJ_RETAIN(tasks_to_free);
         
             buffer_size = total_selected * SINGLE_ACTIVATE_MSG_SIZE * sizeof(char); 
             /** buff holds the message that will be send to the thief node */
@@ -1675,7 +1666,6 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         assert(5 == task->task_class->task_class_id );
 
         insert_received_tasks_details(task, origin->from);
-        
     }
 
     /** schedule the migrated tasks */
@@ -2317,7 +2307,6 @@ receive_task_mapping_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     return 0;
 
 }
-
 
 
 /**

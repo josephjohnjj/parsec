@@ -105,7 +105,6 @@ int process_steal_request(parsec_execution_stream_t* es);
 int process_mig_request(parsec_task_t* this_task);
 int parsec_node_stats_init();
 int parsec_node_stats_fini();
-int parsec_node_mig_inc_released();
 int parsec_node_mig_inc_selected();
 int parsec_node_mig_inc_gpu_task_executed();
 int parsec_node_mig_inc_cpu_task_executed();
