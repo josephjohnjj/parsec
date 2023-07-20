@@ -134,6 +134,12 @@ check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin)
 static int
 receive_task_mapping_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data);
+int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_task_t *task,
+    int rank);
+int insert_migrated_tasks_details(parsec_task_t *task, int rank);
+int update_task_mapping(mig_task_mapping_info_t *mapping_info);
+int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
+    mig_task_mapping_info_t *mapping_info, int src);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -576,7 +582,7 @@ parsec_task_t* select_migrated_task(parsec_execution_stream_t* es)
 int progress_migrated_task(parsec_execution_stream_t* es)
 {
     parsec_task_t *task = NULL;
-    task = (parsec_task_t *)select_migrated_task(&received_task_fifo);
+    task = (parsec_task_t *)select_migrated_task(es);
 
     if(NULL != task) {
         __parsec_task_progress(es, task, 1);
@@ -1882,12 +1888,12 @@ parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es
             assert(current_source != my_rank);
             assert(0 <= current_source && current_source < get_nb_nodes());
 
-            assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) 
+            assert( (((PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
+                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ))
                     ||
-                    (PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS)) && 
+                    (((PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS)) && 
                     (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) &&
-                    (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS))
+                    (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS))))
 
             );
         }
@@ -2078,7 +2084,6 @@ int find_received_tasks_details(parsec_task_t *task)
     }
 
     assert(0 <= item->rank && item->rank < get_nb_nodes());
-
     return item->rank;
 }
 
