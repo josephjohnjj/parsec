@@ -1768,7 +1768,6 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
     parsec_dependency_t *deps;
     int completed;
     parsec_dependency_t source_mask = (parsec_dependency_t)0;
-    int source = -1;
 #if defined(PARSEC_DEBUG_NOISIER)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, task);
@@ -1823,7 +1822,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             PARSEC_AYU_ADD_TASK_DEP(new_context, (int)dest_flow->flow_index);
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
             if (parsec_runtime_task_mapping ) {
-                if( -1 != find_received_tasks_details(task)) {
+                if( NULL != find_received_tasks_details(task)) {
                     new_context->mig_status = PARSEC_MIGRATED_TASK;
                 }
                 new_context->sources = source_mask; /** Set the intermediate dataflow sources */
@@ -1870,21 +1869,20 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     parsec_release_dep_fct_arg_t *arg = (parsec_release_dep_fct_arg_t *)param;
     const parsec_flow_t* src_flow = dep->belongs_to;
     const parsec_flow_t* dst_flow = dep->flow;
-    int new_mapping = -1;
-    int was_migrated = -1;
-    int was_received = -1;
+    mig_task_mapping_item_t* new_mapping = NULL;
+    mig_task_mapping_item_t* was_migrated = NULL;
+    mig_task_mapping_item_t* was_received = NULL;
     int original_dst = dst_rank;
-    int rc = 0;
 
     if(parsec_runtime_task_mapping) {
         new_mapping = find_task_mapping(newcontext);
-        assert(dst_rank != new_mapping); /** new rank or -1*/
 
-        /** if new_mapping is non-negative, that means I was one of the itermediate source of 
-        * data for the migrated task. 
-        */
-        if( -1 != new_mapping ) { /** But I am not normal deps  */
-            assert(0 <= new_mapping && new_mapping < get_nb_nodes());
+        /** if new_mapping is not NULL, that means I was one of the itermmediate source of
+         * data for the migrated task. 
+         */
+        if( NULL != new_mapping ) { /** But I am not normal deps  */
+            assert(0 <= new_mapping->victim && new_mapping->victim < get_nb_nodes());
+            assert(0 <= new_mapping->thief && new_mapping->thief < get_nb_nodes());
             return PARSEC_ITERATE_CONTINUE;
         } 
     }
@@ -2033,13 +2031,14 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 
         if(parsec_runtime_task_mapping) {
             was_migrated = find_migrated_tasks_details(newcontext);
-            if(was_migrated != -1) { /** The task was migrated */
+            if(NULL != was_migrated ) { /** The task was migrated */
+                assert(was_migrated->victim == get_my_rank());
+                assert(was_migrated->thief != get_my_rank());
                 return PARSEC_ITERATE_CONTINUE;
             }
 
-            if(was_received != -1) {
+            if(NULL != was_received) {
                 assert(dst_rank != original_dst);
-                assert(new_mapping == src_rank || new_mapping == -1);
             }
         }
         /* Copying data in data-repo if there is data .
@@ -2074,26 +2073,25 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     parsec_release_dep_fct_arg_t *arg = (parsec_release_dep_fct_arg_t *)param;
     const parsec_flow_t* src_flow = dep->belongs_to;
     const parsec_flow_t* dst_flow = dep->flow;
-    int new_mapping = -1;
-    int was_migrated = -1;
-    int was_received = -1;
+    mig_task_mapping_item_t* new_mapping = NULL;
+    mig_task_mapping_item_t* was_migrated = NULL;
+    mig_task_mapping_item_t* was_received = NULL;
     int original_dst = dst_rank;
-    int rc = 0;
 
     if(!parsec_runtime_task_mapping) {
         return PARSEC_ITERATE_STOP;
     }
 
     new_mapping = find_task_mapping(newcontext);
-    assert(dst_rank != new_mapping);
   
-    /** if new_mapping is non-negative, that means I was one of the itermediate source of 
+    /** if new_mapping is not nULL, that means I was one of the itermmediate source of 
     * data for the migrated task. 
     */
-    if( -1 == new_mapping ) { /** I am only dealing with direct deps  */
+    if( NULL == new_mapping ) { /** I am only dealing with direct deps  */
         return PARSEC_ITERATE_CONTINUE;
     } 
-    assert(0 <= new_mapping && new_mapping < get_nb_nodes());
+    assert(0 <= new_mapping->victim && new_mapping->victim < get_nb_nodes());
+    assert(0 <= new_mapping->thief && new_mapping->thief < get_nb_nodes());
 
     if(parsec_runtime_task_mapping) {
         int action = 0;
@@ -2104,8 +2102,8 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             return PARSEC_ITERATE_CONTINUE;
         }
         else {
-            assert(dst_rank == new_mapping);
-            assert(original_dst != new_mapping);
+            assert(dst_rank == new_mapping->thief);
+            assert(original_dst == new_mapping->victim);
         }
     }
 
@@ -2148,7 +2146,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     }
 
 #if defined(DISTRIBUTED)
-    if( dst_rank != src_rank ) { /** Also mean that new_mapping != src_rank */
+    if( dst_rank != src_rank ) { /** Also mean that new_mapping != NULL */
         assert( 0 == (arg->action_mask & PARSEC_ACTION_RECV_INIT_REMOTE_DEPS) );
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
@@ -2233,13 +2231,14 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         (es->virtual_process->parsec_context->my_rank == dst_rank) ) {
 
         was_migrated = find_migrated_tasks_details(newcontext);
-        if(was_migrated != -1) { /** The task was migrated */
+        if(NULL != was_migrated ) { /** The task was migrated */
+            assert(was_migrated->victim == get_my_rank());
+            assert(was_migrated->thief != get_my_rank());
             return PARSEC_ITERATE_CONTINUE;
         }
 
-        if(was_received != -1) {
+        if(NULL != was_received) {
             assert(dst_rank != original_dst);
-            assert(new_mapping == src_rank || new_mapping == -1);
         }
         
         /* Copying data in data-repo if there is data .

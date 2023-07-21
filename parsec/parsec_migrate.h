@@ -86,16 +86,18 @@ typedef struct migrated_node_level_task_s
 typedef struct mig_task_mapping_item_s
 {
     parsec_hash_table_item_t ht_item;
-    int rank;
+    int thief;
+    int victim;
     int task_class_id;
 } mig_task_mapping_item_t;
 
 typedef struct mig_task_mapping_info_s
 {
     parsec_key_t key;
-    int task_class_id;
-    int mig_rank;
     int taskpool_id;
+    int thief;
+    int victim;
+    int task_class_id;
 } mig_task_mapping_info_t;
 
 int parsec_node_migrate_init(parsec_context_t* context );
@@ -118,23 +120,25 @@ int get_progress_counter(int device_num);
 parsec_dependency_t parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es,
     const parsec_task_t* restrict task, parsec_release_dep_fct_arg_t *arg, int src_rank);
 int get_nb_nodes();
-int find_task_mapping(parsec_task_t *task);
+int get_my_rank();
+mig_task_mapping_item_t* find_task_mapping(const parsec_task_t *task);
 int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
     parsec_remote_deps_t* rdeps, int rank);
 void remote_dep_mark_forwarded_direct(parsec_execution_stream_t* es,
     parsec_remote_deps_t* rdeps, int rank);
 void remote_dep_reset_forwarded_direct(parsec_execution_stream_t* es,
     parsec_remote_deps_t* rdeps);
-int find_received_tasks_details(parsec_task_t *task);
-int insert_direct_msg(parsec_task_t *task, int rank);
-int find_direct_msg(parsec_task_t *task);
+mig_task_mapping_item_t* find_received_tasks_details(const parsec_task_t *task);
+mig_task_mapping_item_t* insert_received_tasks_details(parsec_task_t *task, int victim, int thief);
+mig_task_mapping_item_t* insert_direct_msg(parsec_task_t *task, int current_source);
+mig_task_mapping_item_t* find_direct_msg(parsec_task_t *task);
 int whoami();
 int progress_direct_activation(parsec_execution_stream_t* es);
 int direct_activation_fifo_status(parsec_execution_stream_t* es);
 int modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
-    int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg);
+    int* src_rank, int* dst_rank, mig_task_mapping_item_t *new_mapping, parsec_release_dep_fct_arg_t *arg);
 int modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
-    int* src_rank, int* dst_rank, int new_mapping, parsec_release_dep_fct_arg_t *arg);
+    int* src_rank, int* dst_rank, mig_task_mapping_item_t *new_mapping, parsec_release_dep_fct_arg_t *arg);
 parsec_ontask_iterate_t parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
     const parsec_dep_t* dep, parsec_dep_data_description_t* data,
@@ -145,6 +149,5 @@ parsec_ontask_iterate_t  mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t
     const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
     int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
     parsec_key_t successor_repo_key, void *param);
-int find_migrated_tasks_details(parsec_task_t *task);
-int insert_received_tasks_details(parsec_task_t *task, int rank);
+mig_task_mapping_item_t* find_migrated_tasks_details(const parsec_task_t *task);
 #endif

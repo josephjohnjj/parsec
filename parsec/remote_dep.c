@@ -407,17 +407,16 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
     int _array_pos  = 0;
     int _array_mask = 0;
-    int new_mapping = -1;
+    mig_task_mapping_item_t* new_mapping = NULL;
 
     if( dst_rank == es->virtual_process->parsec_context->my_rank )
         deps->outgoing_mask |= (1 << dep->dep_datatype_index);
 
     if(parsec_runtime_task_mapping) {
         new_mapping = find_task_mapping(newcontext);
-        assert(dst_rank != new_mapping);
     }
 
-    if( -1 != new_mapping) {
+    if( NULL != new_mapping) {
         /** I have  information about this task being migrated.
          * I am only intrested in task without a new mapping.
          */
