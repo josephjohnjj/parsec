@@ -1055,17 +1055,6 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     uint32_t mask = origin->outgoing_mask;
     origin->outgoing_mask = 0;
 
-    int t = 0, r = 0;
-    for( t = 0;  t  < MAX_PARAM_COUNT; t++)  {
-        for( r = 0; r < 4; r++) {
-            int _array_pos = r / (8 * sizeof(uint32_t)); 
-            assert(origin->output->rank_bits[_array_pos]  == 0);
-            assert(origin->output->rank_bits_direct[_array_pos]  == 0);
-        }
-        assert(origin->output[t].count_bits == 0);
-        assert(origin->output[t].count_bits_direct == 0);
-    }
-
 #if defined(PARSEC_DIST_COLLECTIVES)
     if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) /* indicates it is a PTG taskpool */
         parsec_remote_dep_propagate(es, &task, origin);
@@ -1884,7 +1873,6 @@ remote_dep_mpi_save_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
     while(position < length) {
         deps = remote_deps_allocate(&parsec_remote_dep_context.freelist);
-
         ce->unpack(ce, msg, length, &position, &deps->msg, dep_count, dep_dtt);
         deps->from = src;
         deps->eager_msg = msg;

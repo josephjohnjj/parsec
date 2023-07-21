@@ -164,31 +164,63 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
         ptr = (char*)(&(remote_deps->output[parsec_remote_dep_context.max_dep_count]));
         rank_bit_size = sizeof(uint32_t) * ((parsec_remote_dep_context.max_nodes_number + 31) / 32);
         memset(ptr, 0, 2 * rank_bit_size * parsec_remote_dep_context.max_dep_count);
+
         for( i = 0; i < parsec_remote_dep_context.max_dep_count; i++ ) {
             PARSEC_OBJ_CONSTRUCT(&remote_deps->output[i].super, parsec_list_item_t);
             remote_deps->output[i].parent     = remote_deps;
             remote_deps->output[i].deps_mask  = 0;
             remote_deps->output[i].priority   = 0xffffffff;
+        }
 
-            remote_deps->output[i].rank_bits  = (uint32_t*)ptr;
+        for( i = 0; i < parsec_remote_dep_context.max_dep_count; i++ ) {
             remote_deps->output[i].count_bits = 0;
-            ptr += rank_bit_size;
-
-            remote_deps->output[i].rank_bits_direct  = (uint32_t*)ptr;
-            remote_deps->output[i].count_bits_direct = 0;
+            remote_deps->output[i].rank_bits  = (uint32_t*)ptr;
             ptr += rank_bit_size;
         }
         /* fw_mask immediatly follows outputs */
         remote_deps->remote_dep_fw_mask = (uint32_t*) ptr;
         ptr += rank_bit_size;
+
+        for( i = 0; i < parsec_remote_dep_context.max_dep_count; i++ ) {
+            remote_deps->output[i].count_bits_direct = 0;
+            remote_deps->output[i].rank_bits_direct  = (uint32_t*)ptr;
+            ptr += rank_bit_size;
+        }
         remote_deps->remote_dep_fw_mask_direct = (uint32_t*) ptr;
         
         assert( (int)(ptr - (char*)remote_deps) ==
                 (int)(parsec_remote_dep_context.elem_size - rank_bit_size));
+
+    #if defined(PARSEC_DEBUG)
+        int t = 0, r = 0;
+        for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+            for( r = 0; r < get_nb_nodes(); r++) {
+                int _array_pos = r / (8 * sizeof(uint32_t)); 
+                assert(remote_deps->output->rank_bits[_array_pos]  == 0);
+                assert(remote_deps->output->rank_bits_direct[_array_pos]  == 0);
+            }
+            assert(remote_deps->output[t].count_bits == 0);
+            assert(remote_deps->output[t].count_bits_direct == 0);
+        }   
+    #endif
+
     } else {
         PARSEC_VALGRIND_MEMPOOL_ALLOC(lifo,
                                       ((unsigned char *)remote_deps)+sizeof(parsec_list_item_t),
                                       parsec_remote_dep_context.elem_size - sizeof(parsec_list_item_t));
+    #if defined(PARSEC_DEBUG)
+        int t = 0, r = 0;
+        for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+            for( r = 0; r < get_nb_nodes(); r++) {
+                int _array_pos = r / (8 * sizeof(uint32_t)); 
+                assert(remote_deps->output->rank_bits[_array_pos]  == 0);
+                assert(remote_deps->output->rank_bits_direct[_array_pos]  == 0);
+            }
+            assert(remote_deps->output[t].count_bits == 0);
+            assert(remote_deps->output[t].count_bits_direct == 0);
+        }   
+    #endif
+
     }
     assert(NULL == remote_deps->taskpool);
     remote_deps->max_priority    = 0xffffffff;
@@ -198,6 +230,7 @@ parsec_remote_deps_t* remote_deps_allocate( parsec_lifo_t* lifo )
     remote_deps->incoming_mask   = 0;
     remote_deps->outgoing_mask   = 0;
     PARSEC_DEBUG_VERBOSE(30, parsec_comm_output_stream, "remote_deps_allocate: %p", remote_deps);
+
     return remote_deps;
 }
 
@@ -209,9 +242,12 @@ inline void remote_deps_free(parsec_remote_deps_t* deps)
     assert(0 == deps->outgoing_mask);
     for( k = 0; k < parsec_remote_dep_context.max_dep_count; k++ ) {
         if( 0 == deps->output[k].count_bits ) continue;
-        for(a = 0; a < (parsec_remote_dep_context.max_nodes_number + 31)/32; a++)
+        for(a = 0; a < (parsec_remote_dep_context.max_nodes_number + 31)/32; a++) {
             deps->output[k].rank_bits[a] = 0;
+            deps->output[k].rank_bits_direct[a] = 0;
+        }
         deps->output[k].count_bits = 0;
+        deps->output[k].count_bits_direct = 0;
 #if defined(PARSEC_DEBUG_PARANOID)
         deps->output[k].data.data   = NULL;
         deps->output[k].data.local.arena  = NULL;
@@ -482,17 +518,6 @@ int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
 
         assert(0 <= deps->root && deps->root < get_nb_nodes());
         assert(0 <= deps->from && deps->from < get_nb_nodes());
-
-        int t = 0, r = 0;
-        for( t = 0;  t  < MAX_PARAM_COUNT; t++)  {
-            assert(deps->output[t].count_bits_direct == 0);
-
-            for( r = 0; r < 4; r++) {
-                int _array_pos = r / (8 * sizeof(uint32_t)); 
-                int _array_mask = 1 << (r % (8 * sizeof(uint32_t)));
-                assert(deps->output->rank_bits_direct[_array_pos]  == 0); 
-            }
-        }
 
         tc->iterate_successors(es, task,
                            dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
