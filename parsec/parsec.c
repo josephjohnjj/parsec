@@ -1877,7 +1877,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     if(parsec_runtime_task_mapping) {
         new_mapping = find_task_mapping(newcontext);
 
-        /** if new_mapping is not NULL, that means I was one of the itermmediate source of
+        /** if new_mapping is not NULL, that means I was one of the intermediate source of
          * data for the migrated task. 
          */
         if( NULL != new_mapping ) { /** But I am not normal deps  */

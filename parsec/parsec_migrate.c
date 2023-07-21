@@ -2023,6 +2023,10 @@ mig_task_mapping_item_t* insert_migrated_tasks_details(parsec_task_t *task, int 
         parsec_hash_table_nolock_insert(migrated_task_ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(migrated_task_ht, key);
     }
+    else {
+        /** There should be only one task with the same key in this HT*/
+        assert(0);
+    }
     
     return item;
 }
@@ -2072,6 +2076,7 @@ mig_task_mapping_item_t* insert_received_tasks_details(parsec_task_t *task, int 
         parsec_hash_table_unlock_bucket(received_task_ht, key);
     }
     else {
+        /** There should not be more than one task in the same HT with the same key */
         assert(0);
     }
     return item;
@@ -2159,6 +2164,7 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     assert(NULL != tp);
     assert(0 <= victim && victim < get_nb_nodes());
     assert(0 <= thief && thief < get_nb_nodes());
+    assert(victim != thief);
 
     mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);
     mapping_info.victim         = victim;
@@ -2201,11 +2207,6 @@ mig_task_mapping_item_t* update_task_mapping(mig_task_mapping_info_t *mapping_in
 
     if (NULL == (item = parsec_hash_table_nolock_find(task_map_ht, mapping_info->key)))
     {
-        /**
-         * @brief Entry NULL imples that we have no information on the task mapping
-         * for this task.
-         */
-
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = mapping_info->key; 
         item->victim = mapping_info->victim;
@@ -3085,8 +3086,9 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
             assert(was_received->thief == my_rank);
             assert(was_received->task_class_id == succecessor->task_class->task_class_id);
 
-            assert(was_received->victim == *src_rank);
-            assert(was_received->thief == *dst_rank);
+            assert(was_received->thief == *src_rank);
+            assert(my_rank == *src_rank);
+            assert(was_received->victim == *dst_rank);
             
             assert(*dst_rank != *src_rank);
 
@@ -3144,10 +3146,11 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
             assert(was_received->task_class_id == succecessor->task_class->task_class_id);
-
             assert(was_received->victim == *dst_rank);
             assert(was_received->thief == *src_rank);
+            assert(my_rank == *src_rank);
 
+            assert(new_mapping->victim == *dst_rank);
             assert(new_mapping->thief == *src_rank);
         }
         else {
@@ -3156,7 +3159,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
              *  We have to make sure that the direct deps taskes care of it.
              */
             assert(new_mapping->thief != my_rank);
-            assert(new_mapping->thief != *src_rank);
+            assert(my_rank == *src_rank);
         }     
 
         *dst_rank = new_mapping->thief;   
@@ -3174,7 +3177,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
              * mapping. This means that the atleast one  source for this task is this node. At the same 
              * time atleast one source is some other node (probably the node that send the remote 
              * activation). This means that there is also direct activation expected from the source. 
-             * So the dataflow will be tajen care of by that direct activation. 
+             * So the dataflow will be taken care of by that direct activation. 
              * So we can skip and action on this successor. 
              */
 
@@ -3193,7 +3196,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
              * operation. This mode handles only local task activation.
              */
             assert(new_mapping->victim == *dst_rank);
-            assert(new_mapping->thief == *src_rank);
+            assert(new_mapping->thief != *src_rank);
+            assert(my_rank == *src_rank);
 
             return 0; /** PARSEC_ITERATE_CONTINUE */
         }
@@ -3211,7 +3215,6 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
             assert(was_received->task_class_id == succecessor->task_class->task_class_id);
-
             assert(was_received->victim == *dst_rank);
             assert(*dst_rank != *src_rank);
 
@@ -3224,7 +3227,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             assert(new_mapping->thief == *src_rank);
             assert(new_mapping->thief == my_rank);
 
-            *dst_rank = new_mapping->thief;
+            *dst_rank =  *src_rank;
         }
         else {
             /** The predecessor can have more than one successor. But direct messages are 
@@ -3275,15 +3278,17 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
         return PARSEC_ITERATE_CONTINUE;
     }
 
-    /** I was one of the intermediate nodes. */
-    if(new_mapping->thief == es->virtual_process->parsec_context->my_rank) {
+    /** I was the thief and I was also one of the intermediate nodes. */
+    if(new_mapping->thief == my_rank) {
         /** This case i already taken care by a direct dataflow from
          *  some other node or a local activation from this node.
         */
        return PARSEC_ITERATE_CONTINUE;
     }
 
-    assert(dst_rank != new_mapping->thief );     
+    assert(new_mapping->thief != my_rank);
+    assert(new_mapping->thief != dst_rank);     
+    
     dst_rank = new_mapping->thief ;
     assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
