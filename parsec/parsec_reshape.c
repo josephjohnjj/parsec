@@ -429,6 +429,8 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
         if( NULL != was_received) {
             assert(was_received->thief == es->virtual_process->parsec_context->my_rank);
             assert(was_received->victim != es->virtual_process->parsec_context->my_rank);
+            assert(dst_rank != es->virtual_process->parsec_context->my_rank);
+            
             dst_rank = es->virtual_process->parsec_context->my_rank;
         }
     }

@@ -2042,7 +2042,8 @@ mig_task_mapping_item_t* find_migrated_tasks_details(const parsec_task_t *task)
         return NULL;
     }
     if(task->task_class->task_class_id != item->task_class_id) {
-        assert(0);
+        assert(5 == item->task_class_id);
+        return NULL;
     }
 
     assert(0 <= item->victim && item->victim < get_nb_nodes());
@@ -2095,6 +2096,7 @@ mig_task_mapping_item_t* find_received_tasks_details(const parsec_task_t *task)
     }
     if(task->task_class->task_class_id != item->task_class_id) {
         assert(5 == item->task_class_id);
+        return NULL;
     }
 
     assert(0 <= item->victim && item->victim < get_nb_nodes());
@@ -2242,7 +2244,10 @@ mig_task_mapping_item_t* find_task_mapping(const parsec_task_t *task)
         return NULL;
     }
 
-    assert(task->task_class->task_class_id == item->task_class_id);
+    if(task->task_class->task_class_id != item->task_class_id) {
+        assert(5 == item->task_class_id);
+        return NULL;
+    }
 
     assert(0 <= item->victim && item->victim < get_nb_nodes());
     assert(0 <= item->thief && item->thief < get_nb_nodes());
@@ -3288,7 +3293,7 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
 
     assert(new_mapping->thief != my_rank);
     assert(new_mapping->thief != dst_rank);     
-    
+
     dst_rank = new_mapping->thief ;
     assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 

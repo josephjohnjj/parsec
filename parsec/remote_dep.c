@@ -420,6 +420,7 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
         /** I have  information about this task being migrated.
          * I am only intrested in task without a new mapping.
          */
+        assert(new_mapping->thief != dst_rank); 
         return PARSEC_ITERATE_CONTINUE;
     }
 
