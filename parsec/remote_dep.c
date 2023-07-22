@@ -241,7 +241,7 @@ inline void remote_deps_free(parsec_remote_deps_t* deps)
     assert(0 == deps->incoming_mask);
     assert(0 == deps->outgoing_mask);
     for( k = 0; k < parsec_remote_dep_context.max_dep_count; k++ ) {
-        if( 0 == deps->output[k].count_bits ) continue;
+        if( (0 == deps->output[k].count_bits) && (0 == deps->output[k].count_bits_direct)) continue;
         for(a = 0; a < (parsec_remote_dep_context.max_nodes_number + 31)/32; a++) {
             deps->output[k].rank_bits[a] = 0;
             deps->output[k].rank_bits_direct[a] = 0;
