@@ -65,9 +65,7 @@ static parsec_hash_table_t *task_map_ht = NULL;
 /** hashtable for storing details of received tasks */
 static parsec_hash_table_t *received_task_ht = NULL; 
 /** hashtable for storing details of migrated tasks */
-static parsec_hash_table_t *migrated_task_ht = NULL; 
-/** hashtable of direct messages */
-static parsec_hash_table_t *direct_msg_ht = NULL; 
+static parsec_hash_table_t *migrated_task_ht = NULL;  
 
 static parsec_key_fn_t node_task_mapping_table_generic_key_fn = {
     .key_equal = parsec_hash_table_generic_64bits_key_equal,
@@ -375,11 +373,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
         migrated_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
         parsec_hash_table_init(migrated_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
-            node_task_mapping_table_generic_key_fn, NULL);
-
-        direct_msg_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
-        parsec_hash_table_init(direct_msg_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
-            node_task_mapping_table_generic_key_fn, NULL);     
+            node_task_mapping_table_generic_key_fn, NULL);    
     }
     
     return 0;
@@ -542,14 +536,7 @@ int parsec_node_migrate_fini()
         parsec_hash_table_for_all(migrated_task_ht, task_mapping_free_elt, migrated_task_ht);
         parsec_hash_table_fini(migrated_task_ht);
         PARSEC_OBJ_RELEASE(migrated_task_ht);
-        migrated_task_ht = NULL;
-
-        parsec_hash_table_for_all(direct_msg_ht, task_mapping_free_elt, direct_msg_ht);
-        parsec_hash_table_fini(direct_msg_ht);
-        PARSEC_OBJ_RELEASE(direct_msg_ht);
-        direct_msg_ht = NULL;
-
-        
+        migrated_task_ht = NULL;    
     }
 
     return parsec_migration_engine_up;
@@ -2105,28 +2092,67 @@ mig_task_mapping_item_t* find_received_tasks_details(const parsec_task_t *task)
     return item;
 }
 
+int create_direct_message_ht(parsec_taskpool_t* tp)
+{
+    int i = 0, nb_task_classes = tp->nb_task_classes;
+    assert(NULL != tp);
+    tp->ht_direct_msg  = malloc(sizeof(parsec_hash_table_t*) * nb_task_classes);
+
+    for (i = 0; i < tp->nb_task_classes; i++) {
+        tp->ht_direct_msg[i] = PARSEC_OBJ_NEW(parsec_hash_table_t);
+        parsec_hash_table_init(tp->ht_direct_msg[i], offsetof(mig_task_mapping_item_t, ht_item), 16, 
+            node_task_mapping_table_generic_key_fn, NULL); 
+    }
+    return 1;
+}
+
+int destroy_direct_message_ht(parsec_taskpool_t* tp)
+{
+    
+    int i = 0, nb_task_classes = tp->nb_task_classes;
+    assert(NULL != tp);
+
+    for (i = 0; i < tp->nb_task_classes; i++) {
+        assert(NULL != tp->ht_direct_msg[i]);
+
+        parsec_hash_table_for_all(tp->ht_direct_msg[i], task_mapping_free_elt, tp->ht_direct_msg[i]);
+        parsec_hash_table_fini(tp->ht_direct_msg[i]);
+
+        PARSEC_OBJ_RELEASE(tp->ht_direct_msg[i]);
+        tp->ht_direct_msg[i] = NULL;
+    }
+
+    return 1;
+}
+
 mig_task_mapping_item_t* insert_direct_msg(parsec_task_t *task, int source)
 {
     parsec_key_t key;
     mig_task_mapping_item_t *item;
 
     assert(0 <= source && source < get_nb_nodes());
-    key = task->task_class->make_key(task->taskpool, task->locals);
+    assert(NULL != task->taskpool);
 
-    if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key)))
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    parsec_hash_table_t *ht = task->taskpool->ht_direct_msg[task->task_class->task_class_id];
+
+    if (NULL == (item = parsec_hash_table_nolock_find(ht, key)))
     {
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
         item->victim = source; /** temp storage */
         item->thief = source;  /** temp storage */
         item->task_class_id = task->task_class->task_class_id;
-        parsec_hash_table_lock_bucket(direct_msg_ht, key);
-        parsec_hash_table_nolock_insert(direct_msg_ht, &item->ht_item);
-        parsec_hash_table_unlock_bucket(direct_msg_ht, key);
+
+        parsec_hash_table_lock_bucket(ht, key);
+        parsec_hash_table_nolock_insert(ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(ht, key);
     }
     else {
         item->victim = item->thief; /** temp storage for old source*/
         item->thief = source;  /** temp storage of new source */
+        assert(item->task_class_id == task->task_class->task_class_id);
+        assert(item->victim != item->thief);
     }
     return item;
 }
@@ -2135,15 +2161,15 @@ mig_task_mapping_item_t* find_direct_msg(parsec_task_t *task)
 {
     parsec_key_t key;
     mig_task_mapping_item_t *item;
-
+    
     key = task->task_class->make_key(task->taskpool, task->locals);
-    if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key))) {
+
+    parsec_hash_table_t *ht = task->taskpool->ht_direct_msg[task->task_class->task_class_id];
+    if (NULL == (item = parsec_hash_table_nolock_find(ht, key))) {
         return NULL;
     }
 
-    if(task->task_class->task_class_id != item->task_class_id) {
-        return NULL;
-    }
+    assert(task->task_class->task_class_id != item->task_class_id);
     assert(0 <= item->victim && item->victim < get_nb_nodes());
     assert(0 <= item->thief && item->thief < get_nb_nodes());
 
@@ -3323,4 +3349,7 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     (void)oldcontext; (void)dst_vpid; (void)data; (void)src_rank;
     return PARSEC_ITERATE_CONTINUE;
 }
+
+
+
 

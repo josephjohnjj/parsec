@@ -136,6 +136,7 @@ extern int parsec_node_task_count_end;
 extern int parsec_all_task_count_start;
 extern int parsec_all_task_count_end;
 extern int parsec_runtime_starving_devices;
+extern int parsec_runtime_task_mapping;
 
 int __parsec_execute( parsec_execution_stream_t* es,
                       parsec_task_t* task )
@@ -803,6 +804,10 @@ int parsec_context_add_taskpool( parsec_context_t* context, parsec_taskpool_t* t
         parsec_set_scheduler( context );
     }
     clear_task_migrated_per_tp();
+
+    if(parsec_runtime_task_mapping) {
+        create_direct_message_ht(tp);
+    }
 
     tp->context = context;  /* save the context */
 

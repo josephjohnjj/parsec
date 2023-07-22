@@ -150,4 +150,6 @@ parsec_ontask_iterate_t  mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t
     int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
     parsec_key_t successor_repo_key, void *param);
 mig_task_mapping_item_t* find_migrated_tasks_details(const parsec_task_t *task);
+int create_direct_message_ht(parsec_taskpool_t* tp);
+int destroy_direct_message_ht(parsec_taskpool_t* tp);
 #endif
