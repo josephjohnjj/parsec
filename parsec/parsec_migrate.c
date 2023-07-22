@@ -2105,24 +2105,20 @@ mig_task_mapping_item_t* find_received_tasks_details(const parsec_task_t *task)
     return item;
 }
 
-mig_task_mapping_item_t* insert_direct_msg(parsec_task_t *task, int current_source)
+mig_task_mapping_item_t* insert_direct_msg(parsec_task_t *task, int source)
 {
     parsec_key_t key;
     mig_task_mapping_item_t *item;
 
-    assert(0 <= current_source && current_source < get_nb_nodes());
+    assert(0 <= source && source < get_nb_nodes());
     key = task->task_class->make_key(task->taskpool, task->locals);
 
-    /**
-     * @brief Entry NULL imples that this task has never been received
-     * till now in any of the iteration. So we start a new entry.
-     */
     if (NULL == (item = parsec_hash_table_nolock_find(direct_msg_ht, key)))
     {
         item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
         item->ht_item.key = key;
-        item->victim = current_source; /** temp storage */
-        item->thief = current_source;  /** temp storage */
+        item->victim = source; /** temp storage */
+        item->thief = source;  /** temp storage */
         item->task_class_id = task->task_class->task_class_id;
         parsec_hash_table_lock_bucket(direct_msg_ht, key);
         parsec_hash_table_nolock_insert(direct_msg_ht, &item->ht_item);
@@ -2130,7 +2126,7 @@ mig_task_mapping_item_t* insert_direct_msg(parsec_task_t *task, int current_sour
     }
     else {
         item->victim = item->thief; /** temp storage for old source*/
-        item->thief = current_source;  /** temp storage */
+        item->thief = source;  /** temp storage of new source */
     }
     return item;
 }
@@ -2145,7 +2141,9 @@ mig_task_mapping_item_t* find_direct_msg(parsec_task_t *task)
         return NULL;
     }
 
-    assert(task->task_class->task_class_id == item->task_class_id);
+    if(task->task_class->task_class_id != item->task_class_id) {
+        return NULL;
+    }
     assert(0 <= item->victim && item->victim < get_nb_nodes());
     assert(0 <= item->thief && item->thief < get_nb_nodes());
 
@@ -2494,6 +2492,7 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
     /** make sure we have atleast one migrated task  with this
      * task as the predecessor */
     assert(origin->outgoing_mask != 0); /** temp storage */
+    printf("Received Tasks = %d\n", origin->outgoing_mask);
     /**
      * At this point the msg->output_mask contains the root mask, and should be
      * keep as is and be propagated down the communication pattern. On the
@@ -2521,6 +2520,8 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     if( NULL ==  was_received) {
         return PARSEC_ITERATE_CONTINUE;
     }
+    assert(was_received->thief == my_rank);
+    
 
     parsec_remote_deps_t *deps               = (parsec_remote_deps_t*)param;
     deps->outgoing_mask++;
@@ -2579,7 +2580,7 @@ static void mig_direct_recv_activate(parsec_execution_stream_t* es,
 
     deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, NULL, NULL,
                                                        length, deps);
-        
+    printf(" mig_direct_recv_activate \n");
     for(k = 0; deps->incoming_mask>>k; k++) {
         if(!(deps->incoming_mask & (1U<<k))) continue;
         /* Check for CTL and data that do not carry payload */
@@ -2850,6 +2851,7 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
     assert(0 <= origin->root && origin->root < get_nb_nodes());
     assert(0 <= origin->from && origin->from < get_nb_nodes());
 
+    printf("mig_direct_release_incoming release sucess \n");
     (void)task.task_class->release_deps(es, &task,
         action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
         origin);
@@ -2966,34 +2968,34 @@ static int check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps
 
     assert(NULL != origin->taskpool);
 
-    /* This function is divided into DTD and PTG's logic */
-    if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) {
-        parsec_task_t task;
-        task.taskpool   = origin->taskpool;
-        task.priority = 0;  
-        task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
-        for(i = 0; i < task.task_class->nb_flows;
-            task.data[i].data_in = task.data[i].data_out = NULL,
-            task.data[i].source_repo_entry = NULL,
-            task.data[i].source_repo = NULL, i++);
+    parsec_task_t task;
+    task.taskpool   = origin->taskpool;
+    task.priority = 0;  
+    task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
+    for(i = 0; i < task.task_class->nb_flows;
+        task.data[i].data_in = task.data[i].data_out = NULL,
+        task.data[i].source_repo_entry = NULL,
+        task.data[i].source_repo = NULL, i++);
 
-        for(i = 0; i < task.task_class->nb_locals; i++)
-            task.locals[i] = origin->msg.locals[i];
+    for(i = 0; i < task.task_class->nb_locals; i++)
+        task.locals[i] = origin->msg.locals[i];
 
-        int is_received = 0;
-        is_received = find_direct_msg(&task);
-        /** check if this message was already received from someone else */
-        if(-1 != is_received) {
-            assert(0 <= is_received && is_received < get_nb_nodes());
-            return 1;
-        }
+    mig_task_mapping_item_t* is_received = NULL;
+    is_received = find_direct_msg(&task);
+    /** check if this message was already received from someone else */
+    if(NULL != is_received) {
         insert_direct_msg(&task, origin->from);
-        assert(0 <= origin->from && origin->from < get_nb_nodes());
-        assert(origin->from != is_received);
+        assert(origin->from != is_received->victim);
+        printf("Old source %d new source %d \n", is_received->victim, origin->from );
+        assert(0 <= is_received->victim && is_received->victim < get_nb_nodes()); /** first*/
+        return 1;
     }
     else {
-        assert(0);
+        printf("First time reception %d \n");
     }
+    insert_direct_msg(&task, origin->from);
+    assert(0 <= origin->from && origin->from < get_nb_nodes());
+    
     
     return 0;
 }
@@ -3082,6 +3084,7 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
 
         assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+        assert( NULL != find_direct_msg(predecessor) );
 
         was_received = find_received_tasks_details(succecessor);
 
@@ -3157,6 +3160,11 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
 
             assert(new_mapping->victim == *dst_rank);
             assert(new_mapping->thief == *src_rank);
+
+            /** we make sure that the direct message is not processed twice */
+            if( NULL == find_direct_msg(predecessor) ) {
+                insert_direct_msg(predecessor, my_rank); 
+            }
         }
         else {
 
@@ -3167,7 +3175,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             assert(my_rank == *src_rank);
         }     
 
-        *dst_rank = new_mapping->thief;   
+        *dst_rank = new_mapping->thief;  
     }
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
@@ -3213,6 +3221,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
 
         assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
+        assert( NULL != find_direct_msg(predecessor) );
 
         was_received = find_received_tasks_details(succecessor);
         if(NULL != was_received ) { 
@@ -3306,7 +3315,6 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
         output->count_bits_direct++;
     }
     
-
     if(newcontext->priority > output->priority) {  /* select the priority */
         output->priority = newcontext->priority;
         if(newcontext->priority > deps->max_priority)

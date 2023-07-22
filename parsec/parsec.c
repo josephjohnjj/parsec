@@ -1823,6 +1823,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
             if (parsec_runtime_task_mapping ) {
                 if( NULL != find_received_tasks_details(task)) {
+                    printf("Successful_received_tasks \n");
                     new_context->mig_status = PARSEC_MIGRATED_TASK;
                 }
                 new_context->sources = source_mask; /** Set the intermediate dataflow sources */
@@ -1900,7 +1901,8 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             return PARSEC_ITERATE_CONTINUE;
         }
         else {
-            assert(original_dst == dst_rank);
+            assert(original_dst == dst_rank /** No change in dst rank */
+            || dst_rank == src_rank /** direct message that activated local migrated tasks */);
         }
     }
 
