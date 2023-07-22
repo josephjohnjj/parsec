@@ -2888,6 +2888,21 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
 
+#if defined(PARSEC_DEBUG)
+    if(-1 == origin->root) {
+        int t = 0, r = 0;
+        for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+            for( r = 0; r < get_nb_nodes(); r++) {
+                int _array_pos = r / (8 * sizeof(uint32_t)); 
+                assert(origin->output->rank_bits[_array_pos]  == 0);
+                assert(origin->output->rank_bits_direct[_array_pos]  == 0);
+            }
+            assert(origin->output[t].count_bits == 0);
+            assert(origin->output[t].count_bits_direct == 0);
+        }
+    }
+#endif
+
     origin->outgoing_mask = 0;
     remote_deps_free(origin);
     return NULL;

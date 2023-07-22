@@ -1055,6 +1055,19 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     uint32_t mask = origin->outgoing_mask;
     origin->outgoing_mask = 0;
 
+    if(-1 == origin->root) {
+        int t = 0, r = 0;
+        for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+            for( r = 0; r < get_nb_nodes(); r++) {
+                int _array_pos = r / (8 * sizeof(uint32_t)); 
+                assert(origin->output->rank_bits[_array_pos]  == 0);
+                assert(origin->output->rank_bits_direct[_array_pos]  == 0);
+            }
+            assert(origin->output[t].count_bits == 0);
+            assert(origin->output[t].count_bits_direct == 0);
+        }
+    }
+
 #if defined(PARSEC_DIST_COLLECTIVES)
     if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) /* indicates it is a PTG taskpool */
         parsec_remote_dep_propagate(es, &task, origin);

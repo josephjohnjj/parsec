@@ -1962,6 +1962,21 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             assert(src_rank == es->virtual_process->parsec_context->my_rank);
 #endif
             PARSEC_ALLOCATE_REMOTE_DEPS_IF_NULL(arg->remote_deps, oldcontext, MAX_PARAM_COUNT);
+        #if defined(PARSEC_DEBUG)
+            if(-1 == arg->remote_deps->root) {
+                int t = 0, r = 0;
+                for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+                    for( r = 0; r < get_nb_nodes(); r++) {
+                        int _array_pos = r / (8 * sizeof(uint32_t)); 
+                        assert(arg->remote_deps->output->rank_bits[_array_pos]  == 0);
+                        assert(arg->remote_deps->output->rank_bits_direct[_array_pos]  == 0);
+                    }
+                    assert(arg->remote_deps->output[t].count_bits == 0);
+                    assert(arg->remote_deps->output[t].count_bits_direct == 0);
+                }
+            }
+        #endif
+
             output = &arg->remote_deps->output[dep->dep_datatype_index];
             assert( (-1 == arg->remote_deps->root) || (arg->remote_deps->root == src_rank) );
             /** This is important. The collective operation will be done based on root*/
@@ -2163,6 +2178,21 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
             assert(src_rank == es->virtual_process->parsec_context->my_rank);
 #endif
             PARSEC_ALLOCATE_REMOTE_DEPS_IF_NULL(arg->remote_deps, oldcontext, MAX_PARAM_COUNT);
+        #if defined(PARSEC_DEBUG)
+            if(-1 == arg->remote_deps->root) {
+                int t = 0, r = 0;
+                for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+                    for( r = 0; r < get_nb_nodes(); r++) {
+                        int _array_pos = r / (8 * sizeof(uint32_t)); 
+                        assert(arg->remote_deps->output->rank_bits[_array_pos]  == 0);
+                        assert(arg->remote_deps->output->rank_bits_direct[_array_pos]  == 0);
+                    }
+                    assert(arg->remote_deps->output[t].count_bits == 0);
+                    assert(arg->remote_deps->output[t].count_bits_direct == 0);
+                }
+            }
+        #endif
+
             output = &arg->remote_deps->output[dep->dep_datatype_index];
             assert( (-1 == arg->remote_deps->root) || (arg->remote_deps->root == src_rank) );
             /** This is important. The collective operation will be done based on root*/
