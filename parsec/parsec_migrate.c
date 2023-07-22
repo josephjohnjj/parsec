@@ -2169,7 +2169,7 @@ mig_task_mapping_item_t* find_direct_msg(parsec_task_t *task)
         return NULL;
     }
 
-    assert(task->task_class->task_class_id != item->task_class_id);
+    assert(task->task_class->task_class_id == item->task_class_id);
     assert(0 <= item->victim && item->victim < get_nb_nodes());
     assert(0 <= item->thief && item->thief < get_nb_nodes());
 
