@@ -164,6 +164,7 @@ struct parsec_taskpool_s {
                                              *   Indexed on the same index as functions array */
     parsec_hash_table_t **      ht_direct_msg;  /**< Array of ht for direct flows messages
                                              *   Indexed on the same index as functions array */
+    mig_task_class_hashtables_t** task_class_hashtables; 
 };
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(parsec_taskpool_t);

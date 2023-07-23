@@ -16,6 +16,7 @@
 #define MAX_ACTIVATE_MSG_SIZE    (MAX_CHUNK_SIZE * SINGLE_ACTIVATE_MSG_SIZE)
 #define STEAL_REQ_MSG_SIZE       sizeof(steal_request_msg_t)
 #define MAPPING_INFO_SIZE        sizeof(mig_task_mapping_info_t)
+#define NB_TASK_CLASS_HTS        16
 
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 

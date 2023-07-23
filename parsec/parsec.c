@@ -653,6 +653,9 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
     context->comm_th_core        = -1;
 #endif  /* defined(PARSEC_HAVE_HWLOC) */
 
+    create_task_class_hashtables(context);
+    
+
     /* TODO: nb_cores should depend on the vp_id */
     nb_total_comp_threads = 0;
     for(p = 0; p < nb_vp; p++) {
@@ -1295,6 +1298,9 @@ int parsec_fini( parsec_context_t** pcontext )
     parsec_mempool_stats(context);
 #endif  /* PARSEC_PROF_TRACE */
 
+    
+    destroy_task_class_hashtables(context);
+    
     (void) parsec_termdet_fini();
 
     (void) parsec_remote_dep_fini(context);
@@ -2547,6 +2553,7 @@ void parsec_taskpool_free(parsec_taskpool_t *tp)
     print_task_migrated_per_tp();
 
     if(parsec_runtime_task_mapping) {
+        tp->task_class_hashtables = NULL;
         destroy_direct_message_ht(tp);
     }
     assert(NULL != tp);

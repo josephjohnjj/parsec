@@ -28,6 +28,7 @@
 #include <sys/resource.h>
 #endif
 
+
 BEGIN_C_DECLS
 
 /**
@@ -156,7 +157,7 @@ struct parsec_context_s {
      */
     hwloc_cpuset_t cpuset_free_mask;
 #endif
-
+    mig_task_class_hashtables_t** task_class_hashtables;
     /* This field should always be the last one in the structure. Even if the
      * declared number of virtual processes is 1, when we allocate the memory
      * we will allocate more (as many as we need), so everything after this
