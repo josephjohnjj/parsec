@@ -2038,7 +2038,6 @@ mig_task_mapping_item_t* insert_received_tasks_details(parsec_task_t *task, int 
         item->victim = victim; 
         item->thief = thief;
         item->task_class_id = task->task_class->task_class_id;
-        assert(5 == task->task_class->task_class_id);
         parsec_hash_table_lock_bucket(ht, key);
         parsec_hash_table_nolock_insert(ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(ht, key);
@@ -2069,7 +2068,7 @@ mig_task_mapping_item_t* find_received_tasks_details(const parsec_task_t *task)
         return NULL;
     }
 
-    assert(task->task_class->task_class_id != item->task_class_id); 
+    assert(task->task_class->task_class_id == item->task_class_id); 
     assert(0 <= item->victim && item->victim < get_nb_nodes());
     assert(0 <= item->thief && item->thief < get_nb_nodes());
 
@@ -3071,7 +3070,7 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
              */
             
             assert(was_received->victim != my_rank);
-            assert(was_received->thief == *dst_rank);
+            assert(was_received->victim == *dst_rank);
             assert(was_received->thief == my_rank);
             assert(was_received->task_class_id == succecessor->task_class->task_class_id);
             assert(*src_rank != *dst_rank);
@@ -3360,10 +3359,12 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
 
 int create_task_class_hashtables(parsec_context_t *context) 
 {
-    int i  = 0;
+    printf("create_task_class_hashtables \n");
+
     mig_task_class_hashtables_t** task_class_hashtables;
     task_class_hashtables = (mig_task_class_hashtables_t**) malloc(NB_TASK_CLASS_HTS * sizeof(mig_task_class_hashtables_t*));
  
+    int i  = 0;
     for(i = 0; i < NB_TASK_CLASS_HTS; i++ ) {
         task_class_hashtables[i] = (mig_task_class_hashtables_t*)malloc(sizeof(mig_task_class_hashtables_t));
         
@@ -3387,9 +3388,11 @@ int create_task_class_hashtables(parsec_context_t *context)
 
 int destroy_task_class_hashtables(parsec_context_t *context) 
 {
-    int i  = 0;
     mig_task_class_hashtables_t** task_class_hashtables = context->task_class_hashtables;
+
+    printf("destroy_task_class_hashtables \n");
     
+    int i  = 0;
     for(i = 0; i < NB_TASK_CLASS_HTS; i++ ) {
         task_class_hashtables[i] = (mig_task_class_hashtables_t*)malloc(sizeof(mig_task_class_hashtables_t));
         
@@ -3415,6 +3418,7 @@ int destroy_task_class_hashtables(parsec_context_t *context)
         free(task_class_hashtables[i]);
     }
     free(context->task_class_hashtables);
+    context->task_class_hashtables = NULL;
 }
 
 
