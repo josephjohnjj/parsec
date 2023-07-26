@@ -807,6 +807,7 @@ int parsec_context_add_taskpool( parsec_context_t* context, parsec_taskpool_t* t
 
     if(parsec_runtime_task_mapping) {
         create_direct_message_ht(tp);
+        assert(NULL != context->task_class_hashtables);
         tp->task_class_hashtables = context->task_class_hashtables;
     }
 

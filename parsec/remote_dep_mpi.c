@@ -949,6 +949,8 @@ remote_dep_get_datatypes(parsec_execution_stream_t* es,
      * from the predecessor.
      */
     origin->outgoing_mask = origin->incoming_mask;  /* safekeeper */
+    assert(0 != origin->outgoing_mask);
+    
     return 0;
 }
 

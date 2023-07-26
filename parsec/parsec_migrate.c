@@ -132,6 +132,11 @@ mig_task_mapping_item_t* insert_migrated_tasks_details(parsec_task_t *task, int 
 mig_task_mapping_item_t* update_task_mapping(parsec_taskpool_t* tp, mig_task_mapping_info_t *mapping_info, int from);
 int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
     mig_task_mapping_info_t *mapping_info, int src);
+parsec_ontask_iterate_t elastic_test(parsec_execution_stream_t *eu,
+    const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
+    const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
+    int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
+    parsec_key_t successor_repo_key, void *param);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -705,14 +710,16 @@ int process_steal_request(parsec_execution_stream_t *es)
 
         total_selected = 0; /** reset for each steal requests */
         for (d = 0; d < nb_cuda_devices; d++) {
-            if( 0 != active_steal_request_mutex /* I am a thief */) {
-                break;
-            }
+            //if( 0 != active_steal_request_mutex /* I am a thief */) {
+            //    break;
+            //}
                     
             device_selected = 0; /** reset for each device */
             gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-            if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > parsec_runtime_progress_count ) ) {
+            if(1) {
+            //TODO : change this back
+            //if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > parsec_runtime_progress_count ) ) {
                 list = &(gpu_device->pending);
                 if( !parsec_atomic_trylock( &list->atomic_lock ) ) {
                     continue;
@@ -1457,7 +1464,6 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
                                    &receiver_memory_handle, &receiver_memory_handle_size);
         }
         else {
-            /* TODO: Implement converter to pack and unpack */
             int dtt_size;
             parsec_type_size(dtt, &dtt_size);
             parsec_ce.mem_register(PARSEC_DATA_COPY_GET_PTR(deps->output[k].data.data), PARSEC_MEM_TYPE_CONTIGUOUS,
@@ -1735,12 +1741,11 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
                                    &source_memory_handle, &source_memory_handle_size);
         }
         else {
-            /* TODO: Implement converter to pack and unpack */
             int dtt_size;
             parsec_type_size(dtt, &dtt_size);
             parsec_ce.mem_register(dataptr, PARSEC_MEM_TYPE_CONTIGUOUS,
-                                   -1, NULL, // TODO JS: this interface is so broken, fix it!
-                                   dtt_size, // TODO JS: what about nbdtt? Is it ok to ignore it?!
+                                   -1, NULL, 
+                                   dtt_size, 
                                    &source_memory_handle, &source_memory_handle_size);
         }
 
@@ -1978,6 +1983,12 @@ mig_task_mapping_item_t* insert_migrated_tasks_details(parsec_task_t *task, int 
         parsec_hash_table_lock_bucket(ht, key);
         parsec_hash_table_nolock_insert(ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(ht, key);
+
+    #if defined(PARSEC_DEBUG)
+        char tmp[MAX_TASK_STRLEN];
+        printf("ELASTIC-MSG migrated: Task %s with key %d migrated from %d, victim %d to thief %d \n",
+            parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), key, my_rank, victim, thief);
+    #endif
     }
     else {
         /** A task can be migrated only once. After that its position is fixed */
@@ -2041,6 +2052,12 @@ mig_task_mapping_item_t* insert_received_tasks_details(parsec_task_t *task, int 
         parsec_hash_table_lock_bucket(ht, key);
         parsec_hash_table_nolock_insert(ht, &item->ht_item);
         parsec_hash_table_unlock_bucket(ht, key);
+
+    #if defined(PARSEC_DEBUG)
+        char tmp[MAX_TASK_STRLEN];
+        printf("ELASTIC-MSG Received: Task %s with key %d is received on node %d  victim = %d, thief = %d\n",
+            parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), key, my_rank, victim, thief); 
+    #endif
     }
     else {
         /** A task can be migrated only once. After that its position is fixed*/
@@ -2456,32 +2473,51 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
     if( NULL == origin->taskpool )
         return -1; /* the parsec taskpool doesn't exist yet */
 
-    /* This function is divided into DTD and PTG's logic */
-    if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) {
-        parsec_task_t task;
-        task.taskpool   = origin->taskpool;
-        /* Do not set the task.task_class here, because it might trigger a race condition in DTD */
+    assert( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type );
 
-        task.priority = 0;  /* unknown yet */
+    parsec_task_t task;
+    task.taskpool   = origin->taskpool;
+    /* Do not set the task.task_class here, because it might trigger a race condition in DTD */
 
-        task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
-        for(i = 0; i < task.task_class->nb_flows;
-            task.data[i].data_in = task.data[i].data_out = NULL,
-            task.data[i].source_repo_entry = NULL,
-            task.data[i].source_repo = NULL, i++);
+    task.priority = 0;  /* unknown yet */
 
-        for(i = 0; i < task.task_class->nb_locals; i++)
-            task.locals[i] = origin->msg.locals[i];
+    task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
+    for(i = 0; i < task.task_class->nb_flows;
+        task.data[i].data_in = task.data[i].data_out = NULL,
+        task.data[i].source_repo_entry = NULL,
+        task.data[i].source_repo = NULL, i++);
 
-        /* We need to convert from a dep_datatype_index mask into a dep_index
-         * mask. However, in order to be able to use the above iterator we need to
-         * be able to identify the dep_index for each particular datatype index, and
-         * call the iterate_successors on each of the dep_index sets.
-         */
+    for(i = 0; i < task.task_class->nb_locals; i++)
+        task.locals[i] = origin->msg.locals[i];
 
-        assert(origin->msg.output_mask != 0);
+    /* We need to convert from a dep_datatype_index mask into a dep_index
+     * mask. However, in order to be able to use the above iterator we need to
+     * be able to identify the dep_index for each particular datatype index, and
+     * call the iterate_successors on each of the dep_index sets.
+     */
+    assert(origin->msg.output_mask != 0);
 
-        origin->outgoing_mask = 0; /** temp storage */
+    origin->outgoing_mask = 0; /** temp storage */
+    for(k = 0; origin->msg.output_mask>>k; k++) {
+        if(!(origin->msg.output_mask & (1U<<k))) continue;
+        for(local_mask = i = 0; NULL != task.task_class->out[i]; i++ ) {
+            if(!(task.task_class->out[i]->flow_datatype_mask & (1U<<k))) continue;
+            for(j = 0; NULL != task.task_class->out[i]->dep_out[j]; j++ )
+                if(k == task.task_class->out[i]->dep_out[j]->dep_datatype_index)
+                    local_mask |= (1U << task.task_class->out[i]->dep_out[j]->dep_index);
+            if( 0 != local_mask ) break;  /* we have our local mask, go get the datatype */
+        }
+
+        origin->output[k].data.remote.src_datatype = origin->output[k].data.remote.dst_datatype = PARSEC_DATATYPE_NULL;
+        PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "MPI:\tRetrieve datatype with mask 0x%x (remote_dep_get_datatypes)", local_mask);
+        task.task_class->iterate_successors(es, &task,
+                                            local_mask,
+                                            mig_dep_mpi_retrieve_datatype,
+                                            origin);
+    }
+#if defined(PARSEC_DEBUG)
+    if((origin->outgoing_mask == 0)) {
+
         for(k = 0; origin->msg.output_mask>>k; k++) {
             if(!(origin->msg.output_mask & (1U<<k))) continue;
             for(local_mask = i = 0; NULL != task.task_class->out[i]; i++ ) {
@@ -2492,23 +2528,28 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
                 if( 0 != local_mask ) break;  /* we have our local mask, go get the datatype */
             }
 
+            char tmp[MAX_TASK_STRLEN];
+            printf("ELASTIC-MSG Start elastic_test: Task %s with local_mask %d is found on node %d \n",
+                parsec_task_snprintf(tmp, MAX_TASK_STRLEN, &task), local_mask, my_rank);
+
             origin->output[k].data.remote.src_datatype = origin->output[k].data.remote.dst_datatype = PARSEC_DATATYPE_NULL;
             PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "MPI:\tRetrieve datatype with mask 0x%x (remote_dep_get_datatypes)", local_mask);
             task.task_class->iterate_successors(es, &task,
-                                                local_mask,
-                                                mig_dep_mpi_retrieve_datatype,
-                                                origin);
+                                            local_mask,
+                                            elastic_test,
+                                            origin);
+
+            printf("ELASTIC-MSG End elastic_test: Task %s with local_mask %d is found on node %d \n",
+                parsec_task_snprintf(tmp, MAX_TASK_STRLEN, &task), local_mask, my_rank);
         }
+        
     }
-    else
-    {
-        assert(0);
-    }
+#endif
 
     /** make sure we have atleast one migrated task  with this
      * task as the predecessor */
     assert(origin->outgoing_mask != 0); /** temp storage */
-    printf("Received Tasks = %d\n", origin->outgoing_mask);
+    
     /**
      * At this point the msg->output_mask contains the root mask, and should be
      * keep as is and be propagated down the communication pattern. On the
@@ -2537,10 +2578,8 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
         return PARSEC_ITERATE_CONTINUE;
     }
     assert(was_received->thief == my_rank);
-    
 
     parsec_remote_deps_t *deps               = (parsec_remote_deps_t*)param;
-    deps->outgoing_mask++;
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
     const parsec_task_class_t* fct           = newcontext->task_class;
     uint32_t flow_mask                       = (1U << dep->flow->flow_index) | 0x80000000;  /* in flow */
@@ -2551,6 +2590,7 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 
     fct->get_datatype(eu, newcontext, &flow_mask, &output->data);
     
+    deps->outgoing_mask++; /** temp storage: count the received tasks */
 
     parsec_data_t* data_arena =  NULL; //is_read_only(oldcontext, dep);
     if(NULL == data_arena) {
@@ -2570,7 +2610,6 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     }
     if(old_dtt != PARSEC_DATATYPE_NULL){
         if(old_dtt != output->data.remote.dst_datatype){
-            // TODO JS: implement MPI_Pack_size
             int dsize;
             MPI_Pack_size(output->data.remote.dst_count, output->data.remote.dst_datatype, MPI_COMM_WORLD, &dsize);
             output->data.remote.src_count = output->data.remote.dst_count = dsize;
@@ -2712,7 +2751,6 @@ static void mig_direct_get_start(parsec_execution_stream_t* es,
                                    -1,
                                    &receiver_memory_handle, &receiver_memory_handle_size);
         } else {
-            /* TODO: Implement converter to pack and unpack */
             int dtt_size;
             parsec_type_size(dtt, &dtt_size);
             parsec_ce.mem_register(PARSEC_DATA_COPY_GET_PTR(deps->output[k].data.data), PARSEC_MEM_TYPE_CONTIGUOUS,
@@ -3038,12 +3076,18 @@ int whoami()
 
 
 int 
-modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
+modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *successor,
     int* src_rank, int* dst_rank, mig_task_mapping_item_t  *new_mapping, parsec_release_dep_fct_arg_t *arg)
 {
+
     mig_task_mapping_item_t* was_received = NULL;
 
-    /** I am not aware of any new task mapping for the succecessor */
+    char predecessor_tmp[MAX_TASK_STRLEN];
+    parsec_task_snprintf(predecessor_tmp, MAX_TASK_STRLEN, predecessor);
+    char successor_tmp[MAX_TASK_STRLEN];
+    parsec_task_snprintf(successor_tmp, MAX_TASK_STRLEN, successor);
+
+    /** I am not aware of any new task mapping for the successor */
     assert(new_mapping == NULL);
 
     /** This is a local activation */
@@ -3053,7 +3097,7 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
         assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert(arg->remote_deps == NULL || arg->remote_deps->from == -1);
 
-        was_received = find_received_tasks_details(succecessor);
+        was_received = find_received_tasks_details(successor);
 
         /** If this is a local task activation and the predecessor was executed in this node
          * then it is guaranteed that this node was informed about the new task mapping. 
@@ -3061,7 +3105,7 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
 
        if(NULL != was_received) {
 
-            /** The succecessor was migrated to this node. But we have no information on the new task
+            /** The successor was migrated to this node. But we have no information on the new task
              * mapping. This means that the source for this task is some other node (probably the
              * node that send the remote activation). This means that there is also direct activation
              * expected from the source. So we can skip and action on this successor. 
@@ -3072,7 +3116,7 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
             assert(was_received->victim != my_rank);
             assert(was_received->victim == *dst_rank);
             assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == succecessor->task_class->task_class_id);
+            assert(was_received->task_class_id == successor->task_class->task_class_id);
             assert(*src_rank != *dst_rank);
        }
        
@@ -3088,9 +3132,9 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
         assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
-        was_received = find_received_tasks_details(succecessor);
+        was_received = find_received_tasks_details(successor);
         if(NULL != was_received) {
-            /** The succecessor was migrated to this node. But we have no information on the new task
+            /** The successor was migrated to this node. But we have no information on the new task
              * mapping. This means that the source for this task is some other node (probably the
              * node that send the remote activation). This means that there is also direct activation
              * expected from the source. So we can skip and action on this successor. 
@@ -3098,7 +3142,7 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
 
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == succecessor->task_class->task_class_id);
+            assert(was_received->task_class_id == successor->task_class->task_class_id);
             assert(*dst_rank != *src_rank);
             assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
             return 0; /** PARSEC_ITERATE_CONTINUE */
@@ -3108,6 +3152,8 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
              * This  means that this node is not one of the intermediate nodes. We have 
              * no action to take and this mode handles only local task activation.
              */
+
+            return 1; /** continue with task progression  */
         }
     }
     /** This is a remote activation through direct dataflow */
@@ -3118,13 +3164,13 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
         assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
         assert( NULL != find_direct_msg(predecessor) );
 
-        was_received = find_received_tasks_details(succecessor);
+        was_received = find_received_tasks_details(successor);
 
         if(NULL != was_received) { 
 
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == succecessor->task_class->task_class_id);
+            assert(was_received->task_class_id == successor->task_class->task_class_id);
 
             assert(was_received->thief == *src_rank);
             assert(my_rank == *src_rank);
@@ -3132,11 +3178,13 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
             
             assert(*dst_rank != *src_rank);
 
-            /** succecessor was migrated to this node, but we have no information of 
-             * the new task mapping. Which means that the succecessor did not have any 
+            /** successor was migrated to this node, but we have no information of 
+             * the new task mapping. Which means that the successor did not have any 
              * source from this node.
              */
             *dst_rank = *src_rank;
+
+            return 1; /** continue with task progression  */
         }
         else {
             /** The predecessor can have more than one successor. But direct messages are 
@@ -3151,17 +3199,22 @@ modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_
         assert(0);
     }
 
-    return 1;
+    return 1; /** continue with task progression  */
 }
 
 int 
-modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *succecessor,
+modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *successor,
     int* src_rank, int* dst_rank, mig_task_mapping_item_t *new_mapping, parsec_release_dep_fct_arg_t *arg)
 {
     (void)predecessor;
     mig_task_mapping_item_t* was_received = NULL;
 
-    /** we have information on the new task mapping for the succecessor. */
+    char predecessor_tmp[MAX_TASK_STRLEN];
+    parsec_task_snprintf(predecessor_tmp, MAX_TASK_STRLEN, predecessor);
+    char successor_tmp[MAX_TASK_STRLEN];
+    parsec_task_snprintf(successor_tmp, MAX_TASK_STRLEN, successor);
+
+    /** we have information on the new task mapping for the successor. */
     assert(new_mapping != NULL);
 
     /** This is a local activation */
@@ -3171,7 +3224,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert(arg->remote_deps == NULL || arg->remote_deps->from == -1);
 
-        was_received = find_received_tasks_details(succecessor);
+        was_received = find_received_tasks_details(successor);
 
         /** We have information on the new task mapping of the successor 
          * (as new_mapping != NULL) and we also know the that the predecessor 
@@ -3179,13 +3232,13 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
          * of the successor.
         */
         if(NULL != was_received) {
-            /** The succecessor was migrated to this node. As the predecessor
+            /** The successor was migrated to this node. As the predecessor
             was also executed in this node we can modify the successor activation 
             into a local activation*/
 
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == succecessor->task_class->task_class_id);
+            assert(was_received->task_class_id == successor->task_class->task_class_id);
             assert(was_received->victim == *dst_rank);
             assert(was_received->thief == *src_rank);
             assert(my_rank == *src_rank);
@@ -3208,6 +3261,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         }     
 
         *dst_rank = new_mapping->thief;  
+
+        return 1; /** continue with task progression  */
     }
     /** This is a remote activation through normal dataflow */
     else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
@@ -3216,9 +3271,9 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
         assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
 
-        was_received = find_received_tasks_details(succecessor);
+        was_received = find_received_tasks_details(successor);
         if(NULL != was_received) {
-            /** The succecessor was migrated to this node. And we also have information on the new task
+            /** The successor was migrated to this node. And we also have information on the new task
              * mapping. This means that the atleast one  source for this task is this node. At the same 
              * time atleast one source is some other node (probably the node that send the remote 
              * activation). This means that there is also direct activation expected from the source. 
@@ -3228,7 +3283,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
 
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == succecessor->task_class->task_class_id);
+            assert(was_received->task_class_id == successor->task_class->task_class_id);
 
             assert(*dst_rank != *src_rank);
             assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
@@ -3255,16 +3310,16 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
         assert( NULL != find_direct_msg(predecessor) );
 
-        was_received = find_received_tasks_details(succecessor);
+        was_received = find_received_tasks_details(successor);
         if(NULL != was_received ) { 
 
             assert(was_received->victim != my_rank);
             assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == succecessor->task_class->task_class_id);
+            assert(was_received->task_class_id == successor->task_class->task_class_id);
             assert(was_received->victim == *dst_rank);
             assert(*dst_rank != *src_rank);
 
-            /** succecessor was migrated to this node and we have received a 
+            /** successor was migrated to this node and we have received a 
              * direct dataflow from one of the intermmediate nodes. So the task 
              * should be executed in this node. new_mapping != NULL implies that
              * the task had another flow that originated from this node. 
@@ -3274,6 +3329,8 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
             assert(new_mapping->thief == my_rank);
 
             *dst_rank =  *src_rank;
+
+            return 1; /** continue with task progression  */
         }
         else {
             /** The predecessor can have more than one successor. But direct messages are 
@@ -3288,7 +3345,7 @@ modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_tas
         assert(0);
     }
 
-    return 1;
+    return 1; /** continue with task progression  */
 }
 
 
@@ -3326,15 +3383,12 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
 
     /** I was the thief and I was also one of the intermediate nodes. */
     if(new_mapping->thief == my_rank) {
-        /** This case i already taken care by a direct dataflow from
-         *  some other node or a local activation from this node.
-        */
-       assert(NULL != find_direct_msg(oldcontext));
        return PARSEC_ITERATE_CONTINUE;
     }
 
     assert(new_mapping->thief != my_rank);
-    assert(new_mapping->thief != dst_rank);     
+    assert(new_mapping->thief != dst_rank);  
+    assert(new_mapping->thief != new_mapping->victim);   
 
     dst_rank = new_mapping->thief ;
     assert(0 <= dst_rank && dst_rank < get_nb_nodes());
@@ -3394,8 +3448,12 @@ int destroy_task_class_hashtables(parsec_context_t *context)
     
     int i  = 0;
     for(i = 0; i < NB_TASK_CLASS_HTS; i++ ) {
-        task_class_hashtables[i] = (mig_task_class_hashtables_t*)malloc(sizeof(mig_task_class_hashtables_t));
-        
+
+        assert(NULL != task_class_hashtables);
+        assert(NULL != task_class_hashtables[i]->task_map_ht);
+        assert(NULL != task_class_hashtables[i]->received_task_ht);
+        assert(NULL != task_class_hashtables[i]->migrated_task_ht);
+
         parsec_hash_table_for_all(task_class_hashtables[i]->task_map_ht, task_mapping_free_elt, 
             task_class_hashtables[i]->task_map_ht);
         parsec_hash_table_fini(task_class_hashtables[i]->task_map_ht);
@@ -3421,6 +3479,31 @@ int destroy_task_class_hashtables(parsec_context_t *context)
     context->task_class_hashtables = NULL;
 }
 
+parsec_ontask_iterate_t
+elastic_test(parsec_execution_stream_t *eu,
+    const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
+    const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
+    int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
+    parsec_key_t successor_repo_key, void *param)
+{
+    (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
+    (void)successor_repo; (void) successor_repo_key;
+
+    char tmp[MAX_TASK_STRLEN];
+
+    mig_task_mapping_item_t* was_received = find_received_tasks_details(newcontext);
 
 
+    parsec_key_t key = newcontext->task_class->make_key(newcontext->taskpool, newcontext->locals);
+    if( NULL ==  was_received) {
+        printf("ELASTIC-MSG Fail: Task %s with key %d is not found on node %d \n",
+            parsec_task_snprintf(tmp, MAX_TASK_STRLEN, newcontext), key);   
+    }
+    else {
+        printf("ELASTIC-MSG Success: Task %s with key %d is found on node %d  victim = %d, thief = %d\n",
+            parsec_task_snprintf(tmp, MAX_TASK_STRLEN, newcontext), key, my_rank, 
+            was_received->victim, was_received->thief); 
+    }
+    return PARSEC_ITERATE_CONTINUE;
 
+}

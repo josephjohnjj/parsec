@@ -153,4 +153,11 @@ parsec_ontask_iterate_t  mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t
 mig_task_mapping_item_t* find_migrated_tasks_details(const parsec_task_t *task);
 int create_direct_message_ht(parsec_taskpool_t* tp);
 int destroy_direct_message_ht(parsec_taskpool_t* tp);
+int destroy_task_class_hashtables(parsec_context_t *context);
+int create_task_class_hashtables(parsec_context_t *context);
+parsec_ontask_iterate_t elastic_test(parsec_execution_stream_t *eu,
+    const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
+    const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
+    int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
+    parsec_key_t successor_repo_key, void *param);
 #endif

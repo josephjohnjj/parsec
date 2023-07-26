@@ -1299,8 +1299,6 @@ int parsec_fini( parsec_context_t** pcontext )
 #endif  /* PARSEC_PROF_TRACE */
 
     
-    destroy_task_class_hashtables(context);
-    
     (void) parsec_termdet_fini();
 
     (void) parsec_remote_dep_fini(context);
@@ -1312,6 +1310,8 @@ int parsec_fini( parsec_context_t** pcontext )
     parsec_data_dist_fini();
 
     parsec_mca_device_fini();
+
+    destroy_task_class_hashtables(context);
 
     for(p = 0; p < context->nb_vp; p++) {
         parsec_vp_fini(context->virtual_processes[p]);
@@ -2276,7 +2276,10 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
         }
 
         if(NULL != was_received) {
+            assert(was_migrated->victim == original_dst);
+            assert(was_migrated->thief == get_my_rank());
             assert(dst_rank != original_dst);
+            assert(was_migrated->victim == original_dst);
         }
         
         /* Copying data in data-repo if there is data .
