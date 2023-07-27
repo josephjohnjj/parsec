@@ -1830,7 +1830,8 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             if (parsec_runtime_task_mapping ) {
                 if( NULL != find_received_tasks_details(task)) {
                     printf("Successful_received_tasks \n");
-                    new_context->mig_status = PARSEC_MIGRATED_TASK;
+                    new_context->mig_status = PARSEC_MIGRATED_DIRECT;
+                    pready_ring = &arg->ready_lists[0];
                 }
                 new_context->sources = source_mask; /** Set the intermediate dataflow sources */
             }
@@ -1848,12 +1849,15 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                 *pimmediate_ring = new_context;
 #endif
             } else {
-                *pready_ring = (parsec_task_t*)
+                //*pready_ring = (parsec_task_t*)
                     //parsec_list_item_ring_push_sorted( (parsec_list_item_t*)(*pready_ring),
                     //                                   &new_context->super,
                     //                                   parsec_execution_context_priority_comparator );
-                    parsec_list_item_ring_push_unsorted((parsec_list_item_t*)(*pready_ring),
-                                                       &new_context->super);
+                
+                
+                *pready_ring = (parsec_task_t*) parsec_list_item_ring_push_unsorted((parsec_list_item_t*)(*pready_ring),
+                                    &new_context->super);
+                
             }
         }
     } else { /* Service not ready */

@@ -17,9 +17,11 @@
 #define STEAL_REQ_MSG_SIZE       sizeof(steal_request_msg_t)
 #define MAPPING_INFO_SIZE        sizeof(mig_task_mapping_info_t)
 #define NB_TASK_CLASS_HTS        16
+#define ACK_MSG_SIZE             sizeof(mig_ack_msg_t)
 
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
+#define PARSEC_MIGRATED_DIRECT      (uint8_t)0x02 
 
 #define MAX_NODES           ((uint32_t)1024)
 #define RANKS_PER_INDEX     (sizeof(uint32_t))
@@ -100,6 +102,14 @@ typedef struct mig_task_mapping_info_s
     int victim;
     int task_class_id;
 } mig_task_mapping_info_t;
+
+typedef struct mig_ack_msg_s {
+    uint32_t             taskpool_id;
+    uint32_t             task_class_id;
+    int                  victim;
+    int                  thief;
+    parsec_assignment_t  locals[MAX_LOCAL_COUNT];
+} mig_ack_msg_t;
 
 int parsec_node_migrate_init(parsec_context_t* context );
 int parsec_node_migrate_fini();

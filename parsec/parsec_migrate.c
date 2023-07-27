@@ -123,9 +123,6 @@ static void mig_direct_no_get_start(parsec_execution_stream_t* es,
                                      parsec_remote_deps_t* deps);
 static int 
 check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin);
-static int
-receive_task_mapping_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data);
 int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_task_t *task,
     int victim, int thief);
 mig_task_mapping_item_t* insert_migrated_tasks_details(parsec_task_t *task, int victim, int thief);
@@ -137,6 +134,8 @@ parsec_ontask_iterate_t elastic_test(parsec_execution_stream_t *eu,
     const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
     int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
     parsec_key_t successor_repo_key, void *param);
+static int mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+    void *msg, size_t msg_size, int src, void *cb_data);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -322,14 +321,6 @@ int parsec_node_migrate_init(parsec_context_t *context)
         return rc;
     }
 
-    rc = parsec_ce.tag_register(PARSEC_MIG_ACK_MAPPING, receive_task_mapping_ack_cb, context, MAPPING_INFO_SIZE * sizeof(char));
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_ACK_MAPPING (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_ACK_MAPPING);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
     rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context, SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG (error %d)\n", rc);
@@ -342,6 +333,14 @@ int parsec_node_migrate_init(parsec_context_t *context)
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NO_GET_DATA_TAG (error %d)\n", rc);
         parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+    rc = parsec_ce.tag_register(PARSEC_MIG_ACK_TASK_RECEPTION, mig_recieve_task_ack_cb, context,
+                                ACK_MSG_SIZE * sizeof(char) );
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_ACK_TASK_RECEPTION (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_ACK_TASK_RECEPTION);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -732,7 +731,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                     gpu_task = (parsec_gpu_task_t *)item;
 
                     if ((gpu_task != NULL) && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) &&
-                        (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) &&
+                        (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) &&
                         (gpu_task->ec->task_class->task_class_id == 5)) {
 
                         item = parsec_list_nolock_remove(list, item);
@@ -790,6 +789,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                 item = parsec_list_nolock_remove(ring, item);
                 PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
                 assert(gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK);
+                assert(gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT);
 
                 if (NULL != gpu_task) {
                     /** for each task add the details of the task to be migrated to the buff */
@@ -797,9 +797,6 @@ int process_steal_request(parsec_execution_stream_t *es)
                     deps = prepare_task_details_msg(es, gpu_task, steal_request->msg.root, buff, buffer_size, &position );
 
                     if(parsec_runtime_task_mapping) {
-                        /** send the new task mapping to the predecessors*/
-                        assert(steal_request->msg.root != my_rank);
-                        send_task_mapping_info_to_predecessor(es, gpu_task->ec, my_rank, steal_request->msg.root);
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, my_rank, steal_request->msg.root);
                     }
@@ -1631,6 +1628,9 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         assert(5 == task->task_class->task_class_id );
 
         insert_received_tasks_details(task, origin->from, my_rank);
+
+        /** send task acknowledgement to the victim */
+        send_task_reception_ack(es, task, origin->from /*victim */, my_rank /* thief*/);
     }
 
     /** schedule the migrated tasks */
@@ -2180,14 +2180,14 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     int victim, int thief)
 {
     int src_rank = 0;
-    int32_t source_mask = (int32_t)task->sources;
     mig_task_mapping_info_t mapping_info;
     int total_info_send =  0;
     parsec_taskpool_t *tp = task->taskpool;
-
-    assert(source_mask == parsec_find_sources(es, task));
-    assert(source_mask != 0);
     assert(NULL != tp);
+
+    int32_t source_mask = parsec_find_sources(es, task);
+    assert(source_mask != 0);
+    
     assert(0 <= victim && victim < get_nb_nodes());
     assert(0 <= thief && thief < get_nb_nodes());
     assert(victim != thief);
@@ -2212,7 +2212,6 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
         else {
             send_task_mapping_info(es, task, &mapping_info, src_rank);
             total_info_send++;
-            remote_dep_inc_flying_messages(task->taskpool);
         }
         
     }
@@ -2304,23 +2303,6 @@ int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *t
     return 0;
 }
 
-int send_task_mapping_ack(parsec_execution_stream_t *eu, mig_task_mapping_info_t *mapping_info, 
-    int src)                            
-{
-    char packed_buffer[MAPPING_INFO_SIZE];
-    int saved_position = 0, dsize = 0;
-
-    parsec_ce.pack_size(&parsec_ce, MAPPING_INFO_SIZE, parsec_datatype_int8_t, &dsize);
-    parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, MAPPING_INFO_SIZE, &saved_position);
-
-    assert(saved_position == dsize);
-    assert(MAPPING_INFO_SIZE == dsize);
-
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_ACK_MAPPING, src, packed_buffer, saved_position);
-
-    return 0;
-}
-
 static int
 update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data)
@@ -2341,36 +2323,9 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
     update_task_mapping(taskpool, &mapping_info, src);
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
-
-    parsec_execution_stream_t* es = &parsec_comm_es;
-    send_task_mapping_ack(es, &mapping_info, src);
     
     return 0;
 }
-
-static int
-receive_task_mapping_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data)
-{
-    int position = 0, length = msg_size, rc;
-
-    mig_task_mapping_info_t mapping_info;
-    assert( MAPPING_INFO_SIZE == length );
-
-    parsec_ce.unpack(&parsec_ce, msg, length, &position, &mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t);
-    assert(0 <= mapping_info.victim && mapping_info.victim < get_nb_nodes());
-    assert(0 <= mapping_info.thief && mapping_info.thief < get_nb_nodes());
-    assert( position == length );
-
-    parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info.taskpool_id);
-    assert(NULL != taskpool);
-
-    remote_dep_dec_flying_messages(taskpool);
-
-    return 0;
-
-}
-
 
 /**
  * Starting with a particular item pack as many remote_dep_wire_activate
@@ -3507,3 +3462,80 @@ elastic_test(parsec_execution_stream_t *eu,
     return PARSEC_ITERATE_CONTINUE;
 
 }
+
+static int mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
+    void *msg, size_t msg_size, int src, void *cb_data) 
+
+{
+    (void) ce; (void) tag; (void) cb_data; (void) msg_size;
+    mig_ack_msg_t* mig_ack_msg;
+    parsec_remote_deps_t *deps;
+    parsec_execution_stream_t* es = &parsec_comm_es;
+    int i = 0;
+
+    mig_ack_msg = malloc(ACK_MSG_SIZE);
+    /** copy the static message */
+    memcpy(mig_ack_msg, msg, ACK_MSG_SIZE);
+    /* we are expecting exactly one wire_get_t */
+    assert(msg_size == ACK_MSG_SIZE);
+
+    parsec_taskpool_t *tp = parsec_taskpool_lookup(mig_ack_msg->taskpool_id);
+    assert(tp != NULL);
+
+    parsec_task_t task;
+    task.taskpool   = tp;
+    task.task_class = task.taskpool->task_classes_array[mig_ack_msg->task_class_id];
+    for(i = 0; i < task.task_class->nb_locals; i++) {
+        task.locals[i] = mig_ack_msg->locals[i];
+    }
+    assert(mig_ack_msg->victim == my_rank);
+    assert(mig_ack_msg->thief == src);
+    assert(src != my_rank);
+    assert(0 <= src && src < get_nb_nodes());
+    assert(0 <= my_rank && my_rank < get_nb_nodes());
+
+    tp->tdm.module->incoming_message_start(tp, src, mig_ack_msg, NULL /*not imp today*/,
+        0 /*not imp today*/, NULL);
+    
+    /** send the new task mapping to the predecessors*/
+    
+
+    send_task_mapping_info_to_predecessor(es, &task, my_rank /** victim */, src /** thief */);
+
+    tp->tdm.module->incoming_message_end(tp, NULL /*not imp today*/);
+
+}
+
+int send_task_reception_ack(parsec_execution_stream_t* es,  parsec_task_t* task,
+    int victim, int thief)
+{
+    int i = 0; 
+    parsec_taskpool_t *tp = task->taskpool; 
+    assert(tp != NULL);
+
+    assert(victim != thief);
+    assert(thief == my_rank);
+    assert(0 <= victim && victim < get_nb_nodes());
+    assert(0 <= thief && thief < get_nb_nodes());
+
+    mig_ack_msg_t mig_ack_msg;
+    mig_ack_msg.task_class_id  = task->task_class->task_class_id;
+    mig_ack_msg.taskpool_id =  tp->taskpool_id;
+    for(i = 0; i  < task->task_class->nb_locals; i++) {
+        mig_ack_msg.locals[i]  = task->locals[i];
+    }
+    mig_ack_msg.victim = victim;
+    mig_ack_msg.thief  = thief;
+
+    char packed_buffer[ACK_MSG_SIZE];
+    int saved_position = 0, dsize = 0;
+
+    parsec_ce.pack_size(&parsec_ce, ACK_MSG_SIZE, parsec_datatype_int8_t, &dsize);
+    assert(dsize == ACK_MSG_SIZE);
+    parsec_ce.pack(&parsec_ce, &mig_ack_msg, ACK_MSG_SIZE, parsec_datatype_int8_t, packed_buffer, ACK_MSG_SIZE, &saved_position);
+    assert(saved_position ==  ACK_MSG_SIZE);
+
+    tp->tdm.module->outgoing_message_start(tp, victim, NULL /*not imp today*/);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_ACK_TASK_RECEPTION, victim, packed_buffer, saved_position);
+}
+

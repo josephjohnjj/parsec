@@ -284,8 +284,13 @@ parsec_list_item_ring_push_unsorted( parsec_list_item_t* ring,
         return item;
     }
 
+    assert( (parsec_list_item_t*)(void*)0xdeadbeefL != ring->list_next );
+    assert( (parsec_list_item_t*)(void*)0xdeadbeefL != ring->list_prev );
+    assert(item->list_next == item);
+    assert(item->list_prev == item);
+
     parsec_list_item_ring_push(ring, item);
-    return ring;
+    return item;
 }
 
 /* This is debug helpers for list items accounting */
