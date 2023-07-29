@@ -333,7 +333,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
-    
+
     rc = parsec_ce.tag_register(PARSEC_MIG_STEAL_REQUEST_TAG, recieve_steal_request, context,
                                 STEAL_REQ_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
@@ -2680,7 +2680,7 @@ static void mig_direct_recv_activate(parsec_execution_stream_t* es, parsec_remot
     if(NULL != deps) {
         assert(0 != deps->incoming_mask);
         assert(0 != deps->msg.output_mask);
-        parsec_list_nolock_push_sorted(&direct_activates_fifo, (parsec_list_item_t*)deps, rdep_prio);
+        parsec_list_push_sorted(&direct_activates_fifo, (parsec_list_item_t*)deps, rdep_prio);
     }
 
     /* Check if we have any pending GET orders */
@@ -2695,7 +2695,7 @@ static void mig_direct_recv_no_activate(parsec_execution_stream_t* es,
 {
 
     assert(NULL != deps); 
-    parsec_list_nolock_push_sorted(&direct_no_activates_fifo, (parsec_list_item_t*)deps, rdep_prio);
+    parsec_list_push_sorted(&direct_no_activates_fifo, (parsec_list_item_t*)deps, rdep_prio);
     
     /* Check if we have any pending GET orders */
     if(parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&direct_no_activates_fifo)) {
