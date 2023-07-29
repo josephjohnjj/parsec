@@ -134,8 +134,7 @@ static int
 mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data);
 static int 
-mig_direct_get_datatypes(parsec_execution_stream_t* es, parsec_remote_deps_t* origin,
-    int storage_id, int *position);
+mig_direct_get_datatypes(parsec_execution_stream_t* es, parsec_remote_deps_t* origin);
 parsec_ontask_iterate_t
 mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
@@ -1386,10 +1385,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
         parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
 
         if( deps->msg.taskpool_id == obj->taskpool_id ) {
-            char* buffer = (char*)deps->taskpool;  /* get back the buffer from the "temporary" storage */
             deps->taskpool = NULL;
-            int rc, position = 0;
-            rc = mig_direct_get_datatypes(es, deps, 0, &position); 
+            int rc = mig_direct_get_datatypes(es, deps); 
             assert( -1 != rc );
 
             if (NULL != check_deps_received(es, deps)) {
@@ -2470,7 +2467,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     /* Retrieve the data arenas and update the msg.incoming_mask to reflect
      * the data we should be receiving from the predecessor.
      */
-    rc = mig_direct_get_datatypes(es, deps, 0, &position);
+    rc = mig_direct_get_datatypes(es, deps);
     if( -1 == rc ) {
         parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
         printf("To_direct_msg_fifo \n");
@@ -2493,8 +2490,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 }
 
 static int
-mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* origin,
-    int storage_id, int *position)
+mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* origin)
 {
     uint32_t i, j, k, local_mask = 0, rc = -1;
 
