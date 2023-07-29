@@ -1829,7 +1829,13 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             new_context->mig_status = PARSEC_NON_MIGRATED_TASK;
             if (parsec_runtime_task_mapping ) {
                 if( NULL != find_received_tasks_details(task)) {
-                    printf("Successful_received_tasks \n");
+
+                #if defined(PARSEC_DEBUG)
+                    char tmp3[MAX_TASK_STRLEN];
+                    printf("ELASTIC-MSG  Rank %d  : Activation %s becomes ready from direct deps\n", 
+                        get_my_rank(), parsec_task_snprintf(tmp3, MAX_TASK_STRLEN, task));
+                #endif 
+                        
                     new_context->mig_status = PARSEC_MIGRATED_DIRECT;
                     pready_ring = &arg->ready_lists[0];
                 }

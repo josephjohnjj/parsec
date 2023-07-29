@@ -1046,6 +1046,7 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
         return origin;
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
+    printf("FLYTHING MSG: PARSEC_CE_REMOTE_DEP_ACTIVATE_TAG End \n");
     
     /**
      * All incoming data are now received, start the propagation. We first
@@ -1829,6 +1830,7 @@ static void remote_dep_mpi_recv_activate(parsec_execution_stream_t* es,
            deps->msg.length, *position, length, deps->max_priority);
 #endif
 
+    printf("FLYTHING MSG: PARSEC_CE_REMOTE_DEP_ACTIVATE_TAG Start \n");
     deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, packed_buffer, position,
                                                        length, deps);
         
@@ -1973,6 +1975,9 @@ remote_dep_mpi_new_taskpool(parsec_execution_stream_t* es,
             (void)rc;
         }
     }
+
+    mig_new_taskpool(es, dep_cmd_item);
+
     remote_dep_dec_flying_messages(obj);
 }
 

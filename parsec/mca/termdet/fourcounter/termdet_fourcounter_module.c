@@ -528,6 +528,7 @@ static int parsec_termdet_fourcounter_outgoing_message_start(parsec_taskpool_t *
                                                              int dst_rank,
                                                              parsec_remote_deps_t *remote_deps)
 {
+    printf(" OVERLORD: parsec_termdet_fourcounter_outgoing_message_start \n");
     parsec_termdet_fourcounter_monitor_t *tpm;
     assert( tp->tdm.module != NULL );
     assert( tp->tdm.module == &parsec_termdet_fourcounter_module.module );
@@ -566,6 +567,7 @@ static int parsec_termdet_fourcounter_incoming_message_start(parsec_taskpool_t *
                                                              int buffer_size,
                                                              const parsec_remote_deps_t *msg)
 {
+    printf(" OVERLORD: parsec_termdet_fourcounter_incoming_message_start \n");
     parsec_termdet_fourcounter_monitor_t *tpm;
     assert( tp->tdm.module != NULL );
     assert( tp->tdm.module == &parsec_termdet_fourcounter_module.module );
@@ -600,6 +602,7 @@ static int parsec_termdet_fourcounter_incoming_message_start(parsec_taskpool_t *
 static int parsec_termdet_fourcounter_incoming_message_end(parsec_taskpool_t *tp,
                                                            const parsec_remote_deps_t *msg)
 {
+    printf(" OVERLORD: parsec_termdet_fourcounter_incoming_message_end \n");
     parsec_termdet_fourcounter_monitor_t *tpm;
     (void)msg;
 
