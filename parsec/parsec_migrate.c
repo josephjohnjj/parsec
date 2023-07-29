@@ -333,6 +333,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+    
     rc = parsec_ce.tag_register(PARSEC_MIG_STEAL_REQUEST_TAG, recieve_steal_request, context,
                                 STEAL_REQ_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
@@ -341,6 +342,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
     rc = parsec_ce.tag_register(PARSEC_MIG_DEP_GET_DATA_TAG, migrate_dep_mpi_save_put_cb, context,
                                 4096);
     if (PARSEC_SUCCESS != rc) {
@@ -349,10 +351,11 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
-    rc = parsec_ce.tag_register(PARSEC_MIG_INFORM_PREDECESSOR_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_NEW_MAPPING_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_INFORM_PREDECESSOR_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NEW_MAPPING_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_NEW_MAPPING_TAG);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -364,6 +367,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
     rc = parsec_ce.tag_register(PARSEC_MIG_NO_GET_DATA_TAG, mig_no_put_cb, context,
                                 SINGLE_ACTIVATE_MSG_SIZE * sizeof(char) );
     if (PARSEC_SUCCESS != rc) {
@@ -372,6 +376,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
+
     rc = parsec_ce.tag_register(PARSEC_MIG_ACK_TASK_RECEPTION, mig_recieve_task_ack_cb, context,
                                 ACK_MSG_SIZE * sizeof(char) );
     if (PARSEC_SUCCESS != rc) {
@@ -538,9 +543,13 @@ int parsec_node_migrate_fini()
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
-    parsec_ce.tag_unregister(PARSEC_MIG_INFORM_PREDECESSOR_TAG);
+    parsec_ce.tag_unregister(PARSEC_MIG_ACK_TASK_RECEPTION);
+    parsec_ce.tag_unregister(PARSEC_MIG_NEW_MAPPING_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
+    
+    
+    
     
     free(device_progress_counter);
 
@@ -2365,9 +2374,9 @@ int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *t
     assert(saved_position == dsize);
     assert(MAPPING_INFO_SIZE == dsize);
 
-    printf("FLYTHING MSG: PARSEC_MIG_INFORM_PREDECESSOR_TAG Start %x\n");
+    printf("FLYTHING MSG: PARSEC_MIG_NEW_MAPPING_TAG Start %x\n");
     task->taskpool->tdm.module->outgoing_message_start(task->taskpool, src, NULL);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_INFORM_PREDECESSOR_TAG, src, packed_buffer, saved_position);
+    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_NEW_MAPPING_TAG, src, packed_buffer, saved_position);
 
     return 0;
 }
@@ -2389,13 +2398,13 @@ update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info.taskpool_id);
     assert(NULL != taskpool);
 
-    printf(" FLYTHING MSG: PARSEC_MIG_INFORM_PREDECESSOR_TAG Start");
+    printf(" FLYTHING MSG: PARSEC_MIG_NEW_MAPPING_TAG Start");
     taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
 
     update_task_mapping(taskpool, &mapping_info, src);
     
     taskpool->tdm.module->incoming_message_end(taskpool, NULL);
-    printf(" FLYTHING MSG: PARSEC_MIG_INFORM_PREDECESSOR_TAG End");
+    printf(" FLYTHING MSG: PARSEC_MIG_NEW_MAPPING_TAG End");
 
     
     
