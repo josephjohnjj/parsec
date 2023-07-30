@@ -158,12 +158,6 @@ update_task_mapping(parsec_taskpool_t* tp, mig_task_mapping_info_t *mapping_info
 int 
 send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
     mig_task_mapping_info_t *mapping_info, int src);
-parsec_ontask_iterate_t 
-elastic_test(parsec_execution_stream_t *eu,
-    const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
-    const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
-    int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
-    parsec_key_t successor_repo_key, void *param);
 static int 
 mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data);
@@ -2542,36 +2536,6 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
                                             mig_dep_mpi_retrieve_datatype,
                                             origin);
     }
-#if defined(PARSEC_DEBUG)
-    if((origin->outgoing_mask == 0)) {
-
-        for(k = 0; origin->msg.output_mask>>k; k++) {
-            if(!(origin->msg.output_mask & (1U<<k))) continue;
-            for(local_mask = i = 0; NULL != task.task_class->out[i]; i++ ) {
-                if(!(task.task_class->out[i]->flow_datatype_mask & (1U<<k))) continue;
-                for(j = 0; NULL != task.task_class->out[i]->dep_out[j]; j++ )
-                    if(k == task.task_class->out[i]->dep_out[j]->dep_datatype_index)
-                        local_mask |= (1U << task.task_class->out[i]->dep_out[j]->dep_index);
-                if( 0 != local_mask ) break;  /* we have our local mask, go get the datatype */
-            }
-
-            char tmp[MAX_TASK_STRLEN];
-            printf("ELASTIC-MSG Rank %d Start elastic_test: Task %s with local_mask %d is found on node %d \n",
-                my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, &task), local_mask, my_rank);
-
-            origin->output[k].data.remote.src_datatype = origin->output[k].data.remote.dst_datatype = PARSEC_DATATYPE_NULL;
-            PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "MPI:\tRetrieve datatype with mask 0x%x (remote_dep_get_datatypes)", local_mask);
-            task.task_class->iterate_successors(es, &task,
-                                            local_mask,
-                                            elastic_test,
-                                            origin);
-
-            printf("ELASTIC-MSG Rank %d End elastic_test: Task %s with local_mask %d is found on node %d \n",
-                my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, &task), local_mask, my_rank);
-        }
-        
-    }
-#endif
 
     /** make sure we have atleast one migrated task  with this
      * task as the predecessor */
@@ -3553,34 +3517,6 @@ int destroy_task_class_hashtables(parsec_context_t *context)
     context->task_class_hashtables = NULL;
 }
 
-parsec_ontask_iterate_t
-elastic_test(parsec_execution_stream_t *eu,
-    const parsec_task_t *newcontext, const parsec_task_t *oldcontext,
-    const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
-    int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
-    parsec_key_t successor_repo_key, void *param)
-{
-    (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
-    (void)successor_repo; (void) successor_repo_key;
-
-    char tmp[MAX_TASK_STRLEN];
-
-    mig_task_mapping_item_t* was_received = find_received_tasks_details(newcontext);
-
-
-    parsec_key_t key = newcontext->task_class->make_key(newcontext->taskpool, newcontext->locals);
-    if( NULL ==  was_received) {
-        printf("ELASTIC-MSG Rank %d: Fail, Task %s with key %d is not found on node %d \n",
-            my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, newcontext), key);   
-    }
-    else {
-        printf("ELASTIC-MSG Rank %d,   Success: Task %s with key %d is found on node %d  victim = %d, thief = %d\n",
-            my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, newcontext), key, my_rank, 
-            was_received->victim, was_received->thief); 
-    }
-    return PARSEC_ITERATE_CONTINUE;
-
-}
 
 static int mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     void *msg, size_t msg_size, int src, void *cb_data) 
