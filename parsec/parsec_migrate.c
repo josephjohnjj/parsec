@@ -776,11 +776,11 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
-                        //&& (my_rank == 0) 
-                        //&& (0 == only_one_task)
+                        //&& (my_rank == 1) 
+                        //&& (only_one_task < 1)
                     ) {
 
-                        only_one_task = 1;
+                        only_one_task += 1;
 
                         item = parsec_list_nolock_remove(list, item);
                         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
@@ -2073,7 +2073,7 @@ mig_task_mapping_item_t* find_migrated_tasks_details(const parsec_task_t *task)
         return NULL;
     }
 
-    assert(task->task_class->task_class_id != item->task_class_id);
+    assert(task->task_class->task_class_id == item->task_class_id);
     assert(0 <= item->victim && item->victim < get_nb_nodes());
     assert(0 <= item->thief && item->thief < get_nb_nodes());
 

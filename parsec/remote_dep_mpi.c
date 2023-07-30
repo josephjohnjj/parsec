@@ -741,6 +741,14 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     if( dst_rank != eu->virtual_process->parsec_context->my_rank )
         return PARSEC_ITERATE_CONTINUE;
 
+    if(parsec_runtime_task_mapping){
+        mig_task_mapping_item_t* was_migrated = find_migrated_tasks_details(newcontext);
+        /** we are only interested in task that were not migrated in the previous iteration */
+        if( NULL !=  was_migrated) {
+            return PARSEC_ITERATE_CONTINUE;
+    }
+    }
+
     parsec_remote_deps_t *deps               = (parsec_remote_deps_t*)param;
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
     const parsec_task_class_t* fct           = newcontext->task_class;
