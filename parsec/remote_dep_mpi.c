@@ -745,6 +745,10 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
         mig_task_mapping_item_t* was_migrated = find_migrated_tasks_details(newcontext);
         /** we are only interested in task that were not migrated in the previous iteration */
         if( NULL !=  was_migrated) {
+            assert(was_migrated->thief != get_my_rank());
+            assert(was_migrated->victim == get_my_rank());
+            assert(dst_rank == get_my_rank());
+
             return PARSEC_ITERATE_CONTINUE;
     }
     }

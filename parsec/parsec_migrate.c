@@ -2258,8 +2258,6 @@ int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_
     
 
     for (src_rank = 0; source_mask >> src_rank; src_rank++) {
- 
-
         if (!((1U << src_rank) & source_mask)) {
             continue;
         }
@@ -3548,6 +3546,7 @@ static int mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag
     assert(src != my_rank);
     assert(0 <= src && src < get_nb_nodes());
     assert(0 <= my_rank && my_rank < get_nb_nodes());
+    assert(NULL != find_migrated_tasks_details(&task));
 
 
     /** send the new task mapping to the predecessors*/
