@@ -1011,7 +1011,7 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
         task.data[target->flow_index].data_in   = origin->output[i].data.data;
         task.data[target->flow_index].data_out  = origin->output[i].data.data;
     }
-
+#if 0
 #ifdef PARSEC_DIST_COLLECTIVES
     /* Corresponding comment below on the propagation part */
     if(0 == origin->incoming_mask && PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
@@ -1019,6 +1019,7 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
         (void)parsec_atomic_fetch_inc_int32(&origin->pending_ack);
     }
 #endif  /* PARSEC_DIST_COLLECTIVES */
+#endif
 
     if(PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
         /* We need to convert from a dep_datatype_index mask into a dep_index mask */
@@ -1083,10 +1084,12 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
         }
     }
 
+#if 0
 #if defined(PARSEC_DIST_COLLECTIVES)
     if( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type ) /* indicates it is a PTG taskpool */
         parsec_remote_dep_propagate(es, &task, origin);
 #endif  /* PARSEC_DIST_COLLECTIVES */
+#endif
     /**
      * Release the dependency owned by the communication engine for all data
      * internally allocated by the engine.
@@ -1102,6 +1105,7 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
                              origin->output[i].data.data, origin->output[i].data.data->super.super.obj_reference_count, origin->output[i].data.data->original);
         }
     }
+#if 0
 #if defined(PARSEC_DIST_COLLECTIVES)
     if(PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type) {
         remote_dep_complete_and_cleanup(&origin, 1);
@@ -1111,6 +1115,9 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
 #else
     remote_deps_free(origin);
 #endif  /* PARSEC_DIST_COLLECTIVES */
+#endif
+
+remote_deps_free(origin);
 
     return NULL;
 }
@@ -1906,6 +1913,8 @@ remote_dep_mpi_save_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         deps->from = src;
         deps->eager_msg = msg;
         deps->root = deps->msg.root;
+
+        assert(deps->root == deps->from);
 
         /* Retrieve the data arenas and update the msg.incoming_mask to reflect
          * the data we should be receiving from the predecessor.

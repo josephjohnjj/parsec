@@ -1351,53 +1351,59 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
     parsec_list_item_t *item;
     int rc;
 
-    parsec_list_lock(&mig_noobj_fifo);
-    for(item = PARSEC_LIST_ITERATOR_FIRST(&mig_noobj_fifo);
-        item != PARSEC_LIST_ITERATOR_END(&mig_noobj_fifo);
-        item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
-
-        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
-
-        if( deps->msg.taskpool_id == obj->taskpool_id ) {
-            deps->taskpool = NULL;
-            rc = remote_dep_get_datatypes_of_mig_task(es, deps); 
-
-            assert( -1 != rc );
-            assert(deps->taskpool != NULL);
+    if(parsec_runtime_node_migrate_tasks) {
         
-            item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
-            get_mig_task_data(es, deps);
+        parsec_list_lock(&mig_noobj_fifo);
+        for(item = PARSEC_LIST_ITERATOR_FIRST(&mig_noobj_fifo);
+            item != PARSEC_LIST_ITERATOR_END(&mig_noobj_fifo);
+            item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
+
+            parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
+
+            if( deps->msg.taskpool_id == obj->taskpool_id ) {
+                deps->taskpool = NULL;
+                rc = remote_dep_get_datatypes_of_mig_task(es, deps); 
+
+                assert( -1 != rc );
+                assert(deps->taskpool != NULL);
+        
+                item = parsec_list_nolock_remove(&mig_noobj_fifo, item);
+                get_mig_task_data(es, deps);
+            }
         }
+        parsec_list_unlock(&mig_noobj_fifo);
     }
-    parsec_list_unlock(&mig_noobj_fifo);
 
-    parsec_list_lock(&direct_msg_fifo);
-    for(item = PARSEC_LIST_ITERATOR_FIRST(&direct_msg_fifo);
-        item != PARSEC_LIST_ITERATOR_END(&direct_msg_fifo);
-        item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
+    if(parsec_runtime_task_mapping) {
 
-        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
+        parsec_list_lock(&direct_msg_fifo);
+        for(item = PARSEC_LIST_ITERATOR_FIRST(&direct_msg_fifo);
+            item != PARSEC_LIST_ITERATOR_END(&direct_msg_fifo);
+            item = PARSEC_LIST_ITERATOR_NEXT(item) ) {
 
-        if( deps->msg.taskpool_id == obj->taskpool_id ) {
-            deps->taskpool = NULL;
-            int rc = mig_direct_get_datatypes(es, deps); 
-            assert( -1 != rc );
+            parsec_remote_deps_t* deps = (parsec_remote_deps_t*)item;
 
-            if (NULL != check_deps_received(es, deps)) {
-                /** The same message was received from someone else */
-                mig_direct_recv_no_activate(es, deps);
-                printf("check_deps_received 2 \n");
-            }
-            else {
-                insert_remote_direct_msg_details(es, deps);
-                mig_direct_recv_activate(es, deps);
-            }
+            if( deps->msg.taskpool_id == obj->taskpool_id ) {
+                deps->taskpool = NULL;
+                int rc = mig_direct_get_datatypes(es, deps); 
+                assert( -1 != rc );
 
-            item = parsec_list_nolock_remove(&direct_msg_fifo, item);
+                if (NULL != check_deps_received(es, deps)) {
+                    /** The same message was received from someone else */
+                    mig_direct_recv_no_activate(es, deps);
+                    printf("check_deps_received 2 \n");
+                }
+                else {
+                    insert_remote_direct_msg_details(es, deps);
+                    mig_direct_recv_activate(es, deps);
+                }
+
+                item = parsec_list_nolock_remove(&direct_msg_fifo, item);
             
+            }
         }
+        parsec_list_unlock(&direct_msg_fifo);
     }
-    parsec_list_unlock(&direct_msg_fifo);
 }
 
 static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
