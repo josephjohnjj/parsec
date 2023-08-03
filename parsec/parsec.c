@@ -2121,7 +2121,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
 
-            assert(arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS);
+            assert(!(arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS));
             assert(arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS);
 
             struct remote_dep_output_param_s* output;
