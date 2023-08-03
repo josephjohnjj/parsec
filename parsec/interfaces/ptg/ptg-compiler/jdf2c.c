@@ -7231,10 +7231,11 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                 "   }\n",
                 jdf_basename, f->fname);
 
-        coutput("  iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_fct, &arg);\n",
+        coutput("  if(!(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) ){\n");
+        coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_fct, &arg);\n",
                 jdf_basename, f->fname);
-        coutput("  iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_direct_fct, &arg);\n"
-                 "\n",
+        coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_direct_fct, &arg);\n"
+                 "   }\n",
                 jdf_basename, f->fname);
 
 

@@ -3406,33 +3406,30 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     struct remote_dep_output_param_s* output = &deps->output[dep->dep_datatype_index];
     int _array_pos  = 0;
     int _array_mask = 0;
-    mig_task_mapping_item_t* new_mapping = NULL;
+    mig_task_mapping_item_t* was_migrated = NULL;
 
-    if(!parsec_runtime_task_mapping) {
-        return PARSEC_ITERATE_STOP;
-    }
-
-    if( dst_rank == es->virtual_process->parsec_context->my_rank )
-        deps->outgoing_mask |= (1 << dep->dep_datatype_index);
-
-    new_mapping = find_task_mapping(newcontext);
-    if( NULL == new_mapping) {
-        /** I have no information about this task being migrated. 
-         * I am only intrested in task with a new mapping.
-         */
+    was_migrated = find_migrated_tasks_details(newcontext);
+    if( NULL == was_migrated) {
         return PARSEC_ITERATE_CONTINUE;
     }
 
-    /** I was the thief and I was also one of the intermediate nodes. */
-    if(new_mapping->thief == my_rank) {
-       return PARSEC_ITERATE_CONTINUE;
-    }
+    char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
+    parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
+    parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
+    printf("ELASTIC-MSG Rank %d: Task %s was MIGRATED (predecessor %s) from victim %d to thief %d tp_id %d for flow %d from PROPOGATION (deps from %d root %d)\n",
+        get_my_rank(), tmp1, tmp2, was_migrated->victim, was_migrated->thief, 
+        oldcontext->taskpool->taskpool_id, dep->flow->flow_index,
+        deps->from, deps->root);
 
-    assert(new_mapping->thief != my_rank);
-    assert(new_mapping->thief != dst_rank);  
-    assert(new_mapping->thief != new_mapping->victim);   
 
-    dst_rank = new_mapping->thief ;
+    assert( dst_rank == es->virtual_process->parsec_context->my_rank );
+    assert(was_migrated->thief != my_rank);
+    assert(was_migrated->thief != dst_rank);  
+    assert(was_migrated->victim == my_rank); 
+
+    deps->outgoing_mask |= (1 << dep->dep_datatype_index);
+
+    dst_rank = was_migrated->thief ;
     assert(0 <= dst_rank && dst_rank < get_nb_nodes());
 
     _array_pos  = dst_rank / (8 * sizeof(uint32_t));
@@ -3443,7 +3440,7 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
         output->deps_mask |= (1 << dep->dep_index);
         output->count_bits_direct++;
     }
-    
+
     if(newcontext->priority > output->priority) {  /* select the priority */
         output->priority = newcontext->priority;
         if(newcontext->priority > deps->max_priority)
@@ -3452,6 +3449,7 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     (void)oldcontext; (void)dst_vpid; (void)data; (void)src_rank;
     return PARSEC_ITERATE_CONTINUE;
 }
+
 
 int create_task_class_hashtables(parsec_context_t *context) 
 {

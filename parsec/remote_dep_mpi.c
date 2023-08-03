@@ -1058,6 +1058,13 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     if(0 != origin->incoming_mask)  /* not done receiving */
         return origin;
 
+    /** to propogate the data to migrated tasks */
+    if(parsec_runtime_task_mapping) {
+        remote_dep_inc_flying_messages(task.taskpool);
+        assert(0 == origin->pending_ack);
+        (void)parsec_atomic_fetch_inc_int32(&origin->pending_ack);
+    }
+
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
     printf("FLYTHING MSG: PARSEC_CE_REMOTE_DEP_ACTIVATE_TAG End \n");
     
@@ -1090,6 +1097,10 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
         parsec_remote_dep_propagate(es, &task, origin);
 #endif  /* PARSEC_DIST_COLLECTIVES */
 #endif
+
+    if(parsec_runtime_task_mapping) {
+        parsec_direct_dep_propagate(es, &task, origin);
+    }
     /**
      * Release the dependency owned by the communication engine for all data
      * internally allocated by the engine.
@@ -1117,7 +1128,19 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
 #endif  /* PARSEC_DIST_COLLECTIVES */
 #endif
 
-remote_deps_free(origin);
+    if(parsec_runtime_task_mapping) {
+        parsec_atomic_fetch_dec_int32(&origin->pending_ack);
+        if(0 == origin->outgoing_mask)  {
+            /** no data to propogate to migrated tasks */
+            remote_deps_free(origin);    
+        }
+        remote_dep_dec_flying_messages(task.taskpool);
+    }
+    else {
+       origin->outgoing_mask = 0;
+       origin->incoming_mask = 0;
+       remote_deps_free(origin); 
+    }
 
     return NULL;
 }

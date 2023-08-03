@@ -528,16 +528,68 @@ int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
         assert(0 <= deps->root && deps->root < get_nb_nodes());
         assert(0 <= deps->from && deps->from < get_nb_nodes());
     #endif
-
-        tc->iterate_successors(es, task,
-                           dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
-                           parsec_gather_direct_collective_pattern,
-                           deps);
     }
 
     return parsec_remote_dep_activate(es, task, deps, deps->msg.output_mask);
 }
 #endif
+
+
+int parsec_direct_dep_propagate(parsec_execution_stream_t* es,
+                                const parsec_task_t* task,
+                                parsec_remote_deps_t* deps)
+{
+    const parsec_task_class_t* tc = task->task_class;
+    uint32_t dep_mask = 0;
+
+    assert(deps->root != es->virtual_process->parsec_context->my_rank );
+    /* If I am not the root of the collective I must rebuild the same
+     * information as the root, i.e. the exact same propagation tree as the
+     * initiator.
+     */
+    assert(0 == deps->outgoing_mask);
+
+    /* We need to convert from a dep_datatype_index mask into a dep_index mask */
+    for(int i = 0; NULL != tc->out[i]; i++ )
+        for(int j = 0; NULL != tc->out[i]->dep_out[j]; j++ )
+            if(deps->msg.output_mask & (1U << tc->out[i]->dep_out[j]->dep_datatype_index))
+                dep_mask |= (1U << tc->out[i]->dep_out[j]->dep_index);
+
+    assert(0 <= deps->root && deps->root < get_nb_nodes());
+    assert(0 <= deps->from && deps->from < get_nb_nodes());
+
+#if defined(PARSEC_DEBUG)
+    int t = 0, r = 0;
+    for( t = 0;  t  < parsec_remote_dep_context.max_dep_count; t++)  {
+        for( r = 0; r < get_nb_nodes(); r++) {
+            int _array_pos = r / (8 * sizeof(uint32_t)); 
+            assert(deps->output->rank_bits_direct[_array_pos]  == 0);
+        }
+        assert(deps->output[t].count_bits_direct == 0);
+    }
+    assert(0 <= deps->root && deps->root < get_nb_nodes());
+    assert(0 <= deps->from && deps->from < get_nb_nodes());
+#endif
+
+    tc->iterate_successors(es, task,
+                       dep_mask | PARSEC_ACTION_RELEASE_REMOTE_DEPS,
+                       parsec_gather_direct_collective_pattern,
+                       deps);
+
+    if (0 == deps->outgoing_mask) return;
+    
+    uint32_t propagation_mask = deps->outgoing_mask;
+#if defined(PARSEC_DEBUG)
+    for( int i = 0; propagation_mask >> i; i++ ) {
+        if( !((1U << i) & propagation_mask )) continue;
+        struct remote_dep_output_param_s* output = &deps->output[i];
+        assert(0 == output->count_bits);
+        assert(0 != output->count_bits_direct);
+    }
+#endif
+
+    return parsec_remote_dep_activate(es, task, deps, deps->msg.output_mask);
+}
 
 /**
  *
@@ -690,7 +742,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
 
         if(parsec_runtime_task_mapping) {
             /** Direct data propogation for task that was migrated in the previous iteration */
-            remote_dep_mark_forwarded_direct(es, remote_deps, es->virtual_process->parsec_context->my_rank);
+            //remote_dep_mark_forwarded_direct(es, remote_deps, es->virtual_process->parsec_context->my_rank);
             for( array_index = count = 0; count < remote_deps->output[i].count_bits_direct; array_index++ ) {
                 current_mask = output->rank_bits_direct[array_index];
                 if( 0 == current_mask ) continue;  /* no bits here */
@@ -699,6 +751,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
 
                     int rank = (array_index * sizeof(uint32_t) * 8) + bit_index;
                     assert(0 <= rank && rank < get_nb_nodes());
+                    assert(rank != get_my_rank());
 
                     current_mask ^= (1 << bit_index);
                     count++;
