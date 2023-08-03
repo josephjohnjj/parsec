@@ -1881,18 +1881,17 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     parsec_release_dep_fct_arg_t *arg = (parsec_release_dep_fct_arg_t *)param;
     const parsec_flow_t* src_flow = dep->belongs_to;
     const parsec_flow_t* dst_flow = dep->flow;
-    mig_task_mapping_item_t* new_mapping = NULL;
+ 
     mig_task_mapping_item_t* was_migrated = NULL;
-    mig_task_mapping_item_t* was_received = NULL;
-    int original_dst = dst_rank;
+    if(parsec_runtime_task_mapping) {
+        was_migrated = find_migrated_tasks_details(newcontext);
+        if(NULL != was_migrated) {
+            assert(src_rank == dst_rank);
+            assert(get_my_rank() == dst_rank);
+            assert(was_migrated->thief != dst_rank);
 
-    was_migrated = find_migrated_tasks_details(newcontext);
-    if(NULL != was_migrated) {
-        assert(src_rank == dst_rank);
-        assert(get_my_rank() == dst_rank);
-        assert(was_migrated->thief != dst_rank);
-
-        return PARSEC_ITERATE_CONTINUE;
+            return PARSEC_ITERATE_CONTINUE;
+        }
     }
 
     data_repo_t        *target_repo = arg->output_repo;

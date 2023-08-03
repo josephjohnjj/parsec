@@ -448,18 +448,6 @@ parsec_gather_collective_pattern(parsec_execution_stream_t *es,
     if( dst_rank == es->virtual_process->parsec_context->my_rank )
         deps->outgoing_mask |= (1 << dep->dep_datatype_index);
 
-    if(parsec_runtime_task_mapping) {
-        new_mapping = find_task_mapping(newcontext);
-    }
-
-    if( NULL != new_mapping) {
-        /** I have  information about this task being migrated.
-         * I am only intrested in task without a new mapping.
-         */
-        assert(new_mapping->thief != dst_rank); 
-        return PARSEC_ITERATE_CONTINUE;
-    }
-
     _array_pos  = dst_rank / (8 * sizeof(uint32_t));
     _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
 
@@ -577,7 +565,7 @@ int parsec_direct_dep_propagate(parsec_execution_stream_t* es,
                        deps);
 
     if (0 == deps->outgoing_mask) return;
-    
+
     uint32_t propagation_mask = deps->outgoing_mask;
 #if defined(PARSEC_DEBUG)
     for( int i = 0; propagation_mask >> i; i++ ) {
