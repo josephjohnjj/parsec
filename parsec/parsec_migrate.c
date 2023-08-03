@@ -850,7 +850,6 @@ int process_steal_request(parsec_execution_stream_t *es)
                          * we send the information about the new mapping to the  predecessor.
                         */
                         assert(NULL != deps->taskpool);
-                        remote_dep_inc_flying_messages(deps->taskpool);
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, my_rank, steal_request->msg.root);
                     }
@@ -1388,18 +1387,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
                 int rc = mig_direct_get_datatypes(es, deps); 
                 assert( -1 != rc );
 
-                if (NULL != check_deps_received(es, deps)) {
-                    /** The same message was received from someone else */
-                    mig_direct_recv_no_activate(es, deps);
-                    printf("check_deps_received 2 \n");
-                }
-                else {
-                    insert_remote_direct_msg_details(es, deps);
-                    mig_direct_recv_activate(es, deps);
-                }
-
+                mig_direct_recv_activate(es, deps);
                 item = parsec_list_nolock_remove(&direct_msg_fifo, item);
-            
             }
         }
         parsec_list_unlock(&direct_msg_fifo);
@@ -1684,9 +1673,6 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         assert(5 == task->task_class->task_class_id );
 
         insert_received_tasks_details(task, origin->from, my_rank);
-
-        /** send task acknowledgement to the victim */
-        send_task_reception_ack(es, task, origin->from /*victim */, my_rank /* thief*/);
     }
 
     /** schedule the migrated tasks */
@@ -2471,17 +2457,9 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         printf("To_direct_msg_fifo \n");
     } 
     else {
-        if (NULL != check_deps_received(es, deps)) {
-            /** The same message was received from someone else */
-            mig_direct_recv_no_activate(es, deps);
-            printf("check_deps_received 1 \n");
-        }
-        else {
-            insert_remote_direct_msg_details(es, deps);
-            mig_direct_recv_activate(es, deps);
-        }
+        mig_direct_recv_activate(es, deps);
     }
-
+    
     assert(position == length);
 
     return 1;
@@ -3409,9 +3387,7 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     mig_task_mapping_item_t* was_migrated = NULL;
 
     was_migrated = find_migrated_tasks_details(newcontext);
-    if( NULL == was_migrated) {
-        return PARSEC_ITERATE_CONTINUE;
-    }
+    if( NULL == was_migrated) return PARSEC_ITERATE_CONTINUE;
 
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);

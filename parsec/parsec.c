@@ -2235,7 +2235,7 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
     if(!parsec_runtime_task_mapping)  return PARSEC_ITERATE_STOP;
 
     mig_task_mapping_item_t* was_receieved = NULL;
-    was_receieved = find_migrated_tasks_details(newcontext);
+    was_receieved = find_received_tasks_details(newcontext);
     if(NULL == was_receieved) return PARSEC_ITERATE_CONTINUE;
 
     assert(was_receieved->thief == get_my_rank());
