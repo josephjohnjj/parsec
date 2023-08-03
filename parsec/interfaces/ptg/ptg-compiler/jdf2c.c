@@ -6171,7 +6171,6 @@ static void jdf_generate_code_call_release_dependencies(const jdf_t *jdf,
             "      PARSEC_ACTION_RELEASE_LOCAL_DEPS |\n"
             "      PARSEC_ACTION_RELEASE_LOCAL_REFS |\n"
             "      PARSEC_ACTION_RESHAPE_ON_RELEASE |\n"
-            "      PARSEC_ACTION_RELEASE_DIRECT_DEPS |\n"
             "      0x%x,  /* mask of all dep_index */ \n"
             "      NULL);\n",
             jdf_basename, function->fname, context_name, complete_mask);
