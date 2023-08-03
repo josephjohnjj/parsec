@@ -576,7 +576,7 @@ int parsec_direct_dep_propagate(parsec_execution_stream_t* es,
     }
 #endif
 
-    return parsec_remote_dep_activate(es, task, deps, deps->msg.output_mask);
+    return parsec_remote_dep_activate(es, task, deps, propagation_mask);
 }
 
 /**

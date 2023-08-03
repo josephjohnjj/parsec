@@ -2031,9 +2031,6 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     if ((arg->action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) &&
         (es->virtual_process->parsec_context->my_rank == dst_rank) ) { 
 
-        if(parsec_runtime_task_mapping) {
-            assert(NULL != was_migrated); 
-        }
         /* Copying data in data-repo if there is data .
          * We are doing this in order for dtd to be able to track control dependences.
          * Usage count of the repo is dealt with when setting up reshape promises.
