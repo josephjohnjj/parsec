@@ -7237,6 +7237,12 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  "\n",
                 jdf_basename, f->fname);
 
+
+        coutput("  if(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ){\n");
+        coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_local_direct_fct, &arg);\n"
+                "   }\n",
+                jdf_basename, f->fname);
+
         coutput("#if defined(DISTRIBUTED)\n"
                 "  if( (action_mask & PARSEC_ACTION_SEND_REMOTE_DEPS) && (NULL != arg.remote_deps)) {\n"
                 "    parsec_remote_dep_activate(es, (parsec_task_t *)this_task, arg.remote_deps, arg.remote_deps->outgoing_mask);\n"
