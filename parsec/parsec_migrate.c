@@ -2912,7 +2912,7 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
 
     (void)task.task_class->release_deps(es, &task,
         action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
-        origin);
+        NULL);
     assert(0 == (origin->incoming_mask & complete_mask));
 
     if(0 != origin->incoming_mask)  /* not done receiving */

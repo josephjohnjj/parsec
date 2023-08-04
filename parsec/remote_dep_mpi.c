@@ -1038,22 +1038,10 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     }
     PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MPI:\tTranslate mask from 0x%lx to 0x%x (remote_dep_release_incoming)",
             complete_mask, action_mask);
-    
-    /** fake_deps is used just to update the sources for task dataflow
-     * Precaution so that there is no side effects on the real deps object origin
-    */
-    parsec_remote_deps_t fake_deps;
-    fake_deps.from = origin->from;
-    fake_deps.root = origin->root;
-
-    assert(0 <= fake_deps.root && fake_deps.root < get_nb_nodes());
-    assert(0 <= fake_deps.from && fake_deps.from < get_nb_nodes());
-    assert(origin->root != es->virtual_process->parsec_context->my_rank);
-    assert(origin->from != es->virtual_process->parsec_context->my_rank);
 
     (void)task.task_class->release_deps(es, &task,
                                         action_mask | PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
-                                        &fake_deps);
+                                        NULL);
     assert(0 == (origin->incoming_mask & complete_mask));
 
     if(0 != origin->incoming_mask)  /* not done receiving */
