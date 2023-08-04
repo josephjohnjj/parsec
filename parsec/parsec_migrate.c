@@ -776,8 +776,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
-                        //&& (my_rank == 1) 
-                        //&& (only_one_task < 1)
+                        && (my_rank == 1) 
+                        && (only_one_task < 5)
                     ) {
 
                         only_one_task += 1;
@@ -2029,14 +2029,9 @@ mig_task_mapping_item_t* insert_migrated_tasks_details(parsec_task_t *task, int 
 
     #if defined(PARSEC_DEBUG)
         char tmp[MAX_TASK_STRLEN];
-        printf("ELASTIC-MSG Rank %d: Task %s with key %d MIGRATED from victim %d to thief %d tp_id %d \n",
+        printf("ELASTIC-MSG Rank %d: [insert_migrated_tasks_details] Task %s with key %d migrated from victim %d to thief %d tp_id %d \n",
             my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), key, victim, thief, task->taskpool->taskpool_id);
 
-        int s = 0;
-        for (s = 0; task->sources >> s; s++) {
-            printf("ELASTIC-MSG Rank %d: Task %s with key %d MIGRATED from victim %d to thief %d tp_id %d has SOURCE %d  \n",
-                my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), key, victim, thief, task->taskpool->taskpool_id, s);
-        }
     #endif
     }
     else {
@@ -2104,8 +2099,9 @@ mig_task_mapping_item_t* insert_received_tasks_details(parsec_task_t *task, int 
 
     #if defined(PARSEC_DEBUG)
         char tmp[MAX_TASK_STRLEN];
-        printf("ELASTIC-MSG Rank %d: Task %s with key %d is received on from victim = %d on thief = %d\n",
-            my_rank, (tmp, MAX_TASK_STRLEN, task), key, victim, thief); 
+        parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task);
+        printf("ELASTIC-MSG Rank %d: [insert_received_tasks_details] Task %s with key %d is received on from victim = %d on thief = %d\n",
+            my_rank, tmp, key, victim, thief); 
     #endif
     }
     else {
@@ -2557,6 +2553,18 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     const parsec_task_class_t* fct           = newcontext->task_class;
     uint32_t flow_mask                       = (1U << dep->flow->flow_index) | 0x80000000;  /* in flow */
 
+    if(was_received) {
+        char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
+        parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
+        parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
+        printf("ELASTIC-MSG Rank %d: [mig_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be received(deps from %d root %d)\n",
+            get_my_rank(), 
+            tmp1, tmp2, 
+            was_received->victim, was_received->thief, 
+            dep->flow->flow_index,
+            deps->from, deps->root);
+    }
+
     parsec_datatype_t old_dtt = output->data.remote.dst_datatype;
 
     /* Extract the datatype, count and displacement from the target task */
@@ -2899,7 +2907,7 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
     assert(0 <= origin->from && origin->from < get_nb_nodes());
 
     char tmp1[MAX_TASK_STRLEN];
-    printf("ELASTIC-MSG Rank %d: Release direct deps from Task %s on node %d taskpool_d  %d \n",
+    printf("ELASTIC-MSG Rank %d: [mig_direct_release_incoming] Release direct deps from Task %s (depd from node %d taskpool_d %d) \n",
             my_rank, parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, &task), origin->from, origin->taskpool->taskpool_id);
 
     (void)task.task_class->release_deps(es, &task,
@@ -3392,11 +3400,12 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
     parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-    printf("ELASTIC-MSG Rank %d: Task %s was MIGRATED (predecessor %s) from victim %d to thief %d tp_id %d for flow %d from PROPOGATION (deps from %d root %d)\n",
-        get_my_rank(), tmp1, tmp2, was_migrated->victim, was_migrated->thief, 
-        oldcontext->taskpool->taskpool_id, dep->flow->flow_index,
+    printf("ELASTIC-MSG Rank %d: [parsec_gather_direct_collective_pattern] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d is propogated (deps from %d root %d)\n",
+        get_my_rank(), 
+        tmp1, tmp2, 
+        was_migrated->victim, was_migrated->thief, 
+        dep->flow->flow_index,
         deps->from, deps->root);
-
 
     assert( dst_rank == es->virtual_process->parsec_context->my_rank );
     assert(was_migrated->thief != my_rank);

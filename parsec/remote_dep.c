@@ -771,7 +771,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
                         char tmp1[MAX_TASK_STRLEN];
                         parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, task);
 
-                        printf("ELASTIC-MSG Rank %d: task %s sending direct deps from %d to %d tp_id %d\n",  
+                        printf("ELASTIC-MSG Rank %d: [parsec_remote_dep_activate] task %s sending direct deps from %d to %d tp_id %d\n",  
                             get_my_rank(), tmp1, get_my_rank(), rank, task->taskpool->taskpool_id);
 
                         mig_dep_direct_send(es, rank, remote_deps);

@@ -231,11 +231,15 @@ void parsec_remote_dep_memcpy(parsec_execution_stream_t* es,
  */
 int remote_dep_dequeue_delayed_dep_release(parsec_remote_deps_t *deps);
 
+int parsec_direct_dep_propagate(parsec_execution_stream_t* es,
+                                const parsec_task_t* task,
+                                parsec_remote_deps_t* deps);
+
 #if defined(PARSEC_DIST_COLLECTIVES)
 /* Propagate an activation order from the current node down the original tree */
 int parsec_remote_dep_propagate(parsec_execution_stream_t* es,
                                const parsec_task_t* task,
-                               parsec_remote_deps_t* deps);
+                               parsec_remote_deps_t* deps);                        
 #endif
 
 #else
