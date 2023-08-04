@@ -113,9 +113,6 @@ int
 progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal_request);
 int 
 get_gpu_wt_tasks(parsec_device_gpu_module_t * device);
-static int 
-update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-                         void *msg, size_t msg_size, int src, void *cb_data);
 static 
 parsec_remote_deps_t* mig_direct_release_incoming(parsec_execution_stream_t* es,
     parsec_remote_deps_t* origin, remote_dep_datakey_t complete_mask);
@@ -141,9 +138,6 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
     int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
     parsec_key_t successor_repo_key, void *param);
-static int 
-mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data);
 static void 
 mig_direct_no_get_start(parsec_execution_stream_t* es, parsec_remote_deps_t* deps);
 static mig_task_mapping_item_t*
@@ -158,9 +152,6 @@ update_task_mapping(parsec_taskpool_t* tp, mig_task_mapping_info_t *mapping_info
 int 
 send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
     mig_task_mapping_info_t *mapping_info, int src);
-static int 
-mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data);
 static int 
 insert_remote_direct_msg_details(parsec_execution_stream_t* es, parsec_remote_deps_t* origin);
 static void 
@@ -345,36 +336,10 @@ int parsec_node_migrate_init(parsec_context_t *context)
         return rc;
     }
 
-    rc = parsec_ce.tag_register(PARSEC_MIG_NEW_MAPPING_TAG, update_task_mapping_cb, context, MAPPING_INFO_SIZE * sizeof(char));
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NEW_MAPPING_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_NEW_MAPPING_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
     rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context, SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
     if (PARSEC_SUCCESS != rc) {
         parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG (error %d)\n", rc);
         parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_NO_GET_DATA_TAG, mig_no_put_cb, context,
-                                SINGLE_ACTIVATE_MSG_SIZE * sizeof(char) );
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NO_GET_DATA_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_ACK_TASK_RECEPTION, mig_recieve_task_ack_cb, context,
-                                ACK_MSG_SIZE * sizeof(char) );
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_ACK_TASK_RECEPTION (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_ACK_TASK_RECEPTION);
         parsec_comm_engine_fini(&parsec_ce);
         return rc;
     }
@@ -776,8 +741,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
-                        && (my_rank == 1) 
-                        && (only_one_task < 5)
+                        //&& (my_rank == 1) 
+                        //&& (only_one_task < 5)
                     ) {
 
                         only_one_task += 1;
@@ -1867,129 +1832,6 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
     return 1;
 }
 
-parsec_dependency_t
-parsec_update_sources(const parsec_taskpool_t *tp, parsec_execution_stream_t *es,
-    const parsec_task_t* restrict task, parsec_release_dep_fct_arg_t *arg, int src_rank)
-{
-    int current_source = -1;
-
-    if(NULL != arg->remote_deps) {
-        if(-1 == arg->remote_deps->from) {
-            /** From has not been set which means the flow is from me */
-            current_source = src_rank;
-            assert(src_rank == my_rank);
-            
-            assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
-            assert(0 <= current_source && current_source < get_nb_nodes());
-        }
-        else {
-            /** This flow is from an intermediate node */
-            current_source = arg->remote_deps->from;
-            assert(current_source != my_rank);
-            assert(0 <= current_source && current_source < get_nb_nodes());
-
-            assert( (((PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ))
-                    ||
-                    (((PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS)) && 
-                    (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) &&
-                    (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS))))
-
-            );
-        }
-    }
-    else {
-        /** This flow has no remote deps till now, so it is from me. */
-        current_source = src_rank;
-        assert(src_rank == my_rank);
-
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-                (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) );
-        assert(0 <= current_source && current_source < get_nb_nodes());
-    }
-    
-    
-  
-    parsec_hashable_sources_t *hs;
-    parsec_key_handle_t kh;
-    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
-
-    parsec_key_t key = task->task_class->make_key(tp, task->locals);
-    assert(NULL != ht);
-    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
-    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
-    if( NULL == hs ) {
-        hs = (parsec_hashable_sources_t *) malloc(sizeof(parsec_hashable_sources_t));
-        hs->sources = (parsec_dependency_t)0;
-        hs->ht_item.key = key;
-        parsec_hash_table_nolock_insert_handle(ht, &kh, &hs->ht_item);
-    }
-    else {
-        assert(0 != hs->sources);
-    }
-
-    if ( 0 != (hs->sources & (1 << current_source)) ) {
-        /** this source has already been set */
-        parsec_hash_table_unlock_bucket_handle(ht, &kh);
-        return hs->sources;
-    }
-
-    parsec_dependency_t source_new_value =  (parsec_dependency_t)0;
-    source_new_value = (hs->sources | (1 << current_source));
-    parsec_atomic_fetch_or_int32( &(hs->sources), source_new_value );
-
-    parsec_hash_table_unlock_bucket_handle(ht, &kh);
-    assert(0 != hs->sources);
-    return  hs->sources;
-}
-
-parsec_dependency_t
-parsec_find_sources( parsec_execution_stream_t *es, parsec_task_t*  task)
-{
-   
-    const parsec_taskpool_t *tp = task->taskpool;
-    parsec_hashable_sources_t *hs;
-    parsec_key_handle_t kh;
-    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
-    assert(NULL != ht);
-
-    parsec_key_t key = task->task_class->make_key(tp, task->locals);
-    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
-    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
-
-    assert(NULL != hs);
-    assert(0 != hs->sources);
-
-    parsec_hash_table_unlock_bucket_handle(ht, &kh);
-
-    return hs->sources;
-}
-
-parsec_dependency_t
-parsec_reset_sources( parsec_execution_stream_t *es, parsec_task_t*  task)
-{
-   
-    const parsec_taskpool_t *tp = task->taskpool;
-    parsec_hashable_sources_t *hs;
-    parsec_key_handle_t kh;
-    parsec_hash_table_t *ht = (parsec_hash_table_t*)tp->sources_array[task->task_class->task_class_id];
-    assert(NULL != ht);
-
-    parsec_key_t key = task->task_class->make_key(tp, task->locals);
-    parsec_hash_table_lock_bucket_handle(ht, key, &kh);
-    hs = parsec_hash_table_nolock_find_handle(ht, &kh);
-
-    assert(NULL != hs);
-    assert(0 != hs->sources);
-
-    parsec_hash_table_unlock_bucket_handle(ht, &kh);
-    hs->sources = (parsec_dependency_t)0;
-
-    return hs->sources;
-}
-
 
 static void task_mapping_free_elt(void *_item, void *table)
 {
@@ -2170,223 +2012,6 @@ int destroy_direct_message_ht(parsec_taskpool_t* tp)
     return 1;
 }
 
-mig_task_mapping_item_t* insert_direct_msg_details(parsec_task_t *task, int source)
-{
-    parsec_key_t key;
-    mig_task_mapping_item_t *item;
-
-    assert(0 <= source && source < get_nb_nodes());
-    assert(NULL != task->taskpool);
-
-    key = task->task_class->make_key(task->taskpool, task->locals);
-    parsec_hash_table_t *ht = task->taskpool->ht_direct_msg[task->task_class->task_class_id];
-
-    if (NULL == (item = parsec_hash_table_nolock_find(ht, key)))
-    {
-        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
-        item->ht_item.key = key;
-        item->victim = source; /** temp storage */
-        item->thief = source;  /** temp storage */
-        item->task_class_id = task->task_class->task_class_id;
-
-        parsec_hash_table_lock_bucket(ht, key);
-        parsec_hash_table_nolock_insert(ht, &item->ht_item);
-        parsec_hash_table_unlock_bucket(ht, key);
-    }
-    else {
-        //item->victim = item->thief; /** temp storage for old source*/
-        //item->thief = source;  /** temp storage of new source */
-        //assert(item->task_class_id == task->task_class->task_class_id);
-        //assert(item->victim != item->thief);
-        assert(0);
-    }
-    return item;
-}
-
-mig_task_mapping_item_t* find_direct_msg_details(parsec_task_t *task)
-{
-    parsec_key_t key;
-    mig_task_mapping_item_t *item;
-    
-    key = task->task_class->make_key(task->taskpool, task->locals);
-
-    parsec_hash_table_t *ht = task->taskpool->ht_direct_msg[task->task_class->task_class_id];
-    if (NULL == (item = parsec_hash_table_nolock_find(ht, key))) {
-        return NULL;
-    }
-
-    assert(task->task_class->task_class_id == item->task_class_id);
-    assert(0 <= item->victim && item->victim < get_nb_nodes());
-    assert(0 <= item->thief && item->thief < get_nb_nodes());
-
-    return item;
-}
-
-int send_task_mapping_info_to_predecessor(parsec_execution_stream_t *es, parsec_task_t *task,
-    int victim, int thief)
-{
-    int src_rank = 0;
-    mig_task_mapping_info_t mapping_info;
-    int total_info_send =  0;
-    parsec_taskpool_t *tp = task->taskpool;
-    assert(NULL != tp);
-
-    int32_t source_mask = parsec_find_sources(es, task);
-    assert(source_mask != 0);
-    
-    assert(0 <= victim && victim < get_nb_nodes());
-    assert(0 <= thief && thief < get_nb_nodes());
-    assert(victim != thief);
-
-    mapping_info.key            = task->task_class->make_key(task->taskpool, task->locals);
-    mapping_info.victim         = victim;
-    mapping_info.thief          = thief;
-    mapping_info.task_class_id  = task->task_class->task_class_id;
-    mapping_info.taskpool_id    = tp->taskpool_id;
-    
-
-    for (src_rank = 0; source_mask >> src_rank; src_rank++) {
-        if (!((1U << src_rank) & source_mask)) {
-            continue;
-        }
-        assert(0 <= src_rank && src_rank < get_nb_nodes());
-    
-    #if defined(PARSEC_DEBUG)
-        char tmp[MAX_TASK_STRLEN];
-        printf("ELASTIC-MSG Rank %d: Inform predecessor (source = %d) of Task %s about new mapping  (victim = %d, thief = %d) \n",
-            my_rank, src_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task),  victim, thief); 
-    #endif 
-
-        if(src_rank == my_rank) {
-            update_task_mapping(tp, &mapping_info, victim);          
-        }
-        else {
-            send_task_mapping_info(es, task, &mapping_info, src_rank);
-            total_info_send++;
-        }
-        
-    }
-
-    return total_info_send;
-}
-
-
-mig_task_mapping_item_t* update_task_mapping(parsec_taskpool_t* tp, mig_task_mapping_info_t *mapping_info, int from)
-{
-    assert(NULL != tp);
-    mig_task_mapping_item_t *item = NULL;
-
-    mig_task_class_hashtables_t *task_class_hashtables = tp->task_class_hashtables[mapping_info->task_class_id];
-    assert(NULL != task_class_hashtables);
-    parsec_hash_table_t* ht = task_class_hashtables->task_map_ht;
-    assert(NULL != ht);
-    
-    assert(0 <= mapping_info->victim && mapping_info->victim < get_nb_nodes());
-    assert(0 <= mapping_info->thief && mapping_info->thief < get_nb_nodes());
-    assert(mapping_info->victim != mapping_info->thief);
-    assert(from == mapping_info->victim);
-
-    if (NULL == (item = parsec_hash_table_nolock_find(ht, mapping_info->key)))
-    {
-        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
-        item->ht_item.key = mapping_info->key; 
-        item->victim = mapping_info->victim;
-        item->thief = mapping_info->thief;
-        item->task_class_id = mapping_info->task_class_id;
-
-        parsec_hash_table_lock_bucket(ht, item->ht_item.key);
-        parsec_hash_table_nolock_insert(ht, &item->ht_item);
-        parsec_hash_table_unlock_bucket(ht, item->ht_item.key);
-
-        printf("ELASTIC-MSG: Task mapping updated on  source %d (victim %d source %d)\n", 
-            my_rank, mapping_info->victim, mapping_info->thief);
-
-        return item;
-    }
-    else {
-        assert(item->task_class_id == mapping_info->task_class_id);
-        assert(item->victim == mapping_info->victim);
-        assert(item->thief == mapping_info->thief);
-
-        return item;
-    }
-
-    return item;
-}
-
-mig_task_mapping_item_t* find_task_mapping(const parsec_task_t *task)
-{
-    parsec_key_t key;
-    mig_task_mapping_item_t *item = NULL;
-    assert(NULL != task->taskpool);
-    parsec_taskpool_t* tp = task->taskpool;
-
-    mig_task_class_hashtables_t *task_class_hashtables = tp->task_class_hashtables[task->task_class->task_class_id];
-    assert(NULL != task_class_hashtables);
-    parsec_hash_table_t* ht = task_class_hashtables->task_map_ht;
-    assert(NULL != ht);
-
-    key = task->task_class->make_key(task->taskpool, task->locals);
-    if (NULL == (item = parsec_hash_table_nolock_find(ht, key))) {
-        return NULL;
-    }
-
-    assert(task->task_class->task_class_id == item->task_class_id);
-    assert(0 <= item->victim && item->victim < get_nb_nodes());
-    assert(0 <= item->thief && item->thief < get_nb_nodes());
-
-    return item;
-}
-
-int send_task_mapping_info(parsec_execution_stream_t *eu, const parsec_task_t *task,
-    mig_task_mapping_info_t *mapping_info, int src)
-                                 
-{
-    char packed_buffer[MAPPING_INFO_SIZE];
-    int saved_position = 0, dsize = 0;
-
-    parsec_ce.pack_size(&parsec_ce, MAPPING_INFO_SIZE, parsec_datatype_int8_t, &dsize);
-    parsec_ce.pack(&parsec_ce, mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t, packed_buffer, MAPPING_INFO_SIZE, &saved_position);
-
-    assert(saved_position == dsize);
-    assert(MAPPING_INFO_SIZE == dsize);
-
-    printf("FLYTHING MSG: PARSEC_MIG_NEW_MAPPING_TAG Start %x\n");
-    task->taskpool->tdm.module->outgoing_message_start(task->taskpool, src, NULL);
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_NEW_MAPPING_TAG, src, packed_buffer, saved_position);
-
-    return 0;
-}
-
-static int
-update_task_mapping_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data)
-{
-    int position = 0, length = msg_size, rc;
-
-    mig_task_mapping_info_t mapping_info;
-    assert( MAPPING_INFO_SIZE == length );
-
-    parsec_ce.unpack(&parsec_ce, msg, length, &position, &mapping_info, MAPPING_INFO_SIZE, parsec_datatype_int8_t);
-    assert(0 <= mapping_info.victim && mapping_info.victim < get_nb_nodes());
-    assert(0 <= mapping_info.thief && mapping_info.thief < get_nb_nodes());
-    assert( position == length );
-
-    parsec_taskpool_t *taskpool = parsec_taskpool_lookup(mapping_info.taskpool_id);
-    assert(NULL != taskpool);
-
-    printf(" FLYTHING MSG: PARSEC_MIG_NEW_MAPPING_TAG Start");
-    taskpool->tdm.module->incoming_message_start(taskpool, src, msg, NULL, 0, NULL);
-
-    update_task_mapping(taskpool, &mapping_info, src);
-    
-    taskpool->tdm.module->incoming_message_end(taskpool, NULL);
-    printf(" FLYTHING MSG: PARSEC_MIG_NEW_MAPPING_TAG End");
-
-    
-    
-    return 0;
-}
 
 /**
  * Starting with a particular item pack as many remote_dep_wire_activate
@@ -2450,7 +2075,6 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     rc = mig_direct_get_datatypes(es, deps);
     if( -1 == rc ) {
         parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
-        printf("To_direct_msg_fifo \n");
     } 
     else {
         mig_direct_recv_activate(es, deps);
@@ -2640,23 +2264,7 @@ static void mig_direct_recv_activate(parsec_execution_stream_t* es, parsec_remot
     }
 }
 
-static void mig_direct_recv_no_activate(parsec_execution_stream_t* es,
-                                         parsec_remote_deps_t* deps)
-{
 
-    assert(NULL != deps); 
-    parsec_list_push_sorted(&direct_no_activates_fifo, (parsec_list_item_t*)deps, rdep_prio);
-    
-    /* Check if we have any pending GET orders */
-    if(parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&direct_no_activates_fifo)) {
-        deps = (parsec_remote_deps_t*)parsec_list_pop_front(&direct_no_activates_fifo);
-        
-        mig_direct_no_get_start(es, deps);
-
-        deps->incoming_mask = deps->outgoing_mask = 0;
-        remote_deps_free(deps);
-    }
-}
 
 int progress_direct_activation(parsec_execution_stream_t* es)
 {
@@ -2667,13 +2275,6 @@ int progress_direct_activation(parsec_execution_stream_t* es)
         mig_direct_get_start(es, deps);
         success = 1;
     }
-
-    if(parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&direct_no_activates_fifo)) {
-        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)parsec_list_pop_front(&direct_no_activates_fifo);
-        mig_direct_no_get_start(es, deps);
-        success = 1;
-    }
-
     return success;
 }
 
@@ -2973,407 +2574,11 @@ remote_dep_reset_forwarded_direct(parsec_execution_stream_t* es,
            es->virtual_process->parsec_context->remote_dep_fw_mask_sizeof);
 }
 
-static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg,
-    size_t msg_size, int src, void *cb_data)
-{
-    (void) ce; (void) tag; (void) cb_data; (void) msg_size;
-    remote_dep_wire_get_t* task;
-    parsec_remote_deps_t *deps;
-    parsec_execution_stream_t* es = &parsec_comm_es;
 
-    task = malloc(sizeof(remote_dep_wire_get_t));
-    /** copy the static message */
-    memcpy(task, msg, sizeof(remote_dep_wire_get_t));
-    /* we are expecting exactly one wire_get_t */
-    assert(msg_size == sizeof(remote_dep_wire_get_t));
-
-    int total_cleanup = task->output_mask; /** Get the total_cleanup from the temprary storage */
-    deps = (parsec_remote_deps_t*)(remote_dep_datakey_t)task->source_deps; /* get our deps back */
-    assert(NULL != deps);
-    assert(NULL != deps->taskpool);
-    remote_dep_complete_and_cleanup(&deps, total_cleanup);
-
-    free(task);
-    return 1;
-}
-
-static void mig_direct_no_get_start(parsec_execution_stream_t* es,
-                                     parsec_remote_deps_t* deps)
-{
-    remote_dep_wire_activate_t* task = &(deps->msg);
-    int from = deps->from, k, position = 0;
-    remote_dep_wire_get_t msg;
-
-    assert(0 <= from && from < get_nb_nodes());
-
-    (void)es;
-    int total_cleanup = 0;
-
-     printf("PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG Start \n");
-    deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, NULL, 
-        NULL, 0, deps);
-                
-    msg.source_deps = task->deps; /* the deps copied from activate message from source */
-    
-    for(k = 0; deps->incoming_mask >> k; k++) {
-        if( !((1U<<k) & deps->incoming_mask) ) continue;
-        total_cleanup++;
-    }
-    msg.output_mask = total_cleanup; /** temporary storage for the source */
-
-    /** We pack the static message(remote_dep_wire_get_t) and the total_cleanup required
-     *  on the source side, to the source. 
-     */
-    int buf_size = sizeof(remote_dep_wire_get_t);
-    void *buf = malloc(buf_size);
-    memcpy( buf, &msg, sizeof(remote_dep_wire_get_t) );
-
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_NO_GET_DATA_TAG, from, buf, buf_size);
-
-    deps->taskpool->tdm.module->incoming_message_end(deps->taskpool, deps);
-    printf("FLYTHING MSG: PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG End \n");
-    free(buf);
-}
-
-
-static mig_task_mapping_item_t* check_deps_received(parsec_execution_stream_t* es, parsec_remote_deps_t* origin)
-{
-    uint32_t i;
-    (void)es;
-
-    assert(NULL != origin->taskpool);
-
-    parsec_task_t task;
-    task.taskpool   = origin->taskpool;
-    task.priority = 0;  
-    task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
-    for(i = 0; i < task.task_class->nb_locals; i++) {
-        task.locals[i] = origin->msg.locals[i];
-    }
-
-    /** check if this message was already received from someone else */
-    mig_task_mapping_item_t* is_received = NULL;
-    is_received = find_direct_msg_details(&task);
-
-#if defined(PARSEC_DEBUG)
-    if(NULL != is_received) {
-        assert(origin->from != is_received->victim);
-        assert(0 <= is_received->victim && is_received->victim < get_nb_nodes()); /** first*/
-    }
-
-    char tmp1[MAX_TASK_STRLEN];
-    if(NULL == is_received)  {
-        printf("ELASTIC-MSG Rank %d: First direct message from Task %s from node %d receiced on %d  taskpool_d  %d \n",
-            my_rank, (tmp1, MAX_TASK_STRLEN, &task), origin->from, my_rank,  origin->taskpool->taskpool_id);
-    }
-    else {
-        printf("ELASTIC-MSG Rank %d: Another direct message from Task %s from node %d receiced on %d  taskpool_d  %d \n",
-            my_rank, (tmp1, MAX_TASK_STRLEN, &task), origin->from, my_rank,  origin->taskpool->taskpool_id);
-    }
-#endif
-
-    return is_received;
-}
-
-static int 
-insert_remote_direct_msg_details(parsec_execution_stream_t* es, parsec_remote_deps_t* origin)
-{
-    uint32_t i;
-    (void)es;
-
-    assert(NULL != origin->taskpool);
-
-    parsec_task_t task;
-    task.taskpool   = origin->taskpool;
-    task.priority = 0;  
-    task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
-    for(i = 0; i < task.task_class->nb_locals; i++) {
-        task.locals[i] = origin->msg.locals[i];
-    }
-    
-    insert_direct_msg_details(&task, origin->from);
-    assert(0 <= origin->from && origin->from < get_nb_nodes());
-    
-    return 0;
-}
 
 int whoami()
 {
     return my_rank;
-}
-
-
-int 
-modify_action_for_no_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *successor,
-    int* src_rank, int* dst_rank, mig_task_mapping_item_t  *new_mapping, parsec_release_dep_fct_arg_t *arg)
-{
-
-    mig_task_mapping_item_t* was_received = NULL;
-
-    char predecessor_tmp[MAX_TASK_STRLEN];
-    parsec_task_snprintf(predecessor_tmp, MAX_TASK_STRLEN, predecessor);
-    char successor_tmp[MAX_TASK_STRLEN];
-    parsec_task_snprintf(successor_tmp, MAX_TASK_STRLEN, successor);
-
-    /** I am not aware of any new task mapping for the successor */
-    assert(new_mapping == NULL);
-
-    /** This is a local activation */
-    if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert(arg->remote_deps == NULL || arg->remote_deps->from == -1);
-
-        was_received = find_received_tasks_details(successor);
-
-        /** If this is a local task activation and the predecessor was executed in this node
-         * then it is guaranteed that this node was informed about the new task mapping. 
-        */
-
-       if(NULL != was_received) {
-
-            /** The successor was migrated to this node. But we have no information on the new task
-             * mapping. This means that the source for this task is some other node (probably the
-             * node that send the remote activation). This means that there is also direct activation
-             * expected from the source. So we can skip and action on this successor. 
-             * 
-             * So we allow it to preceed like a normal remote task activation.
-             */
-            
-            assert(was_received->victim != my_rank);
-            assert(was_received->victim == *dst_rank);
-            assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == successor->task_class->task_class_id);
-            assert(*src_rank != *dst_rank);
-       }
-       
-       /** This is normal task activation, we have no action to take. */
-
-        
-    }
-    /** This is a remote activation through normal dataflow */
-    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
-
-        was_received = find_received_tasks_details(successor);
-        if(NULL != was_received) {
-            /** The successor was migrated to this node. But we have no information on the new task
-             * mapping. This means that the source for this task is some other node (probably the
-             * node that send the remote activation). This means that there is also direct activation
-             * expected from the source. So we can skip and action on this successor. 
-             */
-
-            assert(was_received->victim != my_rank);
-            assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == successor->task_class->task_class_id);
-            assert(*dst_rank != *src_rank);
-            assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
-            return 0; /** PARSEC_ITERATE_CONTINUE */
-        }
-        else {
-            /** The task was not migrated to this node and new_mapping == NULL.
-             * This  means that this node is not one of the intermediate nodes. We have 
-             * no action to take and this mode handles only local task activation.
-             */
-
-            return 1; /** continue with task progression  */
-        }
-    }
-    /** This is a remote activation through direct dataflow */
-    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
-        assert( NULL != find_direct_msg_details(predecessor) );
-
-        was_received = find_received_tasks_details(successor);
-
-        if(NULL != was_received) { 
-
-            assert(was_received->victim != my_rank);
-            assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == successor->task_class->task_class_id);
-
-            assert(was_received->thief == *src_rank);
-            assert(my_rank == *src_rank);
-            assert(was_received->victim == *dst_rank);
-            
-            assert(*dst_rank != *src_rank);
-
-            /** successor was migrated to this node, but we have no information of 
-             * the new task mapping. Which means that the successor did not have any 
-             * source from this node.
-             */
-            *dst_rank = *src_rank;
-
-            return 1; /** continue with task progression  */
-        }
-        else {
-            /** The predecessor can have more than one successor. But direct messages are 
-             * meant ony for tasks that were mapped to this node. This successor was not
-             * migrated to this node so we skip and action related to this successor.  
-             */
-            return 0; /** PARSEC_ITERATE_CONTINUE */
-        }
-    }
-    else
-    {
-        assert(0);
-    }
-
-    return 1; /** continue with task progression  */
-}
-
-int 
-modify_action_for_new_mapping(const parsec_task_t *predecessor, const parsec_task_t *successor,
-    int* src_rank, int* dst_rank, mig_task_mapping_item_t *new_mapping, parsec_release_dep_fct_arg_t *arg)
-{
-    (void)predecessor;
-    mig_task_mapping_item_t* was_received = NULL;
-
-    char predecessor_tmp[MAX_TASK_STRLEN];
-    parsec_task_snprintf(predecessor_tmp, MAX_TASK_STRLEN, predecessor);
-    char successor_tmp[MAX_TASK_STRLEN];
-    parsec_task_snprintf(successor_tmp, MAX_TASK_STRLEN, successor);
-
-    /** we have information on the new task mapping for the successor. */
-    assert(new_mapping != NULL);
-
-    /** This is a local activation */
-    if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert(arg->remote_deps == NULL || arg->remote_deps->from == -1);
-
-        was_received = find_received_tasks_details(successor);
-
-        /** We have information on the new task mapping of the successor 
-         * (as new_mapping != NULL) and we also know the that the predecessor 
-         * was executed on this node . So this node is a source
-         * of the successor.
-        */
-        if(NULL != was_received) {
-            /** The successor was migrated to this node. As the predecessor
-            was also executed in this node we can modify the successor activation 
-            into a local activation*/
-
-            assert(was_received->victim != my_rank);
-            assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == successor->task_class->task_class_id);
-            assert(was_received->victim == *dst_rank);
-            assert(was_received->thief == *src_rank);
-            assert(my_rank == *src_rank);
-
-            assert(new_mapping->victim == *dst_rank);
-            assert(new_mapping->thief == *src_rank);
-
-            /** we make sure that the direct message is not processed twice */
-            if( NULL == find_direct_msg_details(predecessor) ) {
-                insert_direct_msg_details(predecessor, my_rank); 
-            }
-        }
-        else {
-
-            /** The task was migrated to some other node. Other than me.
-             *  We have to make sure that the direct deps taskes care of it.
-             */
-            assert(new_mapping->thief != my_rank);
-            assert(my_rank == *src_rank);
-        }     
-
-        *dst_rank = new_mapping->thief;  
-
-        return 1; /** continue with task progression  */
-    }
-    /** This is a remote activation through normal dataflow */
-    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
-
-        was_received = find_received_tasks_details(successor);
-        if(NULL != was_received) {
-            /** The successor was migrated to this node. And we also have information on the new task
-             * mapping. This means that the atleast one  source for this task is this node. At the same 
-             * time atleast one source is some other node (probably the node that send the remote 
-             * activation). This means that there is also direct activation expected from the source. 
-             * So the dataflow will be taken care of by that direct activation. 
-             * So we can skip and action on this successor. 
-             */
-
-            assert(was_received->victim != my_rank);
-            assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == successor->task_class->task_class_id);
-
-            assert(*dst_rank != *src_rank);
-            assert( 0 == (arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS) );
-            return 0; /** PARSEC_ITERATE_CONTINUE */
-        }
-        else {
-            /** The task was not migrated to this node but new_mapping != NULL.
-             * This  means that this node is one of the intermediate nodes. 
-             * The data will be forwarded to the new_mapping during collective 
-             * operation. This mode handles only local task activation.
-             */
-            assert(new_mapping->victim == *dst_rank);
-            assert(new_mapping->thief != *src_rank);
-            assert(my_rank == *src_rank);
-
-            return 0; /** PARSEC_ITERATE_CONTINUE */
-        }
-    }
-    /** This is a remote activation through direct dataflow */
-    else if( (PARSEC_ACTION_RELEASE_DIRECT_DEPS == (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS)) && 
-        (PARSEC_ACTION_RELEASE_LOCAL_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS)) ) {
-
-        assert(PARSEC_ACTION_RELEASE_REMOTE_DEPS != (arg->action_mask & PARSEC_ACTION_RELEASE_REMOTE_DEPS));
-        assert(arg->remote_deps != NULL && arg->remote_deps->from != -1 && arg->remote_deps->from != my_rank);
-        assert( NULL != find_direct_msg_details(predecessor) );
-
-        was_received = find_received_tasks_details(successor);
-        if(NULL != was_received ) { 
-
-            assert(was_received->victim != my_rank);
-            assert(was_received->thief == my_rank);
-            assert(was_received->task_class_id == successor->task_class->task_class_id);
-            assert(was_received->victim == *dst_rank);
-            assert(*dst_rank != *src_rank);
-
-            /** successor was migrated to this node and we have received a 
-             * direct dataflow from one of the intermmediate nodes. So the task 
-             * should be executed in this node. new_mapping != NULL implies that
-             * the task had another flow that originated from this node. 
-            */
-            assert(new_mapping->victim == *dst_rank);
-            assert(new_mapping->thief == *src_rank);
-            assert(new_mapping->thief == my_rank);
-
-            *dst_rank =  *src_rank;
-
-            return 1; /** continue with task progression  */
-        }
-        else {
-            /** The predecessor can have more than one successor. But direct messages are 
-             * meant ony for tasks that were mapped to this node. This successor was not
-             * migrated to this node so we skip and action related to this successor.  
-             */
-            return 0; /** PARSEC_ITERATE_CONTINUE */
-        }
-    }
-    else
-    {
-        assert(0);
-    }
-
-    return 1; /** continue with task progression  */
 }
 
 
@@ -3438,19 +2643,13 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
 
 int create_task_class_hashtables(parsec_context_t *context) 
 {
-    printf("create_task_class_hashtables \n");
-
     mig_task_class_hashtables_t** task_class_hashtables;
     task_class_hashtables = (mig_task_class_hashtables_t**) malloc(NB_TASK_CLASS_HTS * sizeof(mig_task_class_hashtables_t*));
  
     int i  = 0;
     for(i = 0; i < NB_TASK_CLASS_HTS; i++ ) {
         task_class_hashtables[i] = (mig_task_class_hashtables_t*)malloc(sizeof(mig_task_class_hashtables_t));
-        
-        task_class_hashtables[i]->task_map_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
-        parsec_hash_table_init(task_class_hashtables[i]->task_map_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
-            node_task_mapping_table_generic_key_fn, NULL);  
-
+         
         task_class_hashtables[i]->received_task_ht = PARSEC_OBJ_NEW(parsec_hash_table_t);
         parsec_hash_table_init(task_class_hashtables[i]->received_task_ht, offsetof(mig_task_mapping_item_t, ht_item), 16, 
             node_task_mapping_table_generic_key_fn, NULL); 
@@ -3468,23 +2667,14 @@ int create_task_class_hashtables(parsec_context_t *context)
 int destroy_task_class_hashtables(parsec_context_t *context) 
 {
     mig_task_class_hashtables_t** task_class_hashtables = context->task_class_hashtables;
-
-    printf("destroy_task_class_hashtables \n");
     
     int i  = 0;
     for(i = 0; i < NB_TASK_CLASS_HTS; i++ ) {
 
         assert(NULL != task_class_hashtables);
-        assert(NULL != task_class_hashtables[i]->task_map_ht);
         assert(NULL != task_class_hashtables[i]->received_task_ht);
         assert(NULL != task_class_hashtables[i]->migrated_task_ht);
-
-        parsec_hash_table_for_all(task_class_hashtables[i]->task_map_ht, task_mapping_free_elt, 
-            task_class_hashtables[i]->task_map_ht);
-        parsec_hash_table_fini(task_class_hashtables[i]->task_map_ht);
-        PARSEC_OBJ_RELEASE(task_class_hashtables[i]->task_map_ht);
-        task_class_hashtables[i]->task_map_ht = NULL;   
-
+ 
         parsec_hash_table_for_all(task_class_hashtables[i]->received_task_ht, task_mapping_free_elt, 
             task_class_hashtables[i]->received_task_ht);
         parsec_hash_table_fini(task_class_hashtables[i]->received_task_ht);
@@ -3504,88 +2694,4 @@ int destroy_task_class_hashtables(parsec_context_t *context)
     context->task_class_hashtables = NULL;
 }
 
-
-static int mig_recieve_task_ack_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
-    void *msg, size_t msg_size, int src, void *cb_data) 
-
-{
-    (void) ce; (void) tag; (void) cb_data; (void) msg_size;
-    mig_ack_msg_t* mig_ack_msg;
-    parsec_remote_deps_t *deps;
-    parsec_execution_stream_t* es = &parsec_comm_es;
-    int i = 0;
-
-    mig_ack_msg = malloc(ACK_MSG_SIZE);
-    /** copy the static message */
-    memcpy(mig_ack_msg, msg, ACK_MSG_SIZE);
-    /* we are expecting exactly one wire_get_t */
-    assert(msg_size == ACK_MSG_SIZE);
-
-    parsec_taskpool_t *tp = parsec_taskpool_lookup(mig_ack_msg->taskpool_id);
-    assert(tp != NULL);
-
-    parsec_task_t task;
-    task.taskpool   = tp;
-    task.task_class = task.taskpool->task_classes_array[mig_ack_msg->task_class_id];
-    for(i = 0; i < task.task_class->nb_locals; i++) {
-        task.locals[i] = mig_ack_msg->locals[i];
-    }
-    assert(mig_ack_msg->victim == my_rank);
-    assert(mig_ack_msg->thief == src);
-    assert(src != my_rank);
-    assert(0 <= src && src < get_nb_nodes());
-    assert(0 <= my_rank && my_rank < get_nb_nodes());
-    assert(NULL != find_migrated_tasks_details(&task));
-
-
-    /** send the new task mapping to the predecessors*/
-    #if defined(PARSEC_DEBUG)
-        char tmp[MAX_TASK_STRLEN];
-        printf("ELASTIC-MSG Rank %d: Receive task reception ACK for Task %s victim = %d, thief = %d taskpool_id %d\n",
-            my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, &task), my_rank, src, mig_ack_msg->taskpool_id); 
-    #endif
-
-    send_task_mapping_info_to_predecessor(es, &task, my_rank /** victim */, src /** thief */);
-    /** Decrement the PA incremented just before mig details was insereted to the HT*/
-    remote_dep_dec_flying_messages(tp);
-
-}
-
-int send_task_reception_ack(parsec_execution_stream_t* es,  parsec_task_t* task,
-    int victim, int thief)
-{
-    int i = 0; 
-    parsec_taskpool_t *tp = task->taskpool; 
-    assert(tp != NULL);
-
-    assert(victim != thief);
-    assert(thief == my_rank);
-    assert(0 <= victim && victim < get_nb_nodes());
-    assert(0 <= thief && thief < get_nb_nodes());
-
-    mig_ack_msg_t mig_ack_msg;
-    mig_ack_msg.task_class_id  = task->task_class->task_class_id;
-    mig_ack_msg.taskpool_id =  tp->taskpool_id;
-    for(i = 0; i  < task->task_class->nb_locals; i++) {
-        mig_ack_msg.locals[i]  = task->locals[i];
-    }
-    mig_ack_msg.victim = victim;
-    mig_ack_msg.thief  = thief;
-
-    char packed_buffer[ACK_MSG_SIZE];
-    int saved_position = 0, dsize = 0;
-
-    parsec_ce.pack_size(&parsec_ce, ACK_MSG_SIZE, parsec_datatype_int8_t, &dsize);
-    assert(dsize == ACK_MSG_SIZE);
-    parsec_ce.pack(&parsec_ce, &mig_ack_msg, ACK_MSG_SIZE, parsec_datatype_int8_t, packed_buffer, ACK_MSG_SIZE, &saved_position);
-    assert(saved_position ==  ACK_MSG_SIZE);
-
-    #if defined(PARSEC_DEBUG)
-        char tmp[MAX_TASK_STRLEN];
-        printf("ELASTIC-MSG Rank %d: Send task reception ack for Task %s received on node %d  victim = %d, thief = %d\n",
-            my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), my_rank, victim, thief); 
-    #endif
-
-    parsec_ce.send_am(&parsec_ce, PARSEC_MIG_ACK_TASK_RECEPTION, victim, packed_buffer, saved_position);
-}
 

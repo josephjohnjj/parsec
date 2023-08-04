@@ -124,7 +124,6 @@ struct parsec_hash_table_item_s {
 
 typedef struct mig_task_class_hashtables_s
 {
-    parsec_hash_table_t *task_map_ht;
     parsec_hash_table_t *received_task_ht;
     parsec_hash_table_t *migrated_task_ht;
 
