@@ -501,13 +501,7 @@ int parsec_node_migrate_fini()
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
-    parsec_ce.tag_unregister(PARSEC_MIG_ACK_TASK_RECEPTION);
-    parsec_ce.tag_unregister(PARSEC_MIG_NEW_MAPPING_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
-    parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
-    
-    
-    
     
     free(device_progress_counter);
 
