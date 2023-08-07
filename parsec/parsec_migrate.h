@@ -170,4 +170,5 @@ parsec_ontask_iterate_t elastic_test(parsec_execution_stream_t *eu,
     const parsec_dep_t* dep, parsec_dep_data_description_t* out_data,
     int src_rank, int dst_rank, int dst_vpid, data_repo_t *successor_repo, 
     parsec_key_t successor_repo_key, void *param);
+int mig_dep_direct_send(parsec_execution_stream_t* es, dep_cmd_item_t **head_item);
 #endif

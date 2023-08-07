@@ -122,7 +122,7 @@ static int
 mig_direct_get_end_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *msg,
     size_t msg_size, int src, void *cb_data);
 int 
-mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_deps_t *deps);
+mig_dep_direct_send(parsec_execution_stream_t* es, dep_cmd_item_t **head_item);
 static void 
 mig_direct_get_start(parsec_execution_stream_t* es, parsec_remote_deps_t* deps);
 static void
@@ -741,8 +741,8 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
-                        //&& (my_rank == 1) 
-                        //&& (only_one_task < 5)
+                        && (my_rank == 1) 
+                        && (only_one_task < 5)
                     ) {
 
                         only_one_task += 1;
@@ -2020,8 +2020,12 @@ int destroy_direct_message_ht(parsec_taskpool_t* tp)
  * remote peer, the completed messages are released and the header is updated to
  * the next unsent message.
  */
-int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_deps_t *deps)
+int mig_dep_direct_send(parsec_execution_stream_t* es, dep_cmd_item_t **head_item)
 {
+    dep_cmd_item_t *item = *head_item;
+    int rank = item->cmd.activate.peer; 
+    parsec_remote_deps_t *deps = (parsec_remote_deps_t*)item->cmd.activate.task.source_deps;
+
     (void)es;
     char packed_buffer[SINGLE_ACTIVATE_MSG_SIZE];
     int  position = 0, saved_position = 0, dsize = 0;
@@ -2042,6 +2046,8 @@ int mig_dep_direct_send(parsec_execution_stream_t* es, int rank, parsec_remote_d
     parsec_atomic_fetch_add_int32(&deps->pending_ack, 1);
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, rank, packed_buffer, position);
     remote_dep_complete_and_cleanup(&deps, 1);
+
+    free(item);
    
     return 1;
     

@@ -286,6 +286,7 @@ typedef enum dep_cmd_action_t {
     DEP_PUT_DATA,
     DEP_GET_DATA,
     DEP_CTL,
+    DEP_DIRECT,
     DEP_LAST  /* always the last element. it should not be used */
 } dep_cmd_action_t;
 

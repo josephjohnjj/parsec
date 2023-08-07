@@ -550,6 +550,32 @@ remote_dep_dequeue_send(parsec_execution_stream_t* es, int rank,
     return 1;
 }
 
+int
+remote_dep_dequeue_direct_send(parsec_execution_stream_t* es, int rank,
+                        parsec_remote_deps_t* deps)
+{
+    dep_cmd_item_t* item = (dep_cmd_item_t*) calloc(1, sizeof(dep_cmd_item_t));
+    PARSEC_OBJ_CONSTRUCT(item, parsec_list_item_t);
+    item->action   = DEP_DIRECT;
+    item->priority = deps->max_priority;
+    item->cmd.activate.peer             = rank;
+    item->cmd.activate.task.source_deps = (remote_dep_datakey_t)deps;
+    item->cmd.activate.task.output_mask = 0;
+    item->cmd.activate.task.callback_fn = 0;
+    item->cmd.activate.task.remote_memory_handle = NULL; /* we don't have it yet */
+    item->cmd.activate.task.remote_callback_data = (remote_dep_datakey_t)NULL;
+
+    /* if MPI is multithreaded do not thread-shift the send activate */
+    if( parsec_comm_es.virtual_process->parsec_context->flags & PARSEC_CONTEXT_FLAG_COMM_MT ) {
+        parsec_list_item_singleton(&item->pos_list); /* NOTE: this disables aggregation in MT cases. */
+        mig_dep_direct_send(es, &item);
+    }
+    else {
+        parsec_dequeue_push_back(&dep_cmd_queue, (parsec_list_item_t*)item);
+    }
+    return 1;
+}
+
 void parsec_remote_dep_memcpy(parsec_execution_stream_t* es,
                               parsec_taskpool_t* tp,
                               parsec_data_copy_t *dst,
@@ -1245,6 +1271,9 @@ remote_dep_dequeue_nothread_progress(parsec_execution_stream_t* es,
         break;
     case DEP_MEMCPY_RESHAPE:
         local_dep_nothread_reshape(es, item);
+        break;
+    case DEP_DIRECT:
+        mig_dep_direct_send(es, &item);
         break;
     default:
         assert(0 && item->action); /* Not a valid action */
