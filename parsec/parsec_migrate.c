@@ -542,7 +542,7 @@ int progress_migrated_task(parsec_execution_stream_t* es)
     task = (parsec_task_t *)select_migrated_task(es);
 
     if(NULL != task) {
-        __parsec_task_progress(es, task, 1);
+        __parsec_task_progress(es, task, 0);
         return 1;
     }
 
@@ -1585,10 +1585,8 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     task->taskpool = origin->taskpool;
     task->task_class = task->taskpool->task_classes_array[origin->msg.task_class_id];
     task->priority = origin->priority;
-    for (i = 0; i < task->task_class->nb_locals; i++) {
-        task->locals[i] = origin->msg.locals[i];
-    }
-
+    for (i = 0; i < task->task_class->nb_locals; i++)  task->locals[i] = origin->msg.locals[i];
+    
     task->repo_entry = NULL;
     task->mig_status = PARSEC_MIGRATED_TASK;
     task->status = PARSEC_TASK_STATUS_HOOK; /** Skip the prepare input step */
@@ -1613,18 +1611,6 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         origin->output[flow_index].data.data->readers = 0;
     }
 
-    /** Update the task count on this node */
-    origin->taskpool->tdm.module->taskpool_addto_nb_tasks(origin->taskpool, 1);
-
-    /** Schedule the task on this node */
-    parsec_list_item_singleton((parsec_list_item_t *)task);
-    PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
-    task->chore_mask = PARSEC_DEV_ALL;
-
-    if (parsec_runtime_node_migrate_stats) {
-        parsec_node_mig_inc_task_recvd();
-    }
-
     if(parsec_runtime_task_mapping) {
         assert(NULL == find_migrated_tasks_details(task));
         assert(NULL == find_received_tasks_details(task));
@@ -1634,7 +1620,15 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         insert_received_tasks_details(task, origin->from, my_rank);
     }
 
-    /** schedule the migrated tasks */
+    /** Update the task count on this node */
+    origin->taskpool->tdm.module->taskpool_addto_nb_tasks(origin->taskpool, 1);
+    parsec_list_item_singleton((parsec_list_item_t *)task);
+    PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
+    task->chore_mask = PARSEC_DEV_ALL;
+    if (parsec_runtime_node_migrate_stats) {
+        parsec_node_mig_inc_task_recvd();
+    }
+    /** Schedule the task on this node */
     schedule_migrated_task(es, task);
     assert(origin->root == origin->from);
 
