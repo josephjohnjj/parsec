@@ -3127,7 +3127,8 @@ static void jdf_generate_startup_tasks(const jdf_t *jdf, const jdf_function_entr
             "%s    vpid = (vpid + 1) %% context->nb_vp;  /* spread the initial joy */\n"
             "%s  }\n"
             "%s  new_task = (%s*)parsec_thread_mempool_allocate( context->virtual_processes[vpid]->execution_streams[0]->context_mempool );\n"
-            "%s  new_task->status = PARSEC_TASK_STATUS_NONE;\n",
+            "%s  new_task->status = PARSEC_TASK_STATUS_NONE;\n"
+            "%s  new_task->mig_status = PARSEC_NON_MIGRATED_TASK;\n",
             indent(nesting), f->predicate->func_or_mem,
             indent(nesting), f->predicate->func_or_mem, f->predicate->func_or_mem,
             UTIL_DUMP_LIST(sa2, f->predicate->parameters, next,
@@ -3741,13 +3742,15 @@ static void jdf_generate_internal_init(const jdf_t *jdf, const jdf_function_entr
         coutput("%s    do {\n"
                 "%s      this_task->super.list_next = (parsec_list_item_t*)__parsec_tp->startup_queue;\n"
                 "%s    } while(!parsec_atomic_cas_ptr(&__parsec_tp->startup_queue, (parsec_list_item_t*)this_task->super.list_next, this_task));\n"
-                "%s    this_task->status = PARSEC_TASK_STATUS_HOOK;\n",
-                indent(nesting), indent(nesting), indent(nesting), indent(nesting));
+                "%s    this_task->status = PARSEC_TASK_STATUS_HOOK;\n"
+                "%s    this_task->mig_status = PARSEC_NON_MIGRATED_TASK;\n",
+                indent(nesting), indent(nesting), indent(nesting), indent(nesting), indent(nesting));
     } else {
         /* Assume that all startup tasks complete right away, without going through the
          * second stage.
          */
         coutput("  this_task->status = PARSEC_TASK_STATUS_COMPLETE;\n");
+        coutput("  this_task->mig_status = PARSEC_NON_MIGRATED_TASK;\n");
     }
 
     string_arena_free(sa1);
@@ -3851,6 +3854,7 @@ static void jdf_generate_internal_init(const jdf_t *jdf, const jdf_function_entr
         coutput("    if( 1 >= __parsec_tp->super.super.nb_pending_actions ) {\n"
                 "        /* if no tasks will be generated let's prevent the runtime from calling the hook and instead go directly to complete the task */\n"
                 "        this_task->status = PARSEC_TASK_STATUS_COMPLETE;\n"
+                "        this_task->mig_status = PARSEC_NON_MIGRATED_TASK;\n"
                 "    }\n");
     }
     coutput("    return PARSEC_HOOK_RETURN_DONE;\n"
@@ -4460,9 +4464,11 @@ static void jdf_generate_startup_hook( const jdf_t *jdf )
             "    task->taskpool = (parsec_taskpool_t *)__parsec_tp;\n"
             "    task->chore_mask = PARSEC_DEV_CPU;\n"
             "    task->status = PARSEC_TASK_STATUS_NONE;\n"
+            "    task->mig_status = PARSEC_NON_MIGRATED_TASK;\n"
             "    memset(&task->locals, 0, sizeof(parsec_assignment_t) * MAX_LOCAL_COUNT);\n"
             "    PARSEC_LIST_ITEM_SINGLETON(task);\n"
             "    task->priority = -1;\n"
+            "    task->mig_status = PARSEC_NON_MIGRATED_TASK;\n"
             "    task->task_class = task->taskpool->task_classes_array[PARSEC_%s_NB_TASK_CLASSES + i];\n"
             "    int where = i %% context->nb_vp;\n"
             "    if( NULL == ready_tasks[where] ) ready_tasks[where] = &task->super;\n"
