@@ -732,7 +732,7 @@ int process_steal_request(parsec_execution_stream_t *es)
 
                     if ((gpu_task != NULL) 
                         && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) 
-                        && (gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK) 
+                        && (gpu_task->ec->mig_status == PARSEC_NON_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
                         && (my_rank == 1) 
@@ -812,6 +812,9 @@ int process_steal_request(parsec_execution_stream_t *es)
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, my_rank, steal_request->msg.root);
                     }
+                    char tmp[MAX_TASK_STRLEN];
+                    parsec_task_snprintf(tmp, MAX_TASK_STRLEN, gpu_task->ec);
+                    printf("TakMIG: Migrated task %s from node %d to 5D  \n", tmp, get_my_rank(), steal_request->msg.root);
                 }
             }
         
@@ -1586,7 +1589,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     task->task_class = task->taskpool->task_classes_array[origin->msg.task_class_id];
     task->priority = origin->priority;
     for (i = 0; i < task->task_class->nb_locals; i++)  task->locals[i] = origin->msg.locals[i];
-    
+
     task->repo_entry = NULL;
     task->mig_status = PARSEC_MIGRATED_TASK;
     task->status = PARSEC_TASK_STATUS_HOOK; /** Skip the prepare input step */

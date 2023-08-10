@@ -2038,7 +2038,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     (void)data;
 #endif
 
-    if ((arg->action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) &&
+    if ((arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS ) &&
         (es->virtual_process->parsec_context->my_rank == dst_rank) ) { 
 
         /* Copying data in data-repo if there is data .

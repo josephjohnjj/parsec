@@ -5306,7 +5306,7 @@ jdf_generate_code_reshape_input_from_dep(const jdf_t *jdf,
      * Format: type = XX   type_remote = ... -> pack XX unpack XX
      * */
     coutput("%s    data.data   = NULL;\n", spaces);
-    coutput("%s    if ( (NULL != consumed_entry) && (this_task->mig_status == 0) )\n", spaces);
+    coutput("%s    if ( (NULL != consumed_entry) && (this_task->mig_status != PARSEC_MIGRATED_TASK) )\n", spaces);
     coutput("%s         data.data_future   = (parsec_datacopy_future_t*)consumed_entry->data[consumed_flow_index];\n",
             spaces);
 
@@ -5446,14 +5446,14 @@ jdf_generate_code_consume_predecessor_setup(const jdf_t *jdf, const jdf_call_t *
                 spaces, flow->flow_index);
         coutput("%s    }else{\n"
                 "%s        /* Consume from predecessor's repo */\n"
-                "%s        consumed_repo = %s_repo;\n"
+                "%s        consumed_repo = (this_task->mig_status == PARSEC_MIGRATED_DIRECT) ? %s_repo_direct : %s_repo;\n"
                 "%s        consumed_entry_key = %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)target_locals) ;\n"
                 "%s        consumed_entry = data_repo_lookup_entry( consumed_repo, consumed_entry_key );\n"
                 "%s        consumed_flow_index = %d;\n"
                 "%s    }\n",
                 spaces,
                 spaces,
-                spaces, pred_name,
+                spaces, pred_name, pred_name,
                 spaces, jdf_property_get_string(pred_f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL),
                 spaces,
                 spaces, pred_flow->flow_index,
@@ -7256,9 +7256,16 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                 "  }\n"
                 "#endif\n"
                 "\n");
-        coutput("  if(action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) {\n"
-                "    data_repo_entry_addto_usage_limit(%s_repo, arg.output_entry->ht_item.key, arg.output_usage);\n",
-                f->fname);
+
+        coutput("  data_repo_t *parent_repo = NULL; \n");
+        coutput("  if(action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) {\n");
+        coutput("    parent_repo = %s_repo; \n", f->fname);
+        coutput("  } \n");
+        coutput("  else if(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) { \n");
+        coutput("    parent_repo = %s_repo_direct; \n", f->fname);
+        coutput("  } \n");
+        coutput("  if(action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS|PARSEC_ACTION_RELEASE_DIRECT_DEPS)) {\n"
+                "    data_repo_entry_addto_usage_limit(parent_repo, arg.output_entry->ht_item.key, arg.output_usage);\n");
         if(jdf_uses_dynamic_termdet(jdf)) {
             coutput("    {\n"
                     "      /* Using Dynamic Termination Detection, the DSL is reponsible of counting the number of tasks scheduled before scheduling them */\n"
