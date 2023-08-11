@@ -1079,7 +1079,6 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
     if(parsec_runtime_task_mapping) {
         remote_dep_inc_flying_messages(task.taskpool);
         assert(0 == origin->pending_ack);
-        (void)parsec_atomic_fetch_inc_int32(&origin->pending_ack);
     }
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
@@ -1146,7 +1145,6 @@ remote_dep_release_incoming(parsec_execution_stream_t* es,
 #endif
 
     if(parsec_runtime_task_mapping) {
-        parsec_atomic_fetch_dec_int32(&origin->pending_ack);
         if(0 == origin->outgoing_mask)  {
             /** no data to propogate to migrated tasks */
             assert(0 == origin->pending_ack);
