@@ -812,9 +812,14 @@ int process_steal_request(parsec_execution_stream_t *es)
                         /** insert the details of the migrated task to a HT */
                         insert_migrated_tasks_details(gpu_task->ec, my_rank, steal_request->msg.root);
                     }
+                #if defined(PARSEC_DEBUG)
                     char tmp[MAX_TASK_STRLEN];
                     parsec_task_snprintf(tmp, MAX_TASK_STRLEN, gpu_task->ec);
-                    printf("TakMIG: Migrated task %s from node %d to 5D  \n", tmp, get_my_rank(), steal_request->msg.root);
+                    //printf("MIG-MSG: Migrated task %s from node %d to %d  \n", tmp, get_my_rank(), steal_request->msg.root);
+                    PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "MIG-MSG: Migrated task %s from node %d to %d \n", 
+                        tmp, get_my_rank(), steal_request->msg.root);
+                        
+                #endif
                 }
             }
         
@@ -897,12 +902,12 @@ parsec_remote_deps_t* prepare_task_details_msg(parsec_execution_stream_t *es, pa
      * Ideally there should be only one increment per message. But incrementing one
      * per deps makes the logic easier on the receiver side. 
     */
-    printf("FLYTHING MSG: PARSEC_MIG_TASK_DETAILS_TAG Start \n");
     deps->taskpool->tdm.module->outgoing_message_start(deps->taskpool, dst_rank, deps);
 
-
-    PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Migration reply send to rank %d using deps %p with pending ack %d",
+#if defined(PARSEC_DEBUG)
+    PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-MSG: Migration reply send to rank %d using deps %p with pending ack %d",
                          dst_rank, deps, deps->pending_ack);
+#endif
 
     return deps;
 }
@@ -1426,7 +1431,6 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
     remote_dep_wire_get_t msg;
     MPI_Datatype dtt;
 
-    printf("FLYTHING MSG: PARSEC_MIG_TASK_DETAILS_TAG Start \n");
     int rc = deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, &deps->msg, NULL /*not imp today*/,
                                                                 0 /*not imp today*/, deps);
 
@@ -1637,7 +1641,6 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
 
     /** mark the end of communication for this migration message */
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
-    printf("FLYTHING MSG: PARSEC_MIG_TASK_DETAILS_TAG End \n");
 
     remote_deps_free(origin);
     return 0;
@@ -1862,7 +1865,9 @@ mig_task_mapping_item_t* insert_migrated_tasks_details(parsec_task_t *task, int 
 
     #if defined(PARSEC_DEBUG)
         char tmp[MAX_TASK_STRLEN];
-        printf("ELASTIC-MSG Rank %d: [insert_migrated_tasks_details] Task %s with key %d migrated from victim %d to thief %d tp_id %d \n",
+        //printf("ELASTIC-MSG Rank %d: [insert_migrated_tasks_details] Task %s with key %d migrated from victim %d to thief %d tp_id %d \n",
+        //    my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), key, victim, thief, task->taskpool->taskpool_id);
+        PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "ELASTIC-MSG Rank %d: [insert_migrated_tasks_details] Task %s with key %d migrated from victim %d to thief %d tp_id %d",
             my_rank, parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task), key, victim, thief, task->taskpool->taskpool_id);
 
     #endif
@@ -1933,7 +1938,9 @@ mig_task_mapping_item_t* insert_received_tasks_details(parsec_task_t *task, int 
     #if defined(PARSEC_DEBUG)
         char tmp[MAX_TASK_STRLEN];
         parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task);
-        printf("ELASTIC-MSG Rank %d: [insert_received_tasks_details] Task %s with key %d is received on from victim = %d on thief = %d\n",
+        //printf("ELASTIC-MSG Rank %d: [insert_received_tasks_details] Task %s with key %d is received on from victim = %d on thief = %d\n",
+        //    my_rank, tmp, key, victim, thief); 
+        PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream,"ELASTIC-MSG Rank %d: [insert_received_tasks_details] Task %s with key %d is received on from victim = %d on thief = %d",
             my_rank, tmp, key, victim, thief); 
     #endif
     }
@@ -2174,17 +2181,25 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     const parsec_task_class_t* fct           = newcontext->task_class;
     uint32_t flow_mask                       = (1U << dep->flow->flow_index) | 0x80000000;  /* in flow */
 
+#if defined(PARSEC_DEBUG)
     if(was_received) {
         char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
         parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
         parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-        printf("ELASTIC-MSG Rank %d: [mig_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be received(deps from %d root %d)\n",
+        //printf("ELASTIC-MSG Rank %d: [mig_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be received(deps from %d root %d)\n",
+        //    get_my_rank(), 
+        //    tmp1, tmp2, 
+        //    was_received->victim, was_received->thief, 
+        //    dep->flow->flow_index,
+        //    deps->from, deps->root);
+        PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "ELASTIC-MSG Rank %d: [mig_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be received(deps from %d root %d)",
             get_my_rank(), 
             tmp1, tmp2, 
             was_received->victim, was_received->thief, 
             dep->flow->flow_index,
             deps->from, deps->root);
     }
+#endif
 
     parsec_datatype_t old_dtt = output->data.remote.dst_datatype;
 
@@ -2229,7 +2244,6 @@ static void mig_direct_recv_activate(parsec_execution_stream_t* es, parsec_remot
     remote_dep_datakey_t complete_mask = 0;
     int k;
 
-    printf("PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG Start \n");
     deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, NULL, NULL,
                                                        deps->msg.length, deps);
     for(k = 0; deps->incoming_mask>>k; k++) {
@@ -2504,9 +2518,13 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
     assert(0 <= origin->root && origin->root < get_nb_nodes());
     assert(0 <= origin->from && origin->from < get_nb_nodes());
 
+#if defined(PARSEC_DEBUG)
     char tmp1[MAX_TASK_STRLEN];
-    printf("ELASTIC-MSG Rank %d: [mig_direct_release_incoming] Release direct deps from Task %s (depd from node %d taskpool_d %d) \n",
+    //printf("ELASTIC-MSG Rank %d: [mig_direct_release_incoming] Release direct deps from Task %s (depd from node %d taskpool_d %d) \n",
+    //        my_rank, parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, &task), origin->from, origin->taskpool->taskpool_id);
+    PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "ELASTIC-MSG Rank %d: [mig_direct_release_incoming] Release direct deps from Task %s (depd from node %d taskpool_d %d)",
             my_rank, parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, &task), origin->from, origin->taskpool->taskpool_id);
+#endif
 
     (void)task.task_class->release_deps(es, &task,
         action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
@@ -2517,7 +2535,6 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
         return origin;
 
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
-    printf("FLYTHING MSG: PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG End \n");
 
 #if defined(PARSEC_DEBUG)
     if(-1 == origin->root) {
@@ -2599,20 +2616,30 @@ parsec_gather_direct_collective_pattern(parsec_execution_stream_t *es,
     was_migrated = find_migrated_tasks_details(newcontext);
     if( NULL == was_migrated) return PARSEC_ITERATE_CONTINUE;
 
+#if defined(PARSEC_DEBUG)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
     parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-    printf("ELASTIC-MSG Rank %d: [parsec_gather_direct_collective_pattern] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d is propogated (deps from %d root %d)\n",
-        get_my_rank(), 
-        tmp1, tmp2, 
-        was_migrated->victim, was_migrated->thief, 
-        dep->flow->flow_index,
-        deps->from, deps->root);
+    //printf("ELASTIC-MSG Rank %d: [parsec_gather_direct_collective_pattern] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d is propogated (deps from %d root %d)\n",
+    //    get_my_rank(), 
+    //    tmp1, tmp2, 
+    //    was_migrated->victim, was_migrated->thief, 
+    //    dep->flow->flow_index,
+    //    deps->from, deps->root);
+
+    PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "ELASTIC-MSG Rank %d: [parsec_gather_direct_collective_pattern] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d is propogated (deps from %d root %d)",
+                            get_my_rank(), 
+                            tmp1, tmp2, 
+                            was_migrated->victim, was_migrated->thief, 
+                            dep->flow->flow_index,
+                            deps->from, deps->root);
 
     assert( dst_rank == es->virtual_process->parsec_context->my_rank );
     assert(was_migrated->thief != my_rank);
     assert(was_migrated->thief != dst_rank);  
     assert(was_migrated->victim == my_rank); 
+
+#endif
 
     deps->outgoing_mask |= (1 << dep->dep_datatype_index);
 

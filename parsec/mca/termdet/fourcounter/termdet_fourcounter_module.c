@@ -139,8 +139,8 @@ static int parsec_termdet_fourcounter_msg_dispatch_taskpool(parsec_taskpool_t *t
         assert( size == sizeof(parsec_termdet_fourcounter_msg_up_t) );
         PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tIt is an UP message with nb_sent = %d / nb_received = %d",
                              up_msg->nb_sent, up_msg->nb_received);
-        printf("TERMDET-4C:\t I_AM %d It is an UP message with nb_sent = %d / nb_received = %d \n",
-                             whoami(), up_msg->nb_sent, up_msg->nb_received);
+        //printf("TERMDET-4C:\t I_AM %d It is an UP message with nb_sent = %d / nb_received = %d \n",
+        //                     whoami(), up_msg->nb_sent, up_msg->nb_received);
         parsec_termdet_fourcounter_msg_up( up_msg, src, tp );
         return PARSEC_SUCCESS;
     }
@@ -365,9 +365,9 @@ static void parsec_termdet_fourcounter_send_up_messages(parsec_termdet_fourcount
             PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tSending DOWN message with result %d to rank %d. Justification: last_acc_sent_at_root = %d, acc_sent = %d, last_acc_received_at_root = %d, acc_received = %d",
                                  msg_down.result, parsec_termdet_fourcounter_topology_child(tp, i),
                                  tpm->last_acc_sent_at_root, tpm->acc_sent, tpm->last_acc_received_at_root, tpm->acc_received);
-            printf("TERMDET-4C: I_AM %d \tSending DOWN message with result %d to rank %d. Justification: last_acc_sent_at_root = %d, acc_sent = %d, last_acc_received_at_root = %d, acc_received = %d \n",
-                                 whoami(), msg_down.result, parsec_termdet_fourcounter_topology_child(tp, i),
-                                 tpm->last_acc_sent_at_root, tpm->acc_sent, tpm->last_acc_received_at_root, tpm->acc_received);
+            //printf("TERMDET-4C: I_AM %d \tSending DOWN message with result %d to rank %d. Justification: last_acc_sent_at_root = %d, acc_sent = %d, last_acc_received_at_root = %d, acc_received = %d \n",
+            //                     whoami(), msg_down.result, parsec_termdet_fourcounter_topology_child(tp, i),
+            //                     tpm->last_acc_sent_at_root, tpm->acc_sent, tpm->last_acc_received_at_root, tpm->acc_received);
              
             tpm->stats_nb_sent_msg++;
             tpm->stats_nb_sent_bytes += sizeof(parsec_termdet_fourcounter_msg_down_t) + sizeof(int);
@@ -393,8 +393,8 @@ static void parsec_termdet_fourcounter_send_up_messages(parsec_termdet_fourcount
         msg_up.nb_received = tpm->acc_received;
         PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tSending UP message with nb_sent / nb_received of %d/%d to rank %d",
                              msg_up.nb_sent, msg_up.nb_received, parsec_termdet_fourcounter_topology_parent(tp));
-        printf("TERMDET-4C: I_AM %d \tSending UP message with nb_sent / nb_received of %d/%d to rank %d \n",
-                             whoami(), msg_up.nb_sent, msg_up.nb_received, parsec_termdet_fourcounter_topology_parent(tp));
+        //printf("TERMDET-4C: I_AM %d \tSending UP message with nb_sent / nb_received of %d/%d to rank %d \n",
+        //                     whoami(), msg_up.nb_sent, msg_up.nb_received, parsec_termdet_fourcounter_topology_parent(tp));
         tpm->stats_nb_sent_msg++;
         tpm->stats_nb_sent_bytes += sizeof(parsec_termdet_fourcounter_msg_up_t) + sizeof(int);
         parsec_ce.send_am(&parsec_ce, PARSEC_TERMDET_FOURCOUNTER_MSG_TAG, parsec_termdet_fourcounter_topology_parent(tp), &msg_up, sizeof(parsec_termdet_fourcounter_msg_up_t));
@@ -486,7 +486,7 @@ static int parsec_termdet_fourcounter_taskpool_addto_nb_tasks(parsec_taskpool_t 
     if(v == 0)
         return tp->nb_tasks;
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tNB_TASKS %d -> %d", tp->nb_tasks, tp->nb_tasks + v);
-    printf("TERMDET-4C I_AM %d %p:\tNB_TASKS %d -> %d \n", whoami(), tp, tp->nb_tasks, tp->nb_tasks + v);
+    //printf("TERMDET-4C I_AM %d %p:\tNB_TASKS %d -> %d \n", whoami(), tp, tp->nb_tasks, tp->nb_tasks + v);
     int tmp = parsec_atomic_fetch_add_int32(&tp->nb_tasks, v);
     assert( ((parsec_termdet_fourcounter_monitor_t *)tp->tdm.monitor)->state != PARSEC_TERMDET_FOURCOUNTER_TERMINATED );
     ret = tmp + v;
@@ -510,7 +510,7 @@ static int parsec_termdet_fourcounter_taskpool_addto_runtime_actions(parsec_task
     if(v == 0)
         return tp->nb_pending_actions;
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "TERMDET-4C:\tNB_PA %d -> %d", tp->nb_pending_actions, tp->nb_pending_actions + v);
-    printf("TERMDET-4C I_AM %d %p:\tNB_PA %d -> %d \n", whoami(), tp, tp->nb_pending_actions, tp->nb_pending_actions + v);
+    //printf("TERMDET-4C I_AM %d %p:\tNB_PA %d -> %d \n", whoami(), tp, tp->nb_pending_actions, tp->nb_pending_actions + v);
     int tmp = parsec_atomic_fetch_add_int32(&tp->nb_pending_actions, v);
     ret = tmp + v;
     if (tmp == 0 || ret == 0) {
@@ -528,7 +528,7 @@ static int parsec_termdet_fourcounter_outgoing_message_start(parsec_taskpool_t *
                                                              int dst_rank,
                                                              parsec_remote_deps_t *remote_deps)
 {
-    printf(" OVERLORD: parsec_termdet_fourcounter_outgoing_message_start \n");
+    //printf(" OVERLORD: parsec_termdet_fourcounter_outgoing_message_start \n");
     parsec_termdet_fourcounter_monitor_t *tpm;
     assert( tp->tdm.module != NULL );
     assert( tp->tdm.module == &parsec_termdet_fourcounter_module.module );
@@ -567,7 +567,7 @@ static int parsec_termdet_fourcounter_incoming_message_start(parsec_taskpool_t *
                                                              int buffer_size,
                                                              const parsec_remote_deps_t *msg)
 {
-    printf(" OVERLORD: parsec_termdet_fourcounter_incoming_message_start \n");
+    //printf(" OVERLORD: parsec_termdet_fourcounter_incoming_message_start \n");
     parsec_termdet_fourcounter_monitor_t *tpm;
     assert( tp->tdm.module != NULL );
     assert( tp->tdm.module == &parsec_termdet_fourcounter_module.module );
@@ -602,7 +602,7 @@ static int parsec_termdet_fourcounter_incoming_message_start(parsec_taskpool_t *
 static int parsec_termdet_fourcounter_incoming_message_end(parsec_taskpool_t *tp,
                                                            const parsec_remote_deps_t *msg)
 {
-    printf(" OVERLORD: parsec_termdet_fourcounter_incoming_message_end \n");
+    //printf(" OVERLORD: parsec_termdet_fourcounter_incoming_message_end \n");
     parsec_termdet_fourcounter_monitor_t *tpm;
     (void)msg;
 

@@ -102,7 +102,7 @@ int __parsec_context_wait_task( parsec_execution_stream_t* es,
     case PARSEC_TASK_STATUS_NONE:
 #if defined(PARSEC_DEBUG)
         char tmp[MAX_TASK_STRLEN];
-        parsec_degug_verbose(5, parsec_debug_output, "thread %d of VP %d Execute %s\n", es->th_id, es->virtual_process->vp_id,
+        parsec_debug_verbose(5, parsec_debug_output, "thread %d of VP %d Execute %s\n", es->th_id, es->virtual_process->vp_id,
                              parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task));
 #endif
         return -1;
@@ -192,19 +192,6 @@ int __parsec_execute( parsec_execution_stream_t* es,
                              chore_id);
 #endif
         parsec_hook_t *hook = tc->incarnations[chore_id].hook;
-
-        if(task->mig_status == PARSEC_MIGRATED_DIRECT) {
-            printf("Thread (MIG) %d of VP %d Execute %s[%d] chore %d on node %d \n",
-                             es->th_id, es->virtual_process->vp_id,
-                             tmp, tc->incarnations[chore_id].type,
-                             chore_id, get_my_rank());
-        }
-        else if(task->task_class->task_class_id == 5) {
-            printf("Thread (NOMIG) %d of VP %d Execute %s[%d] chore %d  on node %d\n",
-                             es->th_id, es->virtual_process->vp_id,
-                             tmp, tc->incarnations[chore_id].type,
-                             chore_id, get_my_rank());
-        }
 
         rc = hook( es, task );
 #if defined(PARSEC_PROF_TRACE)
@@ -478,11 +465,14 @@ int __parsec_complete_execution( parsec_execution_stream_t *es,
      */
     PARSEC_PINS(es, COMPLETE_EXEC_BEGIN, task);
 
+#if defined(PARSEC_DEBUG)
     if(task->mig_status == PARSEC_MIGRATED_DIRECT) {
         char tmp[MAX_TASK_STRLEN];
         parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task);
-        printf("__parsec_complete_execution: Migrated task %s on node %d \n", tmp, get_my_rank());
+        //printf("__parsec_complete_execution: Migrated task %s on node %d \n", tmp, get_my_rank());
+        parsec_debug_verbose(10, parsec_debug_output, "__parsec_complete_execution: Migrated task %s on node %d \n", tmp, get_my_rank());
     }
+#endif
 
     if( NULL != task->task_class->prepare_output ) {
         task->task_class->prepare_output( es, task );
@@ -575,12 +565,6 @@ int __parsec_task_progress( parsec_execution_stream_t* es,
         switch(rc) {
         case PARSEC_HOOK_RETURN_DONE:    /* This execution succeeded */
             task->status = PARSEC_TASK_STATUS_COMPLETE;
-
-            if(task->mig_status == PARSEC_MIGRATED_TASK) {
-                char tmp[MAX_TASK_STRLEN];
-                parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task);
-                printf("call __parsec_complete_execution: Migrated task %s on node %d \n", tmp, get_my_rank());
-            }
             __parsec_complete_execution( es, task );
 
             if(parsec_runtime_node_migrate_stats)
