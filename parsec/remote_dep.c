@@ -776,7 +776,7 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
                             get_my_rank(), tmp1, get_my_rank(), rank, task->taskpool->taskpool_id);
                     #endif
 
-                        remote_dep_dequeue_direct_send(es, rank, remote_deps);
+                        direct_send(es, rank, remote_deps);
                     
                     }
                     
