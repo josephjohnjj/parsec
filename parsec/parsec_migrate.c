@@ -576,12 +576,14 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
 
     if (steal_request->msg.root == my_rank) /** request initiated from this node */ {
-        if(steal_request->msg.nb_task_request < parsec_runtime_chunk_size) {
-            if(0 == steal_request->msg.nb_task_request) {
-                parsec_node_mig_inc_success_full_steals(steal_request);
+        
+        if (parsec_runtime_node_migrate_stats) {
+            if(steal_request->msg.nb_task_request < parsec_runtime_chunk_size) {
+                if(0 == steal_request->msg.nb_task_request) {
+                    parsec_node_mig_inc_success_full_steals(steal_request);
+                }
+                parsec_node_mig_inc_success_steals(steal_request);
             }
-            parsec_node_mig_inc_success_steals(steal_request);
-
         }
 
         if (2 == parsec_runtime_steal_request_policy) {
