@@ -70,10 +70,8 @@ int main(int argc, char *argv[])
     parsec_matrix_block_cyclic_t *dcA;  
 
 #if defined(PARSEC_HAVE_MPI)
-    {
-        int provided;
-        MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
-    }
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &world);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 #else
