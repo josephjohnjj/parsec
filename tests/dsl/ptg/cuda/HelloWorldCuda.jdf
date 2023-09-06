@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
                                100, 100,   /* Tile size */
                                100, 100,   /* Global matrix size (what is stored)*/
                                0, 0,    /* Staring point in the global matrix */
-                               100, 100,    /* Submatrix size (the one concerned by the computation */
+                               100, 100,    /* Submatrix size (the one concerned by the computation) */
                                1, 1,    /* process process grid */
                                1, 1,   /* k-cyclicity */
                                0, 0);   /* starting point on the process grid */
