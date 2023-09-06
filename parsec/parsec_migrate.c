@@ -576,7 +576,7 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
 
     if (steal_request->msg.root == my_rank) /** request initiated from this node */ {
-        
+
         if (parsec_runtime_node_migrate_stats) {
             if(steal_request->msg.nb_task_request < parsec_runtime_chunk_size) {
                 if(0 == steal_request->msg.nb_task_request) {
@@ -1329,7 +1329,7 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
         parsec_list_unlock(&mig_noobj_fifo);
     }
 
-    if(parsec_runtime_task_mapping) {
+    if(parsec_runtime_task_mapping && (parsec_migration_engine_up ==  1) ) {
 
         parsec_list_lock(&direct_msg_fifo);
         for(item = PARSEC_LIST_ITERATOR_FIRST(&direct_msg_fifo);
@@ -2271,10 +2271,12 @@ int progress_direct_activation(parsec_execution_stream_t* es)
 {
     int success = 0;
 
-    if(parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&direct_activates_fifo)) {
-        parsec_remote_deps_t* deps = (parsec_remote_deps_t*)parsec_list_pop_front(&direct_activates_fifo);
-        mig_direct_get_start(es, deps);
-        success = 1;
+    if(parsec_migration_engine_up ==  1) {
+        if(parsec_ce.can_serve(&parsec_ce) && !parsec_list_nolock_is_empty(&direct_activates_fifo)) {
+            parsec_remote_deps_t* deps = (parsec_remote_deps_t*)parsec_list_pop_front(&direct_activates_fifo);
+            mig_direct_get_start(es, deps);
+            success = 1;
+        }
     }
     return success;
 }
