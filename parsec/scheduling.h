@@ -171,6 +171,10 @@ int parsec_set_scheduler( parsec_context_t *parsec );
  */
 void parsec_remove_scheduler( parsec_context_t *parsec );
 
+int __parsec_task_progress( parsec_execution_stream_t* es,
+                            parsec_task_t* task,
+                            int distance);
+
 struct parsec_sched_module_s;
 extern struct parsec_sched_module_s *parsec_current_scheduler;
 
