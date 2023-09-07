@@ -3130,7 +3130,7 @@ static void jdf_generate_startup_tasks(const jdf_t *jdf, const jdf_function_entr
             "%s  new_task->status = PARSEC_TASK_STATUS_NONE;\n"
             "%s  new_task->mig_status = PARSEC_NON_MIGRATED_TASK;\n",
             indent(nesting), f->predicate->func_or_mem,
-            indent(nesting), f->predicate->func_or_mem, f->predicate->func_or_mem,
+            indent(nesting), f->predicate->func_or_mem, f->predicate->func_or_mem, 
             UTIL_DUMP_LIST(sa2, f->predicate->parameters, next,
                            dump_expr, (void*)&info1,
                            "", "", ", ", ""),
@@ -3139,6 +3139,7 @@ static void jdf_generate_startup_tasks(const jdf_t *jdf, const jdf_function_entr
             indent(nesting),
             indent(nesting),
             indent(nesting), parsec_get_name(jdf, f, "task_t"),
+            indent(nesting), 
             indent(nesting));
 
     JDF_COUNT_LIST_ENTRIES(f->locals, jdf_variable_list_t, next, nb_locals);
