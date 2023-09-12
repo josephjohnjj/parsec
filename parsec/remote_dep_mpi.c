@@ -774,17 +774,17 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 
     if (parsec_runtime_task_mapping) {
         mig_task_mapping_item_t* was_migrated = find_migrated_tasks_details(newcontext);
-    #if defined(PARSEC_DEBUG)
+    //#if defined(PARSEC_DEBUG)
         if(was_migrated) {
             char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
             parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
             parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-            //printf("ELASTIC-MSG Rank %d: [remote_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be propogated (deps from %d root %d)\n",
-            //    get_my_rank(), 
-            //    tmp1, tmp2, 
-            //    was_migrated->victim, was_migrated->thief, 
-            //    dep->flow->flow_index,
-            //    deps->from, deps->root);
+            printf("ELASTIC-MSG Rank %d: [remote_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be propogated (deps from %d root %d)\n",
+                get_my_rank(), 
+                tmp1, tmp2, 
+                was_migrated->victim, was_migrated->thief, 
+                dep->flow->flow_index,
+                deps->from, deps->root);
 
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "ELASTIC-MSG Rank %d: [remote_dep_mpi_retrieve_datatype] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d will be propogated (deps from %d root %d)",
                 get_my_rank(), 
@@ -793,7 +793,7 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
                 dep->flow->flow_index,
                 deps->from, deps->root);
         }
-    #endif
+    //#endif
     }
 
     parsec_datatype_t old_dtt = output->data.remote.dst_datatype;

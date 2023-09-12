@@ -1774,15 +1774,23 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
     parsec_dependency_t *deps;
     int completed;
     parsec_dependency_t source_mask = (parsec_dependency_t)0;
-#if defined(PARSEC_DEBUG_NOISIER)
+//#if defined(PARSEC_DEBUG_NOISIER)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, task);
-#endif
+//#endif
 
     PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "Activate dependencies for %s flags = 0x%04x", tmp1, tc->flags);
     deps = tc->find_deps(origin->taskpool, es, task);
 
     completed = tc->update_deps(origin->taskpool, task, deps, origin, origin_flow, dest_flow);
+
+    if( NULL != find_received_tasks_details(task)) {
+        printf("%s (with flags = 0x%04x) becomes activated by %s, with dep mask 0x%04x (completed %d) \n",
+                   tmp1, tc->flags, 
+                   parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, origin),
+                   *deps,
+                   completed);
+    }
 
 #if defined(PARSEC_PROF_GRAPHER)
     parsec_prof_grapher_dep(origin, task, completed, origin_flow, dest_flow);
@@ -1825,14 +1833,14 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
             if (parsec_runtime_task_mapping ) {
                 if( NULL != find_received_tasks_details(task)) {
 
-                #if defined(PARSEC_DEBUG)
+                //#if defined(PARSEC_DEBUG)
                     char tmp3[MAX_TASK_STRLEN];
                     parsec_task_snprintf(tmp3, MAX_TASK_STRLEN, task);
-                    //printf("ELASTIC-MSG  Rank %d: [parsec_release_local_OUT_dependencies] Activation %s becomes ready from direct deps\n", 
-                    //    get_my_rank(), tmp3);
+                    printf("ELASTIC-MSG  Rank %d: [parsec_release_local_OUT_dependencies] Activation %s becomes ready from direct deps\n", 
+                        get_my_rank(), tmp3);
                     PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,"ELASTIC-MSG  Rank %d: [parsec_release_local_OUT_dependencies] Activation %s becomes ready from direct deps",
                         get_my_rank(), tmp3);
-                #endif 
+                //#endif 
                         
                     new_context->mig_status = PARSEC_MIGRATED_DIRECT;
                     pready_ring = &arg->ready_lists[0];
@@ -1893,21 +1901,21 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
             assert(get_my_rank() == dst_rank);
             assert(was_migrated->thief != dst_rank);
 
-        #if defined(PARSEC_DEBUG)
+        //#if defined(PARSEC_DEBUG)
             char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
             parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
             parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-            //printf("ELASTIC-MSG Rank %d: [parsec_release_dep_fct] Task %s (with predecessor %s) was migrated from victim %d to thief %d for flow %d (no action taken)\n",
-            //    get_my_rank(), 
-            //    tmp1, tmp2, 
-            //    was_migrated->victim, was_migrated->thief, 
-            //    dep->flow->flow_index);
+            printf("ELASTIC-MSG Rank %d: [parsec_release_dep_fct] Task %s (with predecessor %s) was migrated from victim %d to thief %d for flow %d (no action taken)\n",
+                get_my_rank(), 
+                tmp1, tmp2, 
+                was_migrated->victim, was_migrated->thief, 
+                dep->flow->flow_index);
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream, "ELASTIC-MSG Rank %d: [parsec_release_dep_fct] Task %s (with predecessor %s) was migrated from victim %d to thief %d for flow %d (no action taken)\n",
                 get_my_rank(), 
                 tmp1, tmp2, 
                 was_migrated->victim, was_migrated->thief, 
                 dep->flow->flow_index);
-        #endif
+        //#endif
 
             return PARSEC_ITERATE_CONTINUE;
         }
@@ -2089,21 +2097,21 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
     was_migrated =  find_migrated_tasks_details(newcontext);
     if(NULL == was_migrated) return PARSEC_ITERATE_CONTINUE;
 
-#if defined(PARSEC_DEBUG)
+//#if defined(PARSEC_DEBUG)
     char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
     parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
     parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-    //printf("ELASTIC-MSG Rank %d: [parsec_release_dep_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
-    //    get_my_rank(), 
-    //    tmp1, tmp2, 
-    //    was_migrated->victim, was_migrated->thief, 
-    //    dep->flow->flow_index);
+    printf("ELASTIC-MSG Rank %d: [parsec_release_dep_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
+        get_my_rank(), 
+        tmp1, tmp2, 
+        was_migrated->victim, was_migrated->thief, 
+        dep->flow->flow_index);
     parsec_debug_verbose(10, parsec_debug_output,"ELASTIC-MSG Rank %d: [parsec_release_dep_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
         get_my_rank(), 
         tmp1, tmp2, 
         was_migrated->victim, was_migrated->thief, 
         dep->flow->flow_index);
-#endif
+//#endif
     
     assert(src_rank == dst_rank);
     assert(get_my_rank() == dst_rank);
@@ -2318,21 +2326,21 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
             assert(NULL != was_receieved); 
         }
 
-    #if defined(PARSEC_DEBUG)
+    //#if defined(PARSEC_DEBUG)
         char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
         parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
         parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-        //printf("ELASTIC-MSG Rank %d: [parsec_release_local_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
-        //    get_my_rank(), 
-        //    tmp1, tmp2, 
-        //    was_receieved->victim, was_receieved->thief, 
-        //    dep->flow->flow_index);
+        printf("ELASTIC-MSG Rank %d: [parsec_release_local_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
+            get_my_rank(), 
+            tmp1, tmp2, 
+            was_receieved->victim, was_receieved->thief, 
+            dep->flow->flow_index);
         parsec_debug_verbose(10, parsec_debug_output, "ELASTIC-MSG Rank %d: [parsec_release_local_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
             get_my_rank(), 
             tmp1, tmp2, 
             was_receieved->victim, was_receieved->thief, 
             dep->flow->flow_index);
-    #endif
+    //#endif
         /* Copying data in data-repo if there is data .
          * We are doing this in order for dtd to be able to track control dependences.
          * Usage count of the repo is dealt with when setting up reshape promises.
