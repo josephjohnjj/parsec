@@ -1784,6 +1784,25 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
 
     completed = tc->update_deps(origin->taskpool, task, deps, origin, origin_flow, dest_flow);
 
+    if (parsec_runtime_task_mapping ) {
+    #if defined(PARSEC_DEBUG)
+        if( NULL != find_received_tasks_details(task)) {
+            //printf("%s (with flags = 0x%04x) becomes activated by %s, with dep mask 0x%04x (completed %d) \n",
+            //           tmp1, tc->flags, 
+            //           parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, origin),
+            //           *deps,
+            //           completed);
+
+            PARSEC_DEBUG_VERBOSE(6, parsec_debug_output,
+                   "%s (with flags = 0x%04x) becomes activated by %s, with dep mask 0x%04x (completed %d) \n",
+                       tmp1, tc->flags, 
+                       parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, origin),
+                       *deps,
+                       completed);
+        }
+    #endif
+    }
+
 #if defined(PARSEC_PROF_GRAPHER)
     parsec_prof_grapher_dep(origin, task, completed, origin_flow, dest_flow);
 #endif  /* defined(PARSEC_PROF_GRAPHER) */
