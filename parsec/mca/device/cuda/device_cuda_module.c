@@ -2873,6 +2873,7 @@ parsec_cuda_kernel_cleanout( parsec_device_gpu_module_t *gpu_device,
     return 0;
 }
 
+static int tpid = -1;
 /**
  * This version is based on 4 streams: one for transfers from the memory to
  * the GPU, 2 for kernel executions and one for transfers from the GPU into
@@ -2984,7 +2985,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
 
     if( 0 < rc ) {
         parsec_fifo_push( &(gpu_device->pending), (parsec_list_item_t*)gpu_task );
-        parsec_atomic_fetch_inc_int32( &(gpu_device->wt_tasks) );
+        if(PARSEC_GPU_TASK_TYPE_KERNEL == gpu_task->task_type ) {
+            parsec_atomic_fetch_inc_int32( &(gpu_device->wt_tasks) );
+        }
         
 
         /**
@@ -3140,7 +3143,9 @@ parsec_cuda_kernel_scheduler( parsec_execution_stream_t *es,
     gpu_task = (parsec_gpu_task_t*)parsec_fifo_try_pop( &(gpu_device->pending) );
     if( NULL != gpu_task ) {
 
-        parsec_atomic_fetch_dec_int32( &(gpu_device->wt_tasks) );
+        if(PARSEC_GPU_TASK_TYPE_KERNEL == gpu_task->task_type ) {
+            parsec_atomic_fetch_dec_int32( &(gpu_device->wt_tasks) );
+        }
 
         if(parsec_migration_engine_up ==  1)
         {
