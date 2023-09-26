@@ -721,9 +721,9 @@ int process_steal_request(parsec_execution_stream_t *es)
             device_selected = 0; /** reset for each device */
             gpu_device = (parsec_device_gpu_module_t *)parsec_mca_device_get(DEVICE_NUM(d));
 
-            if(1) {
+            //if(1) {
             //TODO : change this back
-            //if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > parsec_runtime_progress_count ) ) {
+            if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > parsec_runtime_progress_count ) ) {
                 list = &(gpu_device->pending);
                 if( !parsec_atomic_trylock( &list->atomic_lock ) ) {
                     continue;
@@ -745,7 +745,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (only_one_task < 1)
                     ) {
 
-                        only_one_task += 1;
+                        //only_one_task += 1;
 
                         item = parsec_list_nolock_remove(list, item);
                         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
