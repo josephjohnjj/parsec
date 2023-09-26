@@ -21,6 +21,8 @@ extern int parsec_runtime_hop_count;
 extern int parsec_runtime_progress_count;
 extern int parsec_runtime_task_mapping;
 extern int parsec_runtime_expand_nodes;
+extern int parsec_runtime_expand_start;
+extern int parsec_runtime_expand_stop ;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 int expand_next_rank = 0; /* Starting rank for round_robin */
@@ -739,6 +741,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
                         && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
+                        && ((parsec_runtime_expand_start <= gpu_task->ec->taskpool->taskpool_id) && (gpu_task->ec->taskpool->taskpool_id < parsec_runtime_expand_stop))
                         && (only_one_task < 1)
                     ) {
 
