@@ -1077,6 +1077,10 @@ int send_steal_request(parsec_execution_stream_t *es)
 {
     steal_request_t steal_request;
 
+    if(nb_starving_device(es) < parsec_runtime_starving_devices) {
+        return PARSEC_HOOK_RETURN_ASYNC;
+    }
+
 #if defined(PARSEC_PROF_TRACE)
     steal_req_prof_t steal_prof;
 

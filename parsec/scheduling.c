@@ -757,10 +757,6 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         if(parsec_migration_engine_up ==  1)
         {
             process_steal_request(es);
-        }
-
-        if( (parsec_migration_engine_up ==  1) && (nb_starving_device(es) >= parsec_runtime_starving_devices) )
-        {
             send_steal_request(es);
         }
     }
