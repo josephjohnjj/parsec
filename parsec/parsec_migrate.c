@@ -20,8 +20,11 @@ extern int parsec_runtime_starving_devices;
 extern int parsec_runtime_hop_count;
 extern int parsec_runtime_progress_count;
 extern int parsec_runtime_task_mapping;
+extern int parsec_runtime_expand_nodes;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
+int expand_next_rank = 0; /* Starting rank for round_robin */
+int original_nodes = 0; /* Original nodes*/
 
 parsec_list_t mig_noobj_fifo;               /** fifo of mig task details with taskpools not actually known */
 parsec_list_t steal_req_fifo;               /** list of all steal request received */
@@ -337,6 +340,8 @@ int parsec_node_migrate_init(parsec_context_t *context)
     }
 
     finalised_hop_count = ((0 == parsec_runtime_hop_count) || (parsec_runtime_hop_count >= nb_nodes) ) ? (nb_nodes - 1) : parsec_runtime_hop_count;
+    expand_next_rank =  rand() % (nb_nodes - parsec_runtime_expand_nodes);
+    
 
     if (parsec_communication_engine_up > 0) {
         parsec_migration_engine_up = 1;
@@ -458,6 +463,9 @@ int parsec_node_stats_fini()
     }
     else if (4 == parsec_runtime_steal_request_policy) {
         printf("Steal req policy                : RandomHops \n");
+    }
+    else if (5 == parsec_runtime_steal_request_policy) {
+        printf("Steal req policy                : Expand \n");
     }
 
     printf("Finalised hopcount              : %d \n", finalised_hop_count);
@@ -725,12 +733,12 @@ int process_steal_request(parsec_execution_stream_t *es)
 
                     gpu_task = (parsec_gpu_task_t *)item;
 
-                    if ((gpu_task != NULL) 
+                    if (   (gpu_task != NULL) 
                         && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) 
                         && (gpu_task->ec->mig_status == PARSEC_NON_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == 5) 
-                        && (my_rank == 1) 
+                        && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
                         && (only_one_task < 1)
                     ) {
 
@@ -1025,6 +1033,12 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         steal_request_msg.dst = victim_rank;
         steal_request_msg.hop_count -= 1;
     }
+    else if(5 == parsec_runtime_steal_request_policy) { /* Expand */
+        victim_rank = expand_next_rank;
+        expand_next_rank = (expand_next_rank + 1) % (nb_nodes - parsec_runtime_expand_nodes);
+
+        steal_request_msg.dst = victim_rank;
+    }
     else {
         printf("Wrong steal policy option \n");
         exit(0);
@@ -1080,6 +1094,13 @@ int send_steal_request(parsec_execution_stream_t *es)
         (uint64_t)(&steal_request),
         parsec_device_cuda_enabled, &steal_prof, 0);
 #endif
+
+
+    if(5 == parsec_runtime_steal_request_policy) { /* Expand */
+        if(my_rank < (nb_nodes - parsec_runtime_expand_nodes)) {
+            return PARSEC_HOOK_RETURN_ASYNC;
+        }
+    }
 
     if (parsec_migration_engine_up == 0 
         || active_steal_request_mutex != 0 /** steal request already sent */
@@ -1173,6 +1194,9 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
                 }
                 steal_request->msg.dst = victim_rank;
             }
+        }
+        else if(5 == parsec_runtime_steal_request_policy) { /* Expand */
+            steal_request->msg.dst = steal_request->msg.root;
         }
     }
 

@@ -173,6 +173,7 @@ int parsec_runtime_print_completion_stats = 0;
 int parsec_runtime_hop_count              = 0;
 int parsec_runtime_progress_count         = 0;
 int parsec_runtime_task_mapping           = 0;
+int parsec_runtime_expand_nodes           = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
 
@@ -967,8 +968,9 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 10, &parsec_runtime_progress_count);
     parsec_mca_param_reg_int_name("runtime", "task_mapping", "Use task mapping",
                                 false, false, 0, &parsec_runtime_task_mapping);
-                                
-                                
+    parsec_mca_param_reg_int_name("runtime", "expand_nodes", "Number of nodes to expand",
+                                false, false, 0, &parsec_runtime_expand_nodes);
+                           
 
     if( parsec_runtime_gdb_attach > 0 )
     {
