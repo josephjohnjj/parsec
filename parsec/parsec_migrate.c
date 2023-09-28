@@ -1374,8 +1374,8 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
                 int rc = mig_direct_get_datatypes(es, deps); 
                 assert( -1 != rc );
 
-                mig_direct_recv_activate(es, deps);
                 item = parsec_list_nolock_remove(&direct_msg_fifo, item);
+                mig_direct_recv_activate(es, deps);
             }
         }
         parsec_list_unlock(&direct_msg_fifo);
