@@ -959,7 +959,7 @@ int migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_
         }
 
         if (NULL != this_task->data[i].data_in) {
-            PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
+            //PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
         }
     }
 
@@ -1637,6 +1637,8 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         task->data[flow_index].data_in = origin->output[flow_index].data.data;
         task->data[flow_index].data_out = origin->output[flow_index].data.data;
         origin->output[flow_index].data.data->readers = 0;
+        PARSEC_OBJ_RETAIN(task->data[flow_index].data_in);
+        origin->output[flow_index].data.data->original->device_copies[0] = task->data[flow_index].data_in;
     }
 
     if(parsec_runtime_task_mapping) {
