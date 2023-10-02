@@ -2101,7 +2101,6 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
      */
     rc = mig_direct_get_datatypes(es, deps);
     if( -1 == rc ) {
-        parsec_list_item_singleton((parsec_list_item_t*)deps);
         parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
     } 
     else {
