@@ -23,6 +23,7 @@ extern int parsec_runtime_task_mapping;
 extern int parsec_runtime_expand_nodes;
 extern int parsec_runtime_expand_start;
 extern int parsec_runtime_expand_stop ;
+extern int parsec_runtime_mig_task_class;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 int expand_next_rank = 0; /* Starting rank for round_robin */
@@ -739,7 +740,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) 
                         && (gpu_task->ec->mig_status == PARSEC_NON_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
-                        && (gpu_task->ec->task_class->task_class_id == 5) 
+                        && (gpu_task->ec->task_class->task_class_id == parsec_runtime_mig_task_class) 
                         && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
                         && ((parsec_runtime_expand_start <= gpu_task->ec->taskpool->taskpool_id) && (gpu_task->ec->taskpool->taskpool_id < parsec_runtime_expand_stop))
                         && (only_one_task < 1)
@@ -1234,7 +1235,7 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     deps->root = src_rank;
     deps->msg.task_class_id = mig_task->task_class->task_class_id;
     deps->msg.taskpool_id = mig_task->taskpool->taskpool_id;
-    assert(5 == deps->msg.task_class_id);
+    assert(parsec_runtime_mig_task_class == deps->msg.task_class_id);
     deps->msg.deps = (uintptr_t)deps;
     deps->msg.root = deps->root;
     deps->taskpool = parsec_taskpool_lookup(deps->msg.taskpool_id);
@@ -1401,7 +1402,7 @@ static int remote_dep_get_datatypes_of_mig_task(parsec_execution_stream_t *es,
     for (i = 0; i < task.task_class->nb_locals; i++) {
         task.locals[i] = deps->msg.locals[i];
     }
-    assert(5 == task.task_class->task_class_id);
+    assert(parsec_runtime_mig_task_class == task.task_class->task_class_id);
 
     for (flow_index = 0; flow_index < task.task_class->nb_flows; flow_index++) {
         if (task.task_class->in[flow_index] == NULL) {
@@ -1645,7 +1646,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         assert(NULL == find_migrated_tasks_details(task));
         assert(NULL == find_received_tasks_details(task));
         assert(0 <= origin->from && origin->from < get_nb_nodes());
-        assert(5 == task->task_class->task_class_id );
+        assert(parsec_runtime_mig_task_class == task->task_class->task_class_id );
 
         insert_received_tasks_details(task, origin->from, my_rank);
     }
