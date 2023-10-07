@@ -5307,6 +5307,7 @@ jdf_generate_code_reshape_input_from_dep(const jdf_t *jdf,
      * Format: type = XX   type_remote = ... -> pack XX unpack XX
      * */
     coutput("%s    data.data   = NULL;\n", spaces);
+    coutput("%s    data.data_future   = NULL;\n", spaces);
     coutput("%s    if ( (NULL != consumed_entry) && (this_task->mig_status != PARSEC_MIGRATED_TASK) )\n", spaces);
     coutput("%s         data.data_future   = (parsec_datacopy_future_t*)consumed_entry->data[consumed_flow_index];\n",
             spaces);
@@ -5445,19 +5446,32 @@ jdf_generate_code_consume_predecessor_setup(const jdf_t *jdf, const jdf_call_t *
                 spaces,
                 spaces,
                 spaces, flow->flow_index);
+
         coutput("%s    }else{\n"
                 "%s        /* Consume from predecessor's repo */\n"
-                "%s        consumed_repo = (this_task->mig_status == PARSEC_MIGRATED_DIRECT) ? %s_repo_direct : %s_repo;\n"
-                "%s        consumed_entry_key = %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)target_locals) ;\n"
-                "%s        consumed_entry = data_repo_lookup_entry( consumed_repo, consumed_entry_key );\n"
                 "%s        consumed_flow_index = %d;\n"
+                "%s        consumed_entry_key = %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)target_locals) ;\n"
+                "%s        consumed_repo =  %s_repo;\n"
+                "%s        if( PARSEC_MIGRATED_DIRECT == this_task->mig_status ) { /* received from a remote direct flow */\n"
+                "%s             data_repo_entry_t *direct_entry = data_repo_lookup_entry( %s_repo_direct, consumed_entry_key ); \n"
+                "%s               if(NULL != direct_entry) { \n"
+                "%s                  consumed_repo =  %s_repo_direct;\n"
+                "%s               } \n"
+                "%s        }\n"
+                "%s        consumed_entry =  data_repo_lookup_entry( consumed_repo, consumed_entry_key );\n"      
                 "%s    }\n",
                 spaces,
                 spaces,
-                spaces, pred_name, pred_name,
-                spaces, jdf_property_get_string(pred_f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL),
-                spaces,
                 spaces, pred_flow->flow_index,
+                spaces, jdf_property_get_string(pred_f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL),
+                spaces, pred_name,
+                spaces,
+                spaces, pred_name,
+                spaces, 
+                spaces, pred_name,
+                spaces, //here
+                spaces,
+                spaces,
                 spaces);
     }
 }
@@ -7200,10 +7214,13 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
     if( !(f->flags & JDF_FUNCTION_FLAG_NO_SUCCESSORS) ) {
 
         coutput("  arg.output_repo = %s_repo;\n", f->fname);
+        coutput("  if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) { \n"
+                "     arg.output_repo = %s_repo_direct;\n"
+                "  } \n", f->fname);
         coutput("  arg.output_entry = this_task->repo_entry;\n");
         coutput("  arg.output_usage = 0;\n");
 
-        coutput("  if( action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_GET_REPO_ENTRY) ) {\n"
+        coutput("  if( action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_GET_REPO_ENTRY | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) {\n"
                  "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
                  "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"
                  "#if defined(PARSEC_SIM)\n"
@@ -7212,33 +7229,17 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                  "#endif\n"
                  "  }\n",
                  jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
-
-        coutput("  else if( (action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) && !(action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) ) {\n"
-                 "    arg.output_repo = %s_repo_direct;\n"
-                 "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
-                 "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"
-                 "#if defined(PARSEC_SIM)\n"
-                 "    assert(arg.output_entry->sim_exec_date == 0);\n"
-                 "    arg.output_entry->sim_exec_date = this_task->sim_exec_date;\n"
-                 "#endif\n"
-                 "  }\n",
-                 f->fname,
-                 jdf_property_get_string(f->properties, JDF_PROP_UD_MAKE_KEY_FN_NAME, NULL));
-
-        coutput("  else {\n"
-                "    assert( NULL != arg.output_repo ); \n"
-                "  } \n");
 
         /* We need 2 iterate_successors calls so that all reshapping info is
          * setup before it is consumed by any local successor.
          */
-        coutput("  if(action_mask & ( PARSEC_ACTION_RESHAPE_ON_RELEASE | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE ) ){\n");
-        coutput("    /* Generate the reshape promise for thet outputs that need it */\n");
+        coutput("  if((action_mask & ( PARSEC_ACTION_RESHAPE_ON_RELEASE | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE )) ){\n");
+        coutput("    /* Generate the reshape promise for the outputs that need it */\n");
         coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_set_up_reshape_promise, &arg);\n"
                 "   }\n",
                 jdf_basename, f->fname);
 
-        coutput("  if(!(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) ){\n");
+        coutput("  if(!(PARSEC_ACTION_RELEASE_DIRECT_DEPS == (action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) ){\n");
         coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_fct, &arg);\n",
                 jdf_basename, f->fname);
         coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_direct_fct, &arg);\n"
