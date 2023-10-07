@@ -2308,6 +2308,7 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
     data_repo_t        *target_repo = arg->output_repo;
     data_repo_entry_t  *target_repo_entry = arg->output_entry;
     parsec_data_copy_t *target_dc = target_repo_entry->data[src_flow->flow_index];
+#if 0
     data_repo_entry_t  *entry_for_reshapping =
             data_repo_lookup_entry(successor_repo, successor_repo_key);
     /* If the successor repo has been advanced with a reshape promise,
@@ -2321,6 +2322,7 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
         target_repo_entry = entry_for_reshapping;
         target_dc = entry_for_reshapping->data[dst_flow->flow_index];
     }
+#endif
 
     /*
      * Check that we don't forward a NULL data to someone else. This
