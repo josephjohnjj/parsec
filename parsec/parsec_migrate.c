@@ -1375,6 +1375,12 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
                 int rc = mig_direct_get_datatypes(es, deps); 
                 assert( -1 != rc );
 
+                if (-2 == rc) {
+                    /** direct deps have been received from another node. No action required. */
+                    item = parsec_list_nolock_remove(&direct_msg_fifo, item);
+                    continue;
+                }
+
                 item = parsec_list_nolock_remove(&direct_msg_fifo, item);
                 mig_direct_recv_activate(es, deps);
             }
@@ -2035,6 +2041,67 @@ int destroy_direct_message_ht(parsec_taskpool_t* tp)
     return 1;
 }
 
+mig_task_mapping_item_t* insert_direct_deps_details(parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item = NULL;
+    parsec_taskpool_t *tp = task->taskpool;
+    assert(NULL != tp);
+
+    parsec_hash_table_t* ht = tp->ht_direct_msg[task->task_class->task_class_id];
+    assert(NULL != ht);
+
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    item = parsec_hash_table_nolock_find(ht, key);
+
+    if (NULL == item) {
+        item = (mig_task_mapping_item_t *)malloc(sizeof(mig_task_mapping_item_t));
+        item->ht_item.key = key;
+        item->task_class_id = task->task_class->task_class_id;
+        parsec_hash_table_lock_bucket(ht, key);
+        parsec_hash_table_nolock_insert(ht, &item->ht_item);
+        parsec_hash_table_unlock_bucket(ht, key);
+
+    #if defined(PARSEC_DEBUG)
+        char tmp[MAX_TASK_STRLEN];
+        parsec_task_snprintf(tmp, MAX_TASK_STRLEN, task);
+        //printf("ELASTIC-MSG Rank %d: [insert_direct_deps_details] Task %s with key %d send direct deps\n",
+        //    my_rank, tmp, key; 
+        PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream,"ELASTIC-MSG Rank %d: [insert_direct_deps_details] Task %s with key %d send direct deps",
+            my_rank, tmp, key); 
+    #endif
+    }
+    else {
+        /** A task can be migrated only once. After that its position is fixed*/
+        assert(0);
+    }
+    return item;
+}
+
+
+mig_task_mapping_item_t* find_direct_deps_details(const parsec_task_t *task)
+{
+    parsec_key_t key;
+    mig_task_mapping_item_t *item = NULL;
+    parsec_taskpool_t *tp = task->taskpool;
+    assert(NULL != tp);
+
+    parsec_hash_table_t* ht = tp->ht_direct_msg[task->task_class->task_class_id];
+    assert(NULL != ht);
+
+    key = task->task_class->make_key(task->taskpool, task->locals);
+    item = parsec_hash_table_find(ht, key);
+
+    if (NULL == item) {
+        return NULL;
+    }
+
+    assert(task->task_class->task_class_id == item->task_class_id); 
+
+    return item;
+}
+
 
 /**
  * Starting with a particular item pack as many remote_dep_wire_activate
@@ -2104,6 +2171,10 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     if( -1 == rc ) {
         parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
     } 
+    else if (-2 == rc) {
+        /** direct deps have been received from another node. No action required. */
+        return 1;
+    }
     else {
         mig_direct_recv_activate(es, deps);
     }
@@ -2112,6 +2183,7 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
     return 1;
 }
+
 
 static int
 mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* origin)
@@ -2128,10 +2200,7 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
 
     parsec_task_t task;
     task.taskpool   = origin->taskpool;
-    /* Do not set the task.task_class here, because it might trigger a race condition in DTD */
-
     task.priority = 0;  /* unknown yet */
-
     task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
     for(i = 0; i < task.task_class->nb_flows;
         task.data[i].data_in = task.data[i].data_out = NULL,
@@ -2140,6 +2209,13 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
 
     for(i = 0; i < task.task_class->nb_locals; i++)
         task.locals[i] = origin->msg.locals[i];
+
+    //if(NULL == find_direct_deps_details(&task)) {
+    //    insert_direct_deps_details(&task);
+    //}
+    //else {
+    //    return -2;
+    //}
 
 #if 0
     char tmp1[MAX_TASK_STRLEN];
@@ -2563,9 +2639,14 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
             my_rank, parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, &task), origin->from, origin->taskpool->taskpool_id);
 #endif
 
-    (void)task.task_class->release_deps(es, &task,
-        action_mask | PARSEC_ACTION_RELEASE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
-        NULL);
+    if(NULL == find_direct_deps_details(&task)) {
+        insert_direct_deps_details(&task);
+
+        (void)task.task_class->release_deps(es, &task,
+        action_mask | PARSEC_ACTION_RECEIVE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
+        NULL); 
+    }
+    
     assert(0 == (origin->incoming_mask & complete_mask));
 
     if(0 != origin->incoming_mask)  /* not done receiving */

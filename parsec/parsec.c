@@ -1986,7 +1986,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
 
-            assert(!(arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS));
+            assert(!(arg->action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS));
             assert(arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS);
 
             struct remote_dep_output_param_s* output;
@@ -2183,7 +2183,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
 
         if( arg->action_mask & PARSEC_ACTION_SEND_INIT_REMOTE_DEPS ){
 
-            assert(!(arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS));
+            assert(!(arg->action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS));
             assert(arg->action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS);
 
             struct remote_dep_output_param_s* output;
@@ -2280,7 +2280,7 @@ parsec_release_dep_direct_fct(parsec_execution_stream_t *es,
 }
 
 parsec_ontask_iterate_t
-parsec_release_local_direct_fct(parsec_execution_stream_t *es,
+parsec_receive_dep_direct_fct(parsec_execution_stream_t *es,
                       const parsec_task_t *newcontext,
                       const parsec_task_t *oldcontext,
                       const parsec_dep_t* dep,
@@ -2344,7 +2344,7 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
 
 
     assert(es->virtual_process->parsec_context->my_rank == dst_rank);
-    if (arg->action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) { 
+    if (arg->action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS) { 
 
         if(parsec_runtime_task_mapping) {
             assert(NULL != was_receieved); 
@@ -2354,12 +2354,12 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
         char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
         parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
         parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, oldcontext);
-        //printf("ELASTIC-MSG Rank %d: [parsec_release_local_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
+        //printf("ELASTIC-MSG Rank %d: [parsec_receive_dep_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
         //    get_my_rank(), 
         //    tmp1, tmp2, 
         //    was_receieved->victim, was_receieved->thief, 
         //    dep->flow->flow_index);
-        parsec_debug_verbose(10, parsec_debug_output, "ELASTIC-MSG Rank %d: [parsec_release_local_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
+        parsec_debug_verbose(10, parsec_debug_output, "ELASTIC-MSG Rank %d: [parsec_receive_dep_direct_fct] Task %s with (with predecessor %s) migrated from victim %d to thief %d for flow %d (will be send as direct deps) \n",
             get_my_rank(), 
             tmp1, tmp2, 
             was_receieved->victim, was_receieved->thief, 

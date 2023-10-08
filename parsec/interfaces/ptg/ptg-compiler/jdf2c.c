@@ -6189,9 +6189,10 @@ static void jdf_generate_code_call_release_dependencies(const jdf_t *jdf,
     }
     coutput("  release_deps_of_%s_%s(es, %s,\n"
             "      PARSEC_ACTION_RELEASE_REMOTE_DEPS |\n"
-            "      PARSEC_ACTION_RELEASE_LOCAL_DEPS |\n"
-            "      PARSEC_ACTION_RELEASE_LOCAL_REFS |\n"
-            "      PARSEC_ACTION_RESHAPE_ON_RELEASE |\n"
+            "      PARSEC_ACTION_RELEASE_LOCAL_DEPS  |\n"
+            "      PARSEC_ACTION_RELEASE_LOCAL_REFS  |\n"
+            "      PARSEC_ACTION_RESHAPE_ON_RELEASE  |\n"
+            "      PARSEC_ACTION_RELEASE_DIRECT_DEPS |\n"
             "      0x%x,  /* mask of all dep_index */ \n"
             "      NULL);\n",
             jdf_basename, function->fname, context_name, complete_mask);
@@ -7214,13 +7215,13 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
     if( !(f->flags & JDF_FUNCTION_FLAG_NO_SUCCESSORS) ) {
 
         coutput("  arg.output_repo = %s_repo;\n", f->fname);
-        coutput("  if( action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) { \n"
+        coutput("  if( action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS ) { \n"
                 "     arg.output_repo = %s_repo_direct;\n"
                 "  } \n", f->fname);
         coutput("  arg.output_entry = this_task->repo_entry;\n");
         coutput("  arg.output_usage = 0;\n");
 
-        coutput("  if( action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_GET_REPO_ENTRY | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) {\n"
+        coutput("  if( action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_GET_REPO_ENTRY | PARSEC_ACTION_RECEIVE_DIRECT_DEPS) ) {\n"
                  "    arg.output_entry = data_repo_lookup_entry_and_create( es, arg.output_repo, %s((const parsec_taskpool_t*)__parsec_tp, (const parsec_assignment_t*)&this_task->locals));\n"
                  "    arg.output_entry->generator = (void*)this_task;  /* for AYU */\n"
                  "#if defined(PARSEC_SIM)\n"
@@ -7239,16 +7240,18 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
                 "   }\n",
                 jdf_basename, f->fname);
 
-        coutput("  if(!(PARSEC_ACTION_RELEASE_DIRECT_DEPS == (action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) ) ){\n");
+        coutput("  if(action_mask & (PARSEC_ACTION_RELEASE_REMOTE_DEPS | PARSEC_ACTION_RELEASE_LOCAL_DEPS | PARSEC_ACTION_RELEASE_DIRECT_DEPS) ){\n");
         coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_fct, &arg);\n",
                 jdf_basename, f->fname);
-        coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_direct_fct, &arg);\n"
-                 "   }\n",
+        coutput( "    if(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ) {\n"
+                 "      iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_dep_direct_fct, &arg);\n"
+                 "    } \n"
+                 "  }\n",
                 jdf_basename, f->fname);
 
 
-        coutput("  if(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS ){\n");
-        coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_release_local_direct_fct, &arg);\n"
+        coutput("  if(action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS ){\n");
+        coutput("    iterate_successors_of_%s_%s(es, this_task, action_mask, parsec_receive_dep_direct_fct, &arg);\n"
                 "   }\n",
                 jdf_basename, f->fname);
 
@@ -7263,10 +7266,10 @@ static void jdf_generate_code_release_deps(const jdf_t *jdf, const jdf_function_
         coutput("  if(action_mask & PARSEC_ACTION_RELEASE_LOCAL_DEPS) {\n");
         coutput("    parent_repo = %s_repo; \n", f->fname);
         coutput("  } \n");
-        coutput("  else if(action_mask & PARSEC_ACTION_RELEASE_DIRECT_DEPS) { \n");
+        coutput("  else if(action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS) { \n");
         coutput("    parent_repo = %s_repo_direct; \n", f->fname);
         coutput("  } \n");
-        coutput("  if(action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS|PARSEC_ACTION_RELEASE_DIRECT_DEPS)) {\n"
+        coutput("  if(action_mask & (PARSEC_ACTION_RELEASE_LOCAL_DEPS|PARSEC_ACTION_RECEIVE_DIRECT_DEPS)) {\n"
                 "    data_repo_entry_addto_usage_limit(parent_repo, arg.output_entry->ht_item.key, arg.output_usage);\n");
         if(jdf_uses_dynamic_termdet(jdf)) {
             coutput("    {\n"

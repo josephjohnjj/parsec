@@ -256,7 +256,8 @@ parsec_create_reshape_promise(parsec_execution_stream_t *es,
                               data_repo_t **setup_repo,
                               parsec_key_t *setup_repo_key,
                               uint32_t *output_usage,
-                              int promise_type)
+                              int promise_type,
+                              uint32_t action_mask)
 {
     parsec_reshape_promise_description_t *future_in_data;
     uint8_t setup_flow_index;
@@ -279,40 +280,42 @@ parsec_create_reshape_promise(parsec_execution_stream_t *es,
     setup_flow_index = predecessor_dep_flow_index;
     setup_repo_entry = predecessor_repo_entry;
 
-    if ( predecessor_repo_entry->data[predecessor_dep_flow_index] != NULL ) {
-        if(promise_type == PARSEC_UNFULFILLED_RESHAPE_PROMISE) {
-            /* New unfulfilled reshape promises are set up on the succcessor repo
-             * in case the predecessor repo is already occupied. */
-            *setup_repo = successor_repo;
-            *setup_repo_key = successor_repo_key;
-            setup_flow_index = successor_dep_flow_index;
-            setup_repo_entry = data_repo_lookup_entry_and_create(es, successor_repo,
-                                                               successor_repo_key);
-        } else {
-            data->data_future = (parsec_datacopy_future_t*)predecessor_repo_entry->data[predecessor_dep_flow_index];
-            /* New fulfilled promises are set up on the successor repo in case
-             * they track a data different to the one tracked by the predecessor repo. */
-            if(data->data != parsec_future_get_or_trigger(data->data_future, NULL, NULL, NULL, NULL)) {
-                /* This case happens when a predecessor sends multiple copies with
-                 * different shapes (type_remote) on the same output flow to a set
-                 * of successors on the same remote destination node.
-                 * Release_deps is invoked with the correct copy and by setting it up
-                 * on the successors repo, we work around having only one pred_entry on
-                 * a flow generating multiple remote outputs.
-                 * (only case a fulfilled reshape promised is set up on the successors
-                 * repo; no reshaping deps are the first ones on the dependency list
-                 * and they fill the pred repo if they exist).
-                 */
+    if(PARSEC_ACTION_RECEIVE_DIRECT_DEPS != (action_mask & PARSEC_ACTION_RECEIVE_DIRECT_DEPS)) {
+        if ( predecessor_repo_entry->data[predecessor_dep_flow_index] != NULL ) {
+            if(promise_type == PARSEC_UNFULFILLED_RESHAPE_PROMISE) {
+                /* New unfulfilled reshape promises are set up on the succcessor repo
+                 * in case the predecessor repo is already occupied. */
                 *setup_repo = successor_repo;
                 *setup_repo_key = successor_repo_key;
                 setup_flow_index = successor_dep_flow_index;
                 setup_repo_entry = data_repo_lookup_entry_and_create(es, successor_repo,
-                                                                     successor_repo_key);
-                data->data_future = NULL; /* Force the generation of a new reshape. */
+                                                                   successor_repo_key);
+            } else {
+                data->data_future = (parsec_datacopy_future_t*)predecessor_repo_entry->data[predecessor_dep_flow_index];
+                /* New fulfilled promises are set up on the successor repo in case
+                 * they track a data different to the one tracked by the predecessor repo. */
+                if(data->data != parsec_future_get_or_trigger(data->data_future, NULL, NULL, NULL, NULL)) {
+                    /* This case happens when a predecessor sends multiple copies with
+                     * different shapes (type_remote) on the same output flow to a set
+                     * of successors on the same remote destination node.
+                     * Release_deps is invoked with the correct copy and by setting it up
+                     * on the successors repo, we work around having only one pred_entry on
+                     * a flow generating multiple remote outputs.
+                     * (only case a fulfilled reshape promised is set up on the successors
+                     * repo; no reshaping deps are the first ones on the dependency list
+                     * and they fill the pred repo if they exist).
+                     */
+                    *setup_repo = successor_repo;
+                    *setup_repo_key = successor_repo_key;
+                    setup_flow_index = successor_dep_flow_index;
+                    setup_repo_entry = data_repo_lookup_entry_and_create(es, successor_repo,
+                                                                         successor_repo_key);
+                    data->data_future = NULL; /* Force the generation of a new reshape. */
+                }
             }
         }
     }
-
+ 
 
     if ( data->data_future == NULL ) {
         /* Create a new future in case one is not already available. */
@@ -322,6 +325,8 @@ parsec_create_reshape_promise(parsec_execution_stream_t *es,
         if(promise_type == PARSEC_FULFILLED_RESHAPE_PROMISE) {
             parsec_future_set(data->data_future, data->data);
         }
+
+
     }
 
     future_in_data = ((parsec_reshape_promise_description_t *)data->data_future->cb_fulfill_data_in);
@@ -335,7 +340,9 @@ parsec_create_reshape_promise(parsec_execution_stream_t *es,
 #endif
 
     /* retain the future if it's being reuse. */
-    if ( !new_future ) PARSEC_OBJ_RETAIN(data->data_future);
+    if ( !new_future ) {
+        PARSEC_OBJ_RETAIN(data->data_future);
+    }
 
     /* Set up the reshape promise. */
     setup_repo_entry->data[setup_flow_index] = (parsec_data_copy_t *)data->data_future;
@@ -417,6 +424,20 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
         return PARSEC_ITERATE_CONTINUE;
     }
 
+    mig_task_mapping_item_t* was_migrated = find_migrated_tasks_details(newcontext);
+    if( NULL != was_migrated) {
+        return PARSEC_ITERATE_CONTINUE;
+    }
+
+    mig_task_mapping_item_t* was_received = find_received_tasks_details(newcontext);
+    if( NULL != was_received) {
+        assert(was_received->thief == es->virtual_process->parsec_context->my_rank);
+        assert(was_received->victim != es->virtual_process->parsec_context->my_rank);
+        assert(dst_rank != es->virtual_process->parsec_context->my_rank);
+        
+        dst_rank = es->virtual_process->parsec_context->my_rank;
+    }
+
     /* Check we have a correct type on the data. Otherwise no reshaping is requested.
      * (Don't force user to defined a datatype if no distributed run.
      *  e.g. tests/interfaces/ptg/compiler_checks/write_check ) */
@@ -424,16 +445,6 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
             || ((data->local.dst_datatype == data->data->dtt)
                && (data->local.src_datatype == data->data->dtt)));
 
-    if (parsec_runtime_task_mapping ) {
-        mig_task_mapping_item_t* was_received = find_received_tasks_details(newcontext);
-        if( NULL != was_received) {
-            assert(was_received->thief == es->virtual_process->parsec_context->my_rank);
-            assert(was_received->victim != es->virtual_process->parsec_context->my_rank);
-            assert(dst_rank != es->virtual_process->parsec_context->my_rank);
-            
-            dst_rank = es->virtual_process->parsec_context->my_rank;
-        }
-    }
 #ifndef PARSEC_RESHAPE_BEFORE_SEND_TO_REMOTE
     if (dst_rank != es->virtual_process->parsec_context->my_rank){
         /* avoid setting up reshape for remotes */
@@ -499,7 +510,8 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
                                   &setup_repo,
                                   &setup_repo_key,
                                   &arg->output_usage,
-                                  promise_type);
+                                  promise_type,
+                                  arg->action_mask);
 
     if(arg->action_mask & PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE){
         /* Mark this future as originated after a reception
@@ -601,7 +613,8 @@ parsec_get_copy_reshape_inline(parsec_execution_stream_t *es,
                                       &setup_repo,
                                       &setup_repo_key,
                                       NULL,
-                                      PARSEC_UNFULFILLED_RESHAPE_PROMISE);
+                                      PARSEC_UNFULFILLED_RESHAPE_PROMISE,
+                                      0);
 
 
 #if defined(PARSEC_DEBUG_NOISIER) || defined(PARSEC_DEBUG_PARANOID)

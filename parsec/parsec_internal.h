@@ -626,7 +626,7 @@ parsec_release_dep_direct_fct(struct parsec_execution_stream_s *es,
                        void *param);
 
 parsec_ontask_iterate_t
-parsec_release_local_direct_fct(parsec_execution_stream_t *es,
+parsec_receive_dep_direct_fct(parsec_execution_stream_t *es,
                       const parsec_task_t *newcontext,
                       const parsec_task_t *oldcontext,
                       const parsec_dep_t* dep,
@@ -640,6 +640,16 @@ parsec_release_local_direct_fct(parsec_execution_stream_t *es,
  */
 parsec_ontask_iterate_t
 parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
+                              const parsec_task_t *newcontext,
+                              const parsec_task_t *oldcontext,
+                              const parsec_dep_t* dep,
+                              parsec_dep_data_description_t* data,
+                              int src_rank, int dst_rank, int dst_vpid,
+                              data_repo_t *successor_repo, parsec_key_t successor_repo_key,
+                              void *param);
+
+parsec_ontask_iterate_t
+parsec_set_up_reshape_promise_direct(parsec_execution_stream_t *es,
                               const parsec_task_t *newcontext,
                               const parsec_task_t *oldcontext,
                               const parsec_dep_t* dep,
