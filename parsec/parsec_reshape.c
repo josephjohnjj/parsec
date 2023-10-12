@@ -424,18 +424,20 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
         return PARSEC_ITERATE_CONTINUE;
     }
 
-    mig_task_mapping_item_t* was_migrated = find_migrated_tasks_details(newcontext);
-    if( NULL != was_migrated) {
-        return PARSEC_ITERATE_CONTINUE;
-    }
+    if(parsec_runtime_task_mapping) {
+        mig_task_mapping_item_t* was_migrated = find_migrated_tasks_details(newcontext);
+        if( NULL != was_migrated) {
+            return PARSEC_ITERATE_CONTINUE;
+        }
 
-    mig_task_mapping_item_t* was_received = find_received_tasks_details(newcontext);
-    if( NULL != was_received) {
-        assert(was_received->thief == es->virtual_process->parsec_context->my_rank);
-        assert(was_received->victim != es->virtual_process->parsec_context->my_rank);
-        assert(dst_rank != es->virtual_process->parsec_context->my_rank);
-        
-        dst_rank = es->virtual_process->parsec_context->my_rank;
+        mig_task_mapping_item_t* was_received = find_received_tasks_details(newcontext);
+        if( NULL != was_received) {
+            assert(was_received->thief == es->virtual_process->parsec_context->my_rank);
+            assert(was_received->victim != es->virtual_process->parsec_context->my_rank);
+            assert(dst_rank != es->virtual_process->parsec_context->my_rank);
+
+            dst_rank = es->virtual_process->parsec_context->my_rank;
+        }
     }
 
     /* Check we have a correct type on the data. Otherwise no reshaping is requested.
