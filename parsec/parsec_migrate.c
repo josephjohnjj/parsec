@@ -730,6 +730,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                     continue;
                 }
 
+                int unsuccessful_searches = 0;
                 for (item = PARSEC_LIST_ITERATOR_FIRST(list);
                      (PARSEC_LIST_ITERATOR_END(list) != item);
                      item = PARSEC_LIST_ITERATOR_NEXT(item)) {
@@ -755,12 +756,19 @@ int process_steal_request(parsec_execution_stream_t *es)
                         parsec_node_mig_inc_selected();
                         total_selected++;
                         device_selected++;
+
+                        unsuccessful_searches = 0;
+                    }
+                    else {
+                        unsuccessful_searches++;
                     }
 
-                    if (total_selected >= tasks_requested) {
+                    if ((total_selected >= tasks_requested) || (unsuccessful_searches >= parsec_runtime_progress_count)) {
                         break;
                     }
                 }
+
+                parsec_atomic_unlock( &list->atomic_lock );
                 
                 parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
                 parsec_atomic_fetch_add_int32( &(gpu_device->wt_tasks), (-1 * device_selected));
@@ -771,10 +779,6 @@ int process_steal_request(parsec_execution_stream_t *es)
                 if (parsec_runtime_node_migrate_stats) {
                     parsec_node_mig_inc_searches();
                 }
-
-                parsec_atomic_unlock( &list->atomic_lock );
-
-                
             }
 
             if (total_selected >= tasks_requested) {
