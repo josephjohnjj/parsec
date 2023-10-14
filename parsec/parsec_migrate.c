@@ -674,7 +674,7 @@ int process_steal_request(parsec_execution_stream_t *es)
     
     do {
         steal_request = NULL;
-        steal_request = (steal_request_t *)parsec_list_pop_front(&steal_req_fifo);
+        steal_request = (steal_request_t *)parsec_list_try_pop_front(&steal_req_fifo);
 
         if(NULL == steal_request) {
             break;
