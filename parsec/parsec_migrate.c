@@ -768,10 +768,10 @@ int process_steal_request(parsec_execution_stream_t *es)
                     }
                 }
 
-                parsec_atomic_unlock( &list->atomic_lock );
-                
                 parsec_atomic_fetch_add_int32(&(gpu_device->mutex), (-1 * device_selected));
                 parsec_atomic_fetch_add_int32( &(gpu_device->wt_tasks), (-1 * device_selected));
+
+                parsec_atomic_unlock( &list->atomic_lock );
 
                 if(device_selected > 0) {
                     unset_progress_counter(d);
