@@ -537,7 +537,7 @@ parsec_task_t* select_migrated_task(parsec_execution_stream_t* es)
 {
     (void)es;
     parsec_task_t *task = NULL;
-    task = (parsec_task_t *)parsec_list_pop_front(&received_task_fifo);
+    task = (parsec_task_t *)parsec_list_try_pop_front(&received_task_fifo);
     return task;
 }
 
