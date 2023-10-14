@@ -706,8 +706,7 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
          * when compared to a new task. 
          */
         rc = parsec_cuda_mig_task_dequeue(es);
-        if(1 == rc)
-        {
+        if(1 == rc) {
             did_some_work++; 
         }
 
@@ -717,16 +716,14 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
         if(parsec_migration_engine_up ==  1)
         {
             rc = progress_migrated_task(es);
-            if(1 == rc)
-            {
+            if(1 == rc) {
                 did_some_work++; 
             }
         }
         
         if( NULL == (task = es->next_task) ) {
             
-            if(NULL == task)
-            {
+            if(NULL == task) {
                 task = parsec_current_scheduler->module.select(es, &distance);
             }
         } else {
@@ -736,24 +733,19 @@ int __parsec_context_wait( parsec_execution_stream_t* es )
 
         if( task != NULL ) {
             rc = __parsec_task_progress(es, task, distance);
-            if(1 == rc)
-            {
+            if(1 == rc) {
                 did_some_work++; 
             }
 
             nbiterations++;
         }
 
-        if( did_some_work > 0 )
-        {
+        if( did_some_work > 0 ) {
             misses_in_a_row = 0;  /* reset the misses counter */
         }
 
-        /**
-         * @brief This function will processes any migrated task
-         * recieved from another node.
-         */
 
+        /** Send or processs steal requests */
         if(parsec_migration_engine_up ==  1)
         {
             process_steal_request(es);
