@@ -2095,7 +2095,7 @@ mig_task_mapping_item_t* find_direct_deps_details(const parsec_task_t *task)
     assert(NULL != ht);
 
     key = task->task_class->make_key(task->taskpool, task->locals);
-    item = parsec_hash_table_find(ht, key);
+    item = parsec_hash_table_nolock_find(ht, key);
 
     if (NULL == item) {
         return NULL;
