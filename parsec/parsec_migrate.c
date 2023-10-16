@@ -160,6 +160,8 @@ static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *ms
     size_t msg_size, int src, void *cb_data);
 static void mig_direct_recv_no_activate(parsec_execution_stream_t* es,
                                          parsec_remote_deps_t* deps);
+static int
+search_direct_deps(parsec_execution_stream_t* es,parsec_remote_deps_t* origin);
 
 PARSEC_DECLSPEC PARSEC_OBJ_CLASS_DECLARATION(steal_request_t);
 PARSEC_OBJ_CLASS_INSTANCE(steal_request_t, parsec_list_item_t, NULL, NULL);
@@ -980,7 +982,7 @@ int migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_
         }
 
         if (NULL != this_task->data[i].data_in) {
-            //PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
+            PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
         }
     }
 
@@ -1396,7 +1398,9 @@ void mig_new_taskpool(parsec_execution_stream_t* es, dep_cmd_item_t *dep_cmd_ite
                 assert( -1 != rc );
 
                 item = parsec_list_nolock_remove(&direct_msg_fifo, item);
-                if (-2 == rc) {
+                
+                rc = search_direct_deps(es, deps);
+                if (1 == rc) {
                     /** direct deps have been received from another node. No get required.*/
                     mig_direct_recv_no_activate(es, deps);
                 }
@@ -2190,14 +2194,18 @@ mig_direct_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
     rc = mig_direct_get_datatypes(es, deps);
     if( -1 == rc ) {
         parsec_list_push_back(&direct_msg_fifo, (parsec_list_item_t*)deps);
-    } 
-    else if (-2 == rc) {
-        /** direct deps have been received from another node. No get required.*/
-        mig_direct_recv_no_activate(es, deps);
     }
     else {
-        mig_direct_recv_activate(es, deps);
+        rc = search_direct_deps(es, deps);
+        if (1 == rc) {
+            /** direct deps have been received from another node. No get required.*/
+            mig_direct_recv_no_activate(es, deps);
+        }
+        else {
+            mig_direct_recv_activate(es, deps);
+        }
     }
+    
     
     assert(position == length);
 
@@ -2229,13 +2237,6 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
 
     for(i = 0; i < task.task_class->nb_locals; i++)
         task.locals[i] = origin->msg.locals[i];
-
-    if(NULL == find_direct_deps_details(&task)) {
-        insert_direct_deps_details(&task);
-    }
-    else {
-        return -2;
-    }
 
 #if 0
     char tmp1[MAX_TASK_STRLEN];
@@ -2659,15 +2660,11 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
             my_rank, parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, &task), origin->from, origin->taskpool->taskpool_id);
 #endif
 
-    
-
     (void)task.task_class->release_deps(es, &task,
     action_mask | PARSEC_ACTION_RECEIVE_DIRECT_DEPS | PARSEC_ACTION_RESHAPE_REMOTE_ON_RELEASE,
     NULL); 
     
-    
     assert(0 == (origin->incoming_mask & complete_mask));
-
     if(0 != origin->incoming_mask)  /* not done receiving */
         return origin;
 
@@ -2939,3 +2936,25 @@ static int mig_no_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void *ms
 }
 
 
+
+static int
+search_direct_deps(parsec_execution_stream_t* es,parsec_remote_deps_t* origin)
+{
+    uint32_t i = 0;
+
+    assert(NULL != origin->taskpool);
+    assert( PARSEC_TASKPOOL_TYPE_PTG == origin->taskpool->taskpool_type );
+
+    parsec_task_t task;
+    task.taskpool   = origin->taskpool;
+    task.task_class = task.taskpool->task_classes_array[origin->msg.task_class_id];
+    for(i = 0; i < task.task_class->nb_locals; i++)
+        task.locals[i] = origin->msg.locals[i];
+
+    if(NULL == find_direct_deps_details(&task)) {
+        insert_direct_deps_details(&task);
+        return 0;
+    }
+
+    return 1;
+}
