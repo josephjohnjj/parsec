@@ -2868,7 +2868,8 @@ static void mig_direct_recv_no_activate(parsec_execution_stream_t* es,
 
     mig_direct_no_get_start(es, deps);
 
-    deps->incoming_mask = deps->outgoing_mask = 0;
+    deps->incoming_mask = deps->outgoing_mask = deps->pending_ack = 0;
+    deps->taskpool = NULL;
     remote_deps_free(deps);
     
 }
@@ -2876,22 +2877,26 @@ static void mig_direct_recv_no_activate(parsec_execution_stream_t* es,
 static void mig_direct_no_get_start(parsec_execution_stream_t* es,
                                      parsec_remote_deps_t* deps)
 {
+    (void)es;
     remote_dep_wire_activate_t* task = &(deps->msg);
-    int from = deps->from, k, position = 0;
+    int from = deps->from, k = 0, position = 0;
     remote_dep_wire_get_t msg;
+    int total_cleanup = 0;
 
     assert(0 <= from && from < get_nb_nodes());
 
-    (void)es;
-    int total_cleanup = 0;
+    deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, NULL, NULL,
+                                                       deps->msg.length, deps);
 
-    deps->taskpool->tdm.module->incoming_message_start(deps->taskpool, deps->from, NULL, 
-        NULL, 0, deps);
-                
     msg.source_deps = task->deps; /* the deps copied from activate message from source */
     
-    for(k = 0; deps->incoming_mask >> k; k++) {
-        if( !((1U<<k) & deps->incoming_mask) ) continue;
+    
+    for(k = 0; deps->incoming_mask>>k; k++) {
+        if(!(deps->incoming_mask & (1U<<k))) continue;
+        /* Check for CTL and data that do not carry payload */
+        if( parsec_is_CTL_dep(deps->output[k].data) ){
+            continue;
+        }
         total_cleanup++;
     }
     msg.output_mask = total_cleanup; /** temporary storage for the source */
