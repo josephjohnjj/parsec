@@ -668,9 +668,10 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         if (parsec_runtime_node_migrate_stats) {
             parsec_node_mig_inc_req_recvd();
         }
-
+    #if defined(PARSEC_DEBUG)
         PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p recvd from rank %d on rank %d. #task requested %d",
                              steal_request, steal_request->msg.src, steal_request->msg.dst, steal_request->msg.nb_task_request);
+    #endif
     }
 
     return 0;
@@ -914,7 +915,9 @@ parsec_remote_deps_t* prepare_task_details_msg(parsec_execution_stream_t *es, pa
     int src_rank = 0, dst_rank = 0;
     int dsize = 0, saved_position = *position;
 
+#if defined(PARSEC_DEBUG)
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Task %p selected for migration", this_task);
+#endif
 
     /** deps will be send to the node that initiated the request */
     dst_rank = root;
@@ -1107,8 +1110,10 @@ int initiate_steal_request(parsec_execution_stream_t *es)
 #endif
 
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request_msg.dst, &steal_request_msg, STEAL_REQ_MSG_SIZE);
+#if defined(PARSEC_DEBUG)    
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request message %p send to rank %d from rank %d. #task requested %d",
                          &steal_request_msg, steal_request_msg.dst, steal_request_msg.src, steal_request_msg.nb_task_request);
+#endif
 
     if (parsec_runtime_node_migrate_stats) {
         parsec_node_mig_inc_req_send();
@@ -1256,10 +1261,10 @@ int progress_steal_request(parsec_execution_stream_t *es, steal_request_t *steal
     assert(0 <= steal_request->msg.dst  && steal_request->msg.dst < nb_nodes);
 
     parsec_ce.send_am(&parsec_ce, PARSEC_MIG_STEAL_REQUEST_TAG, steal_request->msg.dst, &(steal_request->msg), STEAL_REQ_MSG_SIZE);
-
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Steal request %p forwarded to rank %d from rank %d. #task requested %d",
                          steal_request, steal_request->msg.dst, steal_request->msg.src, steal_request->msg.nb_task_request);
-
+#endif
     return PARSEC_HOOK_RETURN_ASYNC;
 }
 
@@ -1490,8 +1495,10 @@ migrated_copy_allocate(parsec_dep_type_description_t *data)
     dc = parsec_arena_get_copy(data->arena, data->dst_count, 0, data->dst_datatype);
 
     dc->coherency_state = PARSEC_DATA_COHERENCY_EXCLUSIVE;
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "MIG-DEBUG: MPI:\tMalloc new remote tile %p size %" PRIu64 " count = %" PRIu64 " displ = %" PRIi64 " %p",
                          dc, data->arena->elem_size, data->dst_count, data->dst_displ, data->arena);
+#endif    
     return dc;
 }
 
@@ -1557,7 +1564,7 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         assert(NULL != receiver_memory_handle);
         assert(receiver_memory_handle_size == (size_t)parsec_ce.get_mem_handle_size());
 
-#if defined(PARSEC_DEBUG_NOISIER)
+#if defined(PARSEC_DEBUG) 
         char type_name[MPI_MAX_OBJECT_NAME];
         int len;
         char tmp[128];
@@ -1620,13 +1627,12 @@ get_mig_task_data_cb(parsec_comm_engine_t *ce,
     remote_dep_cb_data_t *callback_data = (remote_dep_cb_data_t *)*retrieve_pointer_to_callback;
     parsec_remote_deps_t *deps = (parsec_remote_deps_t *)callback_data->deps;
 
-#if defined(PARSEC_DEBUG_NOISIER)
+#if defined(PARSEC_DEBUG) 
     char tmp[MAX_TASK_STRLEN];
-#endif
-
     PARSEC_DEBUG_VERBOSE(6, parsec_debug_output, "MIG-DEBUG: MPI:\tFROM\t%d\tGet END  \t% -8s\tk=%d\twith datakey na        \tparams %lx\t(tag=%d)",
                          src, remote_dep_cmd_to_string(&deps->msg, tmp, MAX_TASK_STRLEN),
                          callback_data->k, deps->incoming_mask, src);
+#endif
 
     TAKE_TIME(es->es_profile, MPI_Data_pldr_ek, callback_data->k);
     get_mig_task_data_complete(es, callback_data->k, deps);
@@ -1705,7 +1711,11 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     /** Update the task count on this node */
     origin->taskpool->tdm.module->taskpool_addto_nb_tasks(origin->taskpool, 1);
     parsec_list_item_singleton((parsec_list_item_t *)task);
+
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: Received task %p scheduled for execution", task);
+#endif
+
     task->chore_mask = PARSEC_DEV_ALL;
     if (parsec_runtime_node_migrate_stats) {
         parsec_node_mig_inc_task_recvd();
@@ -1760,10 +1770,11 @@ migrate_dep_mpi_save_put_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag, void 
     assert(0 != deps->outgoing_mask);
     item->priority = deps->max_priority;
 
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(6, parsec_debug_output, "MIG-DEBUG: MPI: Put cb_received for %s from %d tag %u which 0x%x (deps %p)",
                          remote_dep_cmd_to_string(&deps->msg, tmp, MAX_TASK_STRLEN), item->cmd.activate.peer,
                          -1, task->output_mask, (void *)deps);
-
+#endif
    
     migrate_dep_mpi_put_start(es, item);
     
@@ -1791,7 +1802,9 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
 
 #if !defined(PARSEC_PROF_DRY_DEP)
     assert(task->output_mask);
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(6, parsec_debug_output, "MIG-DEBUG: MPI:\tPUT mask=%lx deps 0x%lx", task->output_mask, task->source_deps);
+#endif
 
     for (k = 0; task->output_mask >> k; k++) {
         assert(k < MAX_PARAM_COUNT);
@@ -1799,8 +1812,10 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
             continue;
         }
 
+    #if defined(PARSEC_DEBUG) 
         PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MIG-DEBUG: MPI:\t[idx %d mask(0x%x / 0x%x)] %p, %p", k, (1U << k), task->output_mask,
                              deps->output[k].data.data, PARSEC_DATA_COPY_GET_PTR(deps->output[k].data.data));
+    #endif
         dataptr = PARSEC_DATA_COPY_GET_PTR(deps->output[k].data.data);
         dtt = deps->output[k].data.remote.src_datatype;
         nbdtt = deps->output[k].data.remote.src_count;
@@ -1831,7 +1846,7 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
         assert( NULL != source_memory_handle);
         assert( source_memory_handle_size == (size_t)parsec_ce.get_mem_handle_size() );
 
-#if defined(PARSEC_DEBUG_NOISIER)
+#if defined(PARSEC_DEBUG) 
         MPI_Type_get_name(dtt, type_name, &len);
         PARSEC_DEBUG_VERBOSE(10, parsec_comm_output_stream, "MIG-DEBUG: MPI:\tTO\t%d\tPut START\tunknown \tk=%d\twith deps 0x%lx at %p type %s (%p)\t(src_mem_handle = %p, dst_mem_handle = %p)",
                              item->cmd.activate.peer, k, task->source_deps, dataptr, type_name, dtt, source_memory_handle, remote_memory_handle);
@@ -1877,8 +1892,10 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
     /* Retreive deps from callback_data */
     parsec_remote_deps_t *deps = ((remote_dep_cb_data_t *)cb_data)->deps;
 
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(6, parsec_debug_output, "MIG-DEBUG: MPI:\tTO\tna\tPut END  \tunknown \tk=%d\twith deps %p\tparams bla\t(src_mem_hanlde = %p, dst_mem_handle=%p",
                          ((remote_dep_cb_data_t *)cb_data)->k, deps, lreg, rreg);
+#endif
 
 #if defined(PARSEC_PROF_TRACE)
     TAKE_TIME(parsec_comm_es.es_profile, MPI_Data_plds_ek, ((remote_dep_cb_data_t *)cb_data)->k);
@@ -2287,7 +2304,9 @@ mig_direct_get_datatypes(parsec_execution_stream_t* es,parsec_remote_deps_t* ori
         }
 
         origin->output[k].data.remote.src_datatype = origin->output[k].data.remote.dst_datatype = PARSEC_DATATYPE_NULL;
+    #if defined(PARSEC_DEBUG) 
         PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "MPI:\tRetrieve datatype with mask 0x%x (remote_dep_get_datatypes)", local_mask);
+    #endif
         task.task_class->iterate_successors(es, &task,
                                             local_mask,
                                             mig_dep_mpi_retrieve_datatype,
@@ -2332,7 +2351,7 @@ mig_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     const parsec_task_class_t* fct           = newcontext->task_class;
     uint32_t flow_mask                       = (1U << dep->flow->flow_index) | 0x80000000;  /* in flow */
 
-#if defined(PARSEC_DEBUG)
+#if defined(PARSEC_DEBUG) 
     if(was_received) {
         char tmp1[MAX_TASK_STRLEN], tmp2[MAX_TASK_STRLEN];
         parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, newcontext);
@@ -2528,14 +2547,14 @@ static void mig_direct_get_start(parsec_execution_stream_t* es,
 
         }
 
-#  if defined(PARSEC_DEBUG_NOISIER)
+    #if defined(PARSEC_DEBUG) 
         MPI_Type_get_name(dtt, type_name, &len);
         int _size;
         MPI_Type_size(dtt, &_size);
         PARSEC_DEBUG_VERBOSE(10, parsec_debug_output, "MPI:\tTO\t%d\tGet START\t% -8s\tk=%d\twith datakey %lx at %p type %s count %d displ %ld \t(k=%d, dst_mem_handle=%p)",
                 from, tmp, k, task->deps, PARSEC_DATA_COPY_GET_PTR(deps->output[k].data.data), type_name, nbdtt,
                 deps->output[k].data.remote.dst_displ, k, receiver_memory_handle);
-#  endif
+    #endif
 
         callback_data->memory_handle = receiver_memory_handle;
 
@@ -2585,16 +2604,14 @@ mig_direct_get_end_cb(parsec_comm_engine_t *ce,
     remote_dep_cb_data_t *callback_data = (remote_dep_cb_data_t *)*retrieve_pointer_to_callback;
     parsec_remote_deps_t *deps = (parsec_remote_deps_t *)callback_data->deps;
 
-#if defined(PARSEC_DEBUG_NOISIER)
+#if defined(PARSEC_DEBUG) 
     char tmp[MAX_TASK_STRLEN];
-#endif
-
     PARSEC_DEBUG_VERBOSE(6, parsec_debug_output, "MPI:\tFROM\t%d\tGet END  \t% -8s\tk=%d\twith datakey na        \tparams %lx\t(tag=%d)",
             src, remote_dep_cmd_to_string(&deps->msg, tmp, MAX_TASK_STRLEN),
             callback_data->k, deps->incoming_mask, src);
-
-
     TAKE_TIME(es->es_profile, MPI_Data_pldr_ek, callback_data->k);
+#endif
+
     mig_direct_get_end(es, callback_data->k, deps);
 
     parsec_ce.mem_unregister(&callback_data->memory_handle);
@@ -2646,8 +2663,10 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
             target = task.task_class->out[++pidx];
             assert(NULL != target);
         }
+    #if defined(PARSEC_DEBUG) 
         PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MPI:\tDATA %p(%s) released from %p[%d] flow idx %d",
                 origin->output[i].data.data, target->name, origin, i, target->flow_index);
+    #endif
         task.data[target->flow_index].source_repo = NULL;
         task.data[target->flow_index].source_repo_entry = NULL;
         task.data[target->flow_index].data_in   = origin->output[i].data.data;
@@ -2667,8 +2686,11 @@ mig_direct_release_incoming(parsec_execution_stream_t* es,
     } else {
         assert(0);
     }
+
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "MPI:\tTranslate mask from 0x%lx to 0x%x (remote_dep_release_incoming)",
             complete_mask, action_mask);
+#endif
     
     assert(0 <= origin->root && origin->root < get_nb_nodes());
     assert(0 <= origin->from && origin->from < get_nb_nodes());
@@ -2730,7 +2752,9 @@ int remote_dep_is_forwarded_direct(parsec_execution_stream_t* es,
 
     boffset = rank / (8 * sizeof(uint32_t));
     mask = ((uint32_t)1) << (rank % (8 * sizeof(uint32_t)));
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "fw test\tREMOTE rank %d (value=%x)", rank, (int) (rdeps->remote_dep_fw_mask[boffset] & mask));
+#endif
     (void)es;
     return (int) ((rdeps->remote_dep_fw_mask_direct[boffset] & mask) != 0);
 }
@@ -2739,7 +2763,9 @@ void
 remote_dep_reset_forwarded_direct(parsec_execution_stream_t* es,
                            parsec_remote_deps_t* rdeps)
 {
+#if defined(PARSEC_DEBUG) 
     PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "fw reset\tcontext %p deps %p", (void*)es, rdeps);
+#endif
     memset(rdeps->remote_dep_fw_mask_direct, 0,
            es->virtual_process->parsec_context->remote_dep_fw_mask_sizeof);
 }

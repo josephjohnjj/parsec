@@ -744,16 +744,20 @@ int parsec_remote_dep_activate(parsec_execution_stream_t* es,
                     count++;
 
                     if(remote_dep_is_forwarded_direct(es, remote_deps, rank)) {  /* already in the counting */
+                    #if defined(PARSEC_DEBUG) 
                         PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "[%d:%d] task %s my_idx %d idx %d rank %d -- skip (already done)",
                                 remote_deps->root, i, tmp, my_idx, idx, rank);
+                    #endif
                         continue;
                     }
                 
+                #if defined(PARSEC_DEBUG) 
                     PARSEC_DEBUG_VERBOSE(20, parsec_comm_output_stream, "[%d:%d] task %s my_idx %d idx %d rank %d -- send (%x)",
                             remote_deps->root, i, tmp, my_idx, idx, rank, remote_deps->outgoing_mask);
                     assert(remote_deps->outgoing_mask & (1U<<i));
-
                     assert(output->parent->taskpool == task->taskpool);
+                #endif
+                
                     if( 0 == parsec_atomic_fetch_inc_int32(&remote_deps->pending_ack) ) {
                         keeper = 1;
                         /* Let the engine know we're working to activate the dependencies remotely */
