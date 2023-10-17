@@ -64,7 +64,7 @@ volatile int last_victim = -1;
 int* device_progress_counter = NULL;
 
 parsec_node_info_t *node_info; /** stats on migration in a node */
-static int my_rank, nb_nodes;
+static int my_rank, nb_nodes, current_taskpool_id;
 PARSEC_OBJ_CLASS_INSTANCE(migrated_node_level_task_t, migrated_node_level_task_t, NULL, NULL);
 
  
@@ -171,8 +171,19 @@ int get_nb_nodes()
     return nb_nodes;
 }
 
-int get_my_rank() {
+int get_my_rank() 
+{
     return my_rank; 
+}
+
+int get_current_taskpool_id() 
+{
+    return current_taskpool_id;
+}
+
+int set_current_taskpool_id(int id) 
+{
+    current_taskpool_id = id;
 }
 
 int parsec_node_mig_inc_gpu_task_executed()
@@ -742,7 +753,12 @@ int process_steal_request(parsec_execution_stream_t *es)
 
             //if(1) {
             //TODO : change this back
-            if ( (gpu_device->wt_tasks > parsec_runtime_starvation_policy) && (get_progress_counter(d) > parsec_runtime_progress_count ) ) {
+            if (    (gpu_device->wt_tasks > parsec_runtime_starvation_policy) 
+                 && (get_progress_counter(d) > parsec_runtime_progress_count) 
+                 && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
+                 && ((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
+                 && (only_one_task < 1)
+            ) {
                 list = &(gpu_device->pending);
                 if( !parsec_atomic_trylock( &list->atomic_lock ) ) {
                     continue;
@@ -760,9 +776,6 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->mig_status == PARSEC_NON_MIGRATED_TASK) 
                         && (gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT) 
                         && (gpu_task->ec->task_class->task_class_id == parsec_runtime_mig_task_class) 
-                        && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
-                        && ((parsec_runtime_expand_start <= gpu_task->ec->taskpool->taskpool_id) && (gpu_task->ec->taskpool->taskpool_id < parsec_runtime_expand_stop))
-                        && (only_one_task < 1)
                     ) {
 
                         //only_one_task += 1;
@@ -1127,7 +1140,10 @@ int send_steal_request(parsec_execution_stream_t *es)
 
 
     if(5 == parsec_runtime_steal_request_policy) { /* Expand */
-        if(my_rank < (nb_nodes - parsec_runtime_expand_nodes)) {
+        if(    (my_rank < (nb_nodes - parsec_runtime_expand_nodes)) 
+            || !((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
+        )
+        {
             return PARSEC_HOOK_RETURN_ASYNC;
         }
     }

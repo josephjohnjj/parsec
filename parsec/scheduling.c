@@ -800,7 +800,9 @@ int parsec_context_add_taskpool( parsec_context_t* context, parsec_taskpool_t* t
     if( NULL == parsec_current_scheduler) {
         parsec_set_scheduler( context );
     }
+    
     clear_task_migrated_per_tp();
+    set_current_taskpool_id(tp->taskpool_id);
 
     if(parsec_runtime_task_mapping) {
         create_direct_message_ht(tp);
