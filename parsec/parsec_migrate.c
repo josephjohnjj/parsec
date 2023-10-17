@@ -784,7 +784,9 @@ int process_steal_request(parsec_execution_stream_t *es)
                         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
                         parsec_list_nolock_push_back(ring, (parsec_list_item_t *)gpu_task);
 
-                        parsec_node_mig_inc_selected();
+                        if (parsec_runtime_node_migrate_stats) {
+                            parsec_node_mig_inc_selected();
+                        }
                         total_selected++;
                         device_selected++;
 
@@ -822,7 +824,10 @@ int process_steal_request(parsec_execution_stream_t *es)
 
 
         if( !parsec_list_nolock_is_empty(ring) ) {
-            parsec_node_mig_inc_success_req_processed();
+
+            if (parsec_runtime_node_migrate_stats) {
+                parsec_node_mig_inc_success_req_processed();
+            }
 
             int position = 0 /** starting position of the message*/, buffer_size = 0;
         
