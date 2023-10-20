@@ -2641,6 +2641,7 @@ void parsec_taskpool_free(parsec_taskpool_t *tp)
         tp->task_class_hashtables = NULL;
         destroy_direct_message_ht(tp);
     }
+    destroy_possible_memory_leak(tp);
     assert(NULL != tp);
     PARSEC_OBJ_RELEASE(tp);
 }

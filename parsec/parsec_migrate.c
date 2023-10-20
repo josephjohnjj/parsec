@@ -371,7 +371,10 @@ int parsec_node_migrate_init(parsec_context_t *context)
     }
 
     finalised_hop_count = ((0 == parsec_runtime_hop_count) || (parsec_runtime_hop_count >= nb_nodes) ) ? (nb_nodes - 1) : parsec_runtime_hop_count;
-    expand_next_rank =  rand() % (nb_nodes - parsec_runtime_expand_nodes);
+
+    if(5 == parsec_runtime_steal_request_policy) { 
+        expand_next_rank =  rand() % (nb_nodes - parsec_runtime_expand_nodes);
+    }
     
 
     if (parsec_communication_engine_up > 0) {
@@ -660,7 +663,7 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
         }
 
         parsec_atomic_fetch_dec_int32(&active_steal_request_mutex);
-        PARSEC_OBJ_RELEASE(steal_request);
+        free(steal_request);
     }
     else {
         parsec_list_push_back(&steal_req_fifo, (parsec_list_item_t *)steal_request);
@@ -756,8 +759,8 @@ int process_steal_request(parsec_execution_stream_t *es)
             //TODO : change this back
             if (    (gpu_device->wt_tasks > parsec_runtime_starvation_policy) 
                  && (get_progress_counter(d) > parsec_runtime_progress_count) 
-                 && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
-                 && ((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
+                 //&& (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
+                 //&& ((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
                  && (only_one_task < 1)
             ) {
                 list = &(gpu_device->pending);
@@ -876,7 +879,7 @@ int process_steal_request(parsec_execution_stream_t *es)
             free(buff);
         }
 
-        PARSEC_OBJ_RELEASE(ring);
+        free(ring);
         ring = NULL;
         
        
@@ -897,7 +900,8 @@ int process_steal_request(parsec_execution_stream_t *es)
         steal_request->msg.nb_task_request -= total_selected;
 
         progress_steal_request(es, steal_request);
-        PARSEC_OBJ_RELEASE(steal_request);
+        free(steal_request);
+        steal_request = NULL;
           
     } while( (1 == parsec_migration_engine_up) );
 
@@ -971,6 +975,11 @@ int migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_
      *  this_task->task_class->release_task() will decrease the task count on this node.
      */
 
+    /** If the tasks 'consumes' a local repo reduce the usage count by one.*/
+    if (this_task->repo_entry != NULL) {
+        data_repo_entry_used_once(this_task->taskpool->repo_array[this_task->task_class->task_class_id], this_task->repo_entry->ht_item.key);
+    }
+
     for (i = 0; i < this_task->task_class->nb_flows; i++) {
         if (this_task->task_class->in[i] == NULL) {
             continue;
@@ -985,25 +994,9 @@ int migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_
         if (this_task->data[i].source_repo_entry != NULL) {
             data_repo_entry_used_once(this_task->data[i].source_repo, this_task->data[i].source_repo_entry->ht_item.key);
         }
-    }
-
-    /** If the tasks 'consumes' a local repo reduce the usage count by one.*/
-    if (this_task->repo_entry != NULL) {
-        data_repo_entry_used_once(this_task->taskpool->repo_array[this_task->task_class->task_class_id], this_task->repo_entry->ht_item.key);
-    }
-
-    for (i = 0; i < this_task->task_class->nb_flows; i++) {
-        if (this_task->task_class->in[i] == NULL) {
-            continue;
-        }
-
-        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
-        if (( this_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) {
-            continue;
-        }
 
         if (NULL != this_task->data[i].data_in) {
-            PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
+            //PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
         }
     }
 
@@ -1323,7 +1316,7 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
 
         output = &deps->output[i];
         output->data.data = mig_task->data[i].data_in;
-        PARSEC_OBJ_RETAIN(mig_task->data[i].data_in);
+        //PARSEC_OBJ_RETAIN(mig_task->data[i].data_in);
         output->rank_bits[_array_pos] |= _array_mask;
         output->count_bits++; /** This is required in remote_dep_complete_and_cleanup()*/
         output->deps_mask |= (1 << i);
@@ -1867,6 +1860,8 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
                       migrate_dep_mpi_put_end_cb, cb_data,
                       (parsec_ce_tag_t)task->callback_fn, &task->remote_callback_data, sizeof(uintptr_t));
 
+        
+        //PARSEC_DATA_COPY_RELEASE(deps->output[k].data.data);
         //parsec_comm_puts++;
         parsec_atomic_fetch_inc_int32(&parsec_comm_puts);
     }
@@ -2101,6 +2096,19 @@ int destroy_direct_message_ht(parsec_taskpool_t* tp)
     }
 
     return 1;
+}
+
+int destroy_possible_memory_leak(parsec_taskpool_t* tp)
+{
+    int i = 0;
+    for (i = 0; i < tp->nb_task_classes; i++) {
+        assert(NULL != tp->repo_array[i]);
+        parsec_hash_table_for_all(tp->repo_array[i], task_mapping_free_elt, tp->repo_array[i]);
+
+        assert(NULL != tp->repo_array_direct[i]);
+        parsec_hash_table_for_all(tp->repo_array_direct[i], task_mapping_free_elt, tp->repo_array_direct[i]);
+    }
+
 }
 
 mig_task_mapping_item_t* insert_direct_deps_details(parsec_task_t *task)

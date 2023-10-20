@@ -175,4 +175,5 @@ mig_task_mapping_item_t* insert_direct_deps_details(parsec_task_t *task);
 mig_task_mapping_item_t* find_direct_deps_details(const parsec_task_t *task);
 int get_current_taskpool_id();
 int set_current_taskpool_id(int id);
+int destroy_possible_memory_leak(parsec_taskpool_t* tp);
 #endif
