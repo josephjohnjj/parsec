@@ -5308,8 +5308,7 @@ jdf_generate_code_reshape_input_from_dep(const jdf_t *jdf,
      * */
     coutput("%s    data.data   = NULL;\n", spaces);
     coutput("%s    data.data_future   = NULL;\n", spaces);
-    coutput("%s    if ( (NULL != consumed_entry) && (this_task->mig_status != PARSEC_MIGRATED_TASK) )\n", spaces);
-    coutput("%s         data.data_future   = (parsec_datacopy_future_t*)consumed_entry->data[consumed_flow_index];\n",
+    coutput("%s    data.data_future   = (parsec_datacopy_future_t*)consumed_entry->data[consumed_flow_index];\n",
             spaces);
 
     /* Source and dst datatypes are [type] */
@@ -5371,7 +5370,7 @@ jdf_generate_code_reshape_input_from_dep(const jdf_t *jdf,
                                        ".", "local", 1);
     coutput("%s    %s", spaces, string_arena_get_string(sa_datatype));
 
-    coutput("%s    if( (NULL != data.data_future) && (ret = parsec_get_copy_reshape_from_dep(es, this_task->taskpool, (parsec_task_t *)this_task, %d, reshape_repo, reshape_entry_key, &data, &chunk)) < 0){\n"
+    coutput("%s    if( (ret = parsec_get_copy_reshape_from_dep(es, this_task->taskpool, (parsec_task_t *)this_task, %d, reshape_repo, reshape_entry_key, &data, &chunk)) < 0){\n"
             "%s        return ret;\n"
             "%s    }\n",
             spaces, flow->flow_index,
