@@ -22,6 +22,7 @@
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
 #define PARSEC_MIGRATED_DIRECT      (uint8_t)0x02 
+#define PARSEC_MIGRATED_TEST        (uint8_t)0x03 
 
 #define MAX_NODES           ((uint32_t)1024)
 #define RANKS_PER_INDEX     (sizeof(uint32_t))
@@ -176,4 +177,6 @@ mig_task_mapping_item_t* find_direct_deps_details(const parsec_task_t *task);
 int get_current_taskpool_id();
 int set_current_taskpool_id(int id);
 int destroy_possible_memory_leak(parsec_taskpool_t* tp);
+int migrate_register_tags();
+int migrate_unregister_tags();
 #endif

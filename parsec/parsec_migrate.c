@@ -324,51 +324,7 @@ int parsec_node_migrate_init(parsec_context_t *context)
 
     my_rank = context->my_rank;
     nb_nodes = context->nb_nodes;
-
     srand(time(NULL));
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, MAX_ACTIVATE_MSG_SIZE * sizeof(char));
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_STEAL_REQUEST_TAG, recieve_steal_request, context,
-                                STEAL_REQ_MSG_SIZE * sizeof(char));
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_STEAL_REQUEST_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_DEP_GET_DATA_TAG, migrate_dep_mpi_save_put_cb, context,
-                                4096);
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_GET_DATA_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context, SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
-
-    rc = parsec_ce.tag_register(PARSEC_MIG_NO_GET_DATA_TAG, mig_no_put_cb, context,
-                                SINGLE_ACTIVATE_MSG_SIZE * sizeof(char) );
-    if (PARSEC_SUCCESS != rc) {
-        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NO_GET_DATA_TAG (error %d)\n", rc);
-        parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
-        parsec_comm_engine_fini(&parsec_ce);
-        return rc;
-    }
 
     finalised_hop_count = ((0 == parsec_runtime_hop_count) || (parsec_runtime_hop_count >= nb_nodes) ) ? (nb_nodes - 1) : parsec_runtime_hop_count;
 
@@ -524,7 +480,6 @@ int parsec_node_migrate_fini()
 
     parsec_migration_engine_up = 0;
 
-    while ((item = parsec_list_pop_front(&steal_req_fifo)) != NULL) { free(item); }
     PARSEC_OBJ_DESTRUCT(&steal_req_fifo);
     PARSEC_OBJ_DESTRUCT(&mig_noobj_fifo);
     PARSEC_OBJ_DESTRUCT(&received_task_fifo);
@@ -532,15 +487,67 @@ int parsec_node_migrate_fini()
     PARSEC_OBJ_DESTRUCT(&direct_activates_fifo);
     PARSEC_OBJ_DESTRUCT(&direct_no_activates_fifo);
 
+    
+    
+    free(device_progress_counter);
+
+    return parsec_migration_engine_up;
+}
+
+int migrate_register_tags(parsec_context_t *context)
+{
+    int rc;
+    rc = parsec_ce.tag_register(PARSEC_MIG_TASK_DETAILS_TAG, recieve_mig_task_details, context, MAX_ACTIVATE_MSG_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_TASK_DETAILS_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_STEAL_REQUEST_TAG, recieve_steal_request, context,
+                                STEAL_REQ_MSG_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_STEAL_REQUEST_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_DEP_GET_DATA_TAG, migrate_dep_mpi_save_put_cb, context,
+                                4096);
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_GET_DATA_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG, mig_direct_activate_cb, context, SINGLE_ACTIVATE_MSG_SIZE * sizeof(char));
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+
+    rc = parsec_ce.tag_register(PARSEC_MIG_NO_GET_DATA_TAG, mig_no_put_cb, context,
+                                SINGLE_ACTIVATE_MSG_SIZE * sizeof(char) );
+    if (PARSEC_SUCCESS != rc) {
+        parsec_warning("[CE] Failed to register communication tag PARSEC_MIG_NO_GET_DATA_TAG (error %d)\n", rc);
+        parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
+        parsec_comm_engine_fini(&parsec_ce);
+        return rc;
+    }
+}
+
+int migrate_unregister_tags()
+{
     parsec_ce.tag_unregister(PARSEC_MIG_TASK_DETAILS_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_STEAL_REQUEST_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_GET_DATA_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_DEP_DIRECT_ACTIVATE_TAG);
     parsec_ce.tag_unregister(PARSEC_MIG_NO_GET_DATA_TAG);
-    
-    free(device_progress_counter);
-
-    return parsec_migration_engine_up;
 }
 
 int increment_progress_counter(int device_num)
@@ -970,40 +977,8 @@ int migrated_task_cleanup(parsec_execution_stream_t *es, parsec_gpu_task_t *gpu_
 {
     parsec_task_t *this_task = gpu_task->ec;
     int i = 0;
-    /**
-     * @brief Release everything owned by this task, in the similar manner if it was executed on this node
-     *  this_task->task_class->release_task() will decrease the task count on this node.
-     */
 
-    /** If the tasks 'consumes' a local repo reduce the usage count by one.*/
-    if (this_task->repo_entry != NULL) {
-        data_repo_entry_used_once(this_task->taskpool->repo_array[this_task->task_class->task_class_id], this_task->repo_entry->ht_item.key);
-    }
-
-    for (i = 0; i < this_task->task_class->nb_flows; i++) {
-        if (this_task->task_class->in[i] == NULL) {
-            continue;
-        }
-
-        /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
-        if ((this_task->task_class->in[i]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) {
-            continue;
-        }
-
-        /** If the repo associated with a data is not NULL reduce the usage count by one.*/
-        if (this_task->data[i].source_repo_entry != NULL) {
-            data_repo_entry_used_once(this_task->data[i].source_repo, this_task->data[i].source_repo_entry->ht_item.key);
-        }
-
-        if (NULL != this_task->data[i].data_in) {
-            //PARSEC_DATA_COPY_RELEASE(this_task->data[i].data_in);
-        }
-    }
-
-    /**
-     * 1. release everything related to this task in this node
-     * 2. decrement the task count
-     * */
+    this_task->task_class->release_deps(es, this_task, PARSEC_ACTION_RELEASE_LOCAL_REFS, NULL);
     this_task->task_class->release_task(es, this_task);
 
     if (parsec_runtime_node_migrate_stats) {
@@ -1291,15 +1266,6 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
     _array_mask = 1 << (dst_rank % (8 * sizeof(uint32_t)));
     _array_pos = dst_rank / (8 * sizeof(uint32_t));
 
-    for (i = 0; i < mig_task->task_class->nb_flows; i++) {
-        /**
-         * @brief This is important as we will be using iterate_predecessors() in
-         * remote_dep_get_datatypes_of_mig_task() and iterate_predecessors needs
-         * data_out to well defined.
-         */
-        mig_task->data[i].data_out = mig_task->data[i].data_in;
-    }
-
     remote_dep_get_datatypes_of_mig_task(es, deps);
 
     for (i = 0; i < mig_task->task_class->nb_flows; i++) {
@@ -1313,10 +1279,10 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
         }
 
         assert(NULL != parsec_data_copy_get_ptr(mig_task->data[i].data_in));
+        assert(mig_task->data[i].data_in == mig_task->data[i].data_out);
 
         output = &deps->output[i];
         output->data.data = mig_task->data[i].data_in;
-        //PARSEC_OBJ_RETAIN(mig_task->data[i].data_in);
         output->rank_bits[_array_pos] |= _array_mask;
         output->count_bits++; /** This is required in remote_dep_complete_and_cleanup()*/
         output->deps_mask |= (1 << i);
@@ -1591,8 +1557,6 @@ static void get_mig_task_data(parsec_execution_stream_t *es,
         /* Send AM */
         parsec_ce.send_am(&parsec_ce, PARSEC_MIG_DEP_GET_DATA_TAG, from, buf, buf_size);
         free(buf);
-
-        //parsec_comm_gets++;
         parsec_atomic_fetch_inc_int32(&parsec_comm_gets);
     }
 }
@@ -1632,7 +1596,6 @@ get_mig_task_data_cb(parsec_comm_engine_t *ce,
 
     parsec_ce.mem_unregister(&callback_data->memory_handle);
     parsec_thread_mempool_free(parsec_remote_dep_cb_data_mempool->thread_mempools, callback_data);
-    //parsec_comm_gets--;
     parsec_atomic_fetch_dec_int32(&parsec_comm_gets);
 
     return 1;
@@ -1688,6 +1651,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         task->data[flow_index].data_in = origin->output[flow_index].data.data;
         task->data[flow_index].data_out = origin->output[flow_index].data.data;
         origin->output[flow_index].data.data->readers = 0;
+        origin->output[flow_index].data.data_future = (parsec_datacopy_future_t*)origin->output[flow_index].data.data;
         PARSEC_OBJ_RETAIN(task->data[flow_index].data_in);
         origin->output[flow_index].data.data->original->device_copies[0] = task->data[flow_index].data_in;
     }
@@ -1860,9 +1824,6 @@ migrate_dep_mpi_put_start(parsec_execution_stream_t *es, dep_cmd_item_t *item)
                       migrate_dep_mpi_put_end_cb, cb_data,
                       (parsec_ce_tag_t)task->callback_fn, &task->remote_callback_data, sizeof(uintptr_t));
 
-        
-        //PARSEC_DATA_COPY_RELEASE(deps->output[k].data.data);
-        //parsec_comm_puts++;
         parsec_atomic_fetch_inc_int32(&parsec_comm_puts);
     }
 #endif /* !defined(PARSEC_PROF_DRY_DEP) */
@@ -1896,19 +1857,23 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
     TAKE_TIME(parsec_comm_es.es_profile, MPI_Data_plds_ek, ((remote_dep_cb_data_t *)cb_data)->k);
 #endif
 
-    if( 1 == deps->pending_ack) { /** last put */
+    int32_t saved = parsec_atomic_fetch_sub_int32(&(deps->pending_ack), 1);
+    if(1 == saved) {
         parsec_gpu_task_t *gpu_task = (parsec_gpu_task_t *)deps->eager_msg; /** temp storage */
         /** release the resources held by the migrated task */
         parsec_execution_stream_t* es = &parsec_comm_es;
+        gpu_task->ec->mig_status = PARSEC_MIGRATED_TEST;
         migrated_task_cleanup(es, gpu_task);
         free(gpu_task);
+
+        remote_dep_dec_flying_messages(deps->taskpool);
+        deps->outgoing_mask = 0;
+        remote_deps_free(deps);
+        deps = NULL;
     }
-    remote_dep_complete_and_cleanup(&deps, 1);
 
     ce->mem_unregister(&lreg);
     parsec_thread_mempool_free(parsec_remote_dep_cb_data_mempool->thread_mempools, cb_data);
-
-    //parsec_comm_puts--;
     parsec_atomic_fetch_dec_int32(&parsec_comm_puts);
     return 1;
 }
@@ -2108,6 +2073,9 @@ int destroy_possible_memory_leak(parsec_taskpool_t* tp)
         assert(NULL != tp->repo_array_direct[i]);
         parsec_hash_table_for_all(tp->repo_array_direct[i], task_mapping_free_elt, tp->repo_array_direct[i]);
     }
+
+    parsec_list_item_t *item;
+    while ((item = parsec_list_pop_front(&steal_req_fifo)) != NULL) { free(item); }
 
 }
 
@@ -2588,8 +2556,6 @@ static void mig_direct_get_start(parsec_execution_stream_t* es,
         TAKE_TIME(es->es_profile, MPI_Data_ctl_ek, event_id);
 
         free(buf);
-
-        //parsec_comm_gets++;
         parsec_atomic_fetch_inc_int32(&parsec_comm_gets);
     }
 }
@@ -2624,8 +2590,6 @@ mig_direct_get_end_cb(parsec_comm_engine_t *ce,
 
     parsec_ce.mem_unregister(&callback_data->memory_handle);
     parsec_thread_mempool_free(parsec_remote_dep_cb_data_mempool->thread_mempools, callback_data);
-
-    //parsec_comm_gets--;
     parsec_atomic_fetch_dec_int32(&parsec_comm_gets);
 
     return 1;

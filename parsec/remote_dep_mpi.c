@@ -2288,13 +2288,12 @@ remote_dep_ce_init(parsec_context_t* context)
         return rc;
     }
 
-    if(parsec_runtime_node_migrate_tasks && (context->nb_nodes > 1) )
-    {
+    if(parsec_runtime_node_migrate_tasks && (context->nb_nodes > 1) ) {
         parsec_node_migrate_init(context);
+        migrate_register_tags(context);
     }
     
-    if (parsec_runtime_node_migrate_stats)
-    {
+    if (parsec_runtime_node_migrate_stats) {
         parsec_node_stats_init(context);
     }
 
@@ -2331,6 +2330,10 @@ remote_dep_ce_fini(parsec_context_t* context)
     parsec_ce.tag_unregister(PARSEC_CE_REMOTE_DEP_ACTIVATE_TAG);
     parsec_ce.tag_unregister(PARSEC_CE_REMOTE_DEP_GET_DATA_TAG);
     //parsec_ce.tag_unregister(PARSEC_CE_REMOTE_DEP_PUT_END_TAG);
+
+    if(parsec_runtime_node_migrate_tasks) {
+        migrate_unregister_tags();
+    }
 
     parsec_mempool_destruct(parsec_remote_dep_cb_data_mempool);
     free(parsec_remote_dep_cb_data_mempool); parsec_remote_dep_cb_data_mempool = NULL;
