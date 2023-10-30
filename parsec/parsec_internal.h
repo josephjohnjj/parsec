@@ -162,6 +162,8 @@ struct parsec_taskpool_s {
                                              *   Indexed on the same index as functions array */
     data_repo_t**               repo_array_direct; /**< Array of data repositories for direct flows
                                              *   Indexed on the same index as functions array */
+    data_repo_t**               repo_array_mig; /**< Array of data repositories for direct flows
+                                             *   Indexed on the same index as functions array */
     parsec_hash_table_t **      ht_direct_msg;  /**< Array of ht for direct flows messages
                                              *   Indexed on the same index as functions array */
     mig_task_class_hashtables_t** task_class_hashtables; 
@@ -678,7 +680,9 @@ parsec_get_copy_reshape_from_dep(parsec_execution_stream_t *es,
                                  parsec_dep_data_description_t *data,
                                  parsec_data_copy_t**reshape);
 
-
+parsec_datacopy_future_t *
+parsec_new_reshape_promise(parsec_dep_data_description_t* data,
+                           int type);
 /** deps is an array of size MAX_PARAM_COUNT
  *  Returns the number of output deps on which there is a final output
  */

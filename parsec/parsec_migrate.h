@@ -22,7 +22,7 @@
 #define PARSEC_NON_MIGRATED_TASK    (uint8_t)0x00
 #define PARSEC_MIGRATED_TASK        (uint8_t)0x01 
 #define PARSEC_MIGRATED_DIRECT      (uint8_t)0x02 
-#define PARSEC_MIGRATED_TEST        (uint8_t)0x03 
+#define PARSEC_MIGRATION_COMPLETE   (uint8_t)0x03 
 
 #define MAX_NODES           ((uint32_t)1024)
 #define RANKS_PER_INDEX     (sizeof(uint32_t))

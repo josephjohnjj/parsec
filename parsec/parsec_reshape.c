@@ -102,7 +102,7 @@ parsec_reshape_check_match_datatypes(parsec_base_future_t* f,
  * reshape promise has been fulfilled.
  * @return  parsec_datacopy_future_t* new datacopy_future.
  */
-static parsec_datacopy_future_t *
+parsec_datacopy_future_t *
 parsec_new_reshape_promise(parsec_dep_data_description_t* data,
                            int type)
 {

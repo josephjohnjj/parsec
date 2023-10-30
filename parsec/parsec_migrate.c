@@ -694,7 +694,6 @@ int process_steal_request(parsec_execution_stream_t *es)
     int tasks_requested = 0;
     steal_request_t *steal_request = NULL;
     parsec_device_gpu_module_t *gpu_device = NULL;
-    parsec_gpu_task_t *gpu_task = NULL;
     parsec_list_t *list = NULL;
     parsec_list_item_t *item = NULL;
     int nb_cuda_devices = parsec_device_cuda_enabled;
@@ -766,8 +765,8 @@ int process_steal_request(parsec_execution_stream_t *es)
             //TODO : change this back
             if (    (gpu_device->wt_tasks > parsec_runtime_starvation_policy) 
                  && (get_progress_counter(d) > parsec_runtime_progress_count) 
-                 //&& (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
-                 //&& ((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
+                 && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
+                 && ((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
                  && (only_one_task < 1)
             ) {
                 list = &(gpu_device->pending);
@@ -780,7 +779,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                      (PARSEC_LIST_ITERATOR_END(list) != item);
                      item = PARSEC_LIST_ITERATOR_NEXT(item)) {
 
-                    gpu_task = (parsec_gpu_task_t *)item;
+                    parsec_gpu_task_t *gpu_task = (parsec_gpu_task_t *)item;
 
                     if (   (gpu_task != NULL) 
                         && (gpu_task->task_type == PARSEC_GPU_TASK_TYPE_KERNEL) 
@@ -807,7 +806,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                         unsuccessful_searches++;
                     }
 
-                    if ((total_selected >= tasks_requested) || (unsuccessful_searches >= parsec_runtime_progress_count)) {
+                    if ((total_selected >= tasks_requested) || (unsuccessful_searches >= 1)) {
                         break;
                     }
                 }
@@ -850,7 +849,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                 (PARSEC_LIST_ITERATOR_END(ring) != item);
                 item = PARSEC_LIST_ITERATOR_NEXT(item)) {
 
-                gpu_task = (parsec_gpu_task_t *)item;
+                parsec_gpu_task_t *gpu_task = (parsec_gpu_task_t *)item;
                 item = parsec_list_nolock_remove(ring, item);
                 PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
                 assert(gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK);
@@ -1601,6 +1600,7 @@ get_mig_task_data_cb(parsec_comm_engine_t *ce,
     return 1;
 }
 
+
 static parsec_remote_deps_t *
 get_mig_task_data_complete(parsec_execution_stream_t *es,
                            int idx,
@@ -1626,12 +1626,16 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     task = (parsec_task_t *)parsec_thread_mempool_allocate(es->context_mempool);
     task->taskpool = origin->taskpool;
     task->task_class = task->taskpool->task_classes_array[origin->msg.task_class_id];
+    memset( task->data, 0, sizeof(parsec_data_pair_t) * task->task_class->nb_flows);
     task->priority = origin->priority;
     for (i = 0; i < task->task_class->nb_locals; i++)  task->locals[i] = origin->msg.locals[i];
-
-    task->repo_entry = NULL;
     task->mig_status = PARSEC_MIGRATED_TASK;
     task->status = PARSEC_TASK_STATUS_HOOK; /** Skip the prepare input step */
+
+    data_repo_t *output_repo = task->taskpool->repo_array_mig[task->task_class->task_class_id];
+    parsec_key_t key = task->task_class->make_key(task->taskpool, task->locals);
+    data_repo_entry_t *repo_entry = data_repo_lookup_entry_and_create( es, output_repo, key);
+    int output_usage = 0;
 
     for (flow_index = 0; flow_index < task->task_class->nb_flows; flow_index++) {
         task->data[flow_index].source_repo = NULL;
@@ -1639,22 +1643,93 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         task->data[flow_index].data_in = NULL;
         task->data[flow_index].data_out = NULL;
 
-        if (task->task_class->in[flow_index] == NULL) {
-            continue;
-        }
-
+        if (task->task_class->in[flow_index] == NULL) continue;
         /** Make sure the flow is either READ/WRITE or READ and not a CTL flow*/
         if ( (task->task_class->in[flow_index]->flow_flags & PARSEC_FLOW_ACCESS_MASK) == PARSEC_FLOW_ACCESS_NONE ) {
             continue;
         }
 
-        task->data[flow_index].data_in = origin->output[flow_index].data.data;
-        task->data[flow_index].data_out = origin->output[flow_index].data.data;
-        origin->output[flow_index].data.data->readers = 0;
-        origin->output[flow_index].data.data_future = (parsec_datacopy_future_t*)origin->output[flow_index].data.data;
-        PARSEC_OBJ_RETAIN(task->data[flow_index].data_in);
-        origin->output[flow_index].data.data->original->device_copies[0] = task->data[flow_index].data_in;
+   
+    //#if 0
+        /** Mimic the functioning of iterative successor */
+        parsec_dep_data_description_t data;
+        uint32_t flow_mask = (1U << task->task_class->in[flow_index]->flow_index) | 0x80000000U;
+        task->task_class->get_datatype(es, task, &flow_mask , &data);
+        data.data_future  = NULL;
+        data.data = origin->output[flow_index].data.data;
+
+        /** Mimic the functioning of parsec_set_up_reshape_promise */
+        data.local.dst_datatype = data.local.src_datatype = data.data->dtt;
+        int promise_type = 1;
+
+        /** Mimic the functioning of parsec_create_reshape_promise */
+        data.data_future = parsec_new_reshape_promise(&data, promise_type);
+        parsec_future_set(data.data_future, data.data);
+        assert(data.data_future->super.tracked_data == origin->output[flow_index].data.data);
+
+        PARSEC_OBJ_RETAIN(data.data_future);
+        repo_entry->data[flow_index] = data.data_future;
+        output_usage++;
+
+        parsec_reshape_promise_description_t *future_in_data;
+        future_in_data = ((parsec_reshape_promise_description_t *)data.data_future->cb_fulfill_data_in);
+        future_in_data->remote_recv_guard = PARSEC_AVOID_RESHAPE_AFTER_RECEPTION;
+
+        /** Mimic the functioning of parsec_release_dep_fct */
+        task->repo_entry                         = NULL;
+        task->data[flow_index].source_repo       = output_repo;
+        task->data[flow_index].source_repo_entry = repo_entry;
+        task->data[flow_index].data_in           = repo_entry->data[flow_index];
+
+        /** Mimic the functioning of data lookup */
+        parsec_dep_data_description_t data_lookup;
+        data_lookup.data               = NULL;
+        data_lookup.data_future        = NULL;
+        data_lookup.data_future        = (parsec_datacopy_future_t*)repo_entry->data[flow_index];
+        data_lookup.local.arena        = NULL;
+        data_lookup.local.src_datatype = PARSEC_DATATYPE_NULL;
+        data_lookup.local.dst_datatype = PARSEC_DATATYPE_NULL;
+        data_lookup.local.src_count    = 1;
+        data_lookup.local.dst_count    = 1;
+        data_lookup.local.src_displ    = 0;
+        data_lookup.local.dst_displ    = 0;
+
+        parsec_data_copy_t *chunk = task->data[flow_index].data_in;
+        assert(repo_entry->data[flow_index] == chunk);
+        assert(repo_entry->data[flow_index] == data.data_future);
+        parsec_get_copy_reshape_from_dep(es, task->taskpool, task, flow_index, output_repo, key, &data_lookup, &chunk);
+        assert(origin->output[flow_index].data.data == chunk);
+        int target_device = 0;
+        task->data[flow_index].data_out = parsec_data_get_copy(chunk->original, target_device);
+        task->data[flow_index].data_in = chunk;
+        assert(task->data[flow_index].data_in == origin->output[flow_index].data.data);
+        assert(task->data[flow_index].data_out == origin->output[flow_index].data.data);
+        task->data[flow_index].fulfill = 1;
+
+    //#endif
+
+    #if 0
+        repo_entry->data[flow_index]  = origin->output[flow_index].data.data;
+
+        task->repo_entry                         = NULL;
+        task->data[flow_index].source_repo       = output_repo;
+        task->data[flow_index].source_repo_entry = repo_entry;
+        task->data[flow_index].data_in           = repo_entry->data[flow_index];
+
+        parsec_data_copy_t *chunk = task->data[flow_index].data_in;
+        PARSEC_OBJ_RETAIN(chunk);
+
+        int target_device = 0;
+        task->data[flow_index].data_out = task->data[flow_index].data_in;
+        PARSEC_OBJ_RETAIN(task->data[flow_index].data_out);
+        PARSEC_OBJ_RETAIN(task->data[flow_index].data_out);
+        PARSEC_OBJ_RETAIN(task->data[flow_index].data_out);
+        task->data[flow_index].fulfill = 1;
+
+        output_usage++;
+    #endif
     }
+    data_repo_entry_addto_usage_limit(output_repo, key, output_usage);
 
     if(parsec_runtime_task_mapping) {
         assert(NULL == find_migrated_tasks_details(task));
@@ -1862,7 +1937,7 @@ static int migrate_dep_mpi_put_end_cb(parsec_comm_engine_t *ce, parsec_ce_mem_re
         parsec_gpu_task_t *gpu_task = (parsec_gpu_task_t *)deps->eager_msg; /** temp storage */
         /** release the resources held by the migrated task */
         parsec_execution_stream_t* es = &parsec_comm_es;
-        gpu_task->ec->mig_status = PARSEC_MIGRATED_TEST;
+        gpu_task->ec->mig_status = PARSEC_MIGRATION_COMPLETE;
         migrated_task_cleanup(es, gpu_task);
         free(gpu_task);
 
@@ -2077,6 +2152,7 @@ int destroy_possible_memory_leak(parsec_taskpool_t* tp)
     parsec_list_item_t *item;
     while ((item = parsec_list_pop_front(&steal_req_fifo)) != NULL) { free(item); }
 
+    return 0;
 }
 
 mig_task_mapping_item_t* insert_direct_deps_details(parsec_task_t *task)
