@@ -63,6 +63,9 @@ volatile int last_victim = -1;
 */
 int* device_progress_counter = NULL;
 
+/** Count the number of tasks expected to be migrated to this node.*/
+volatile int expected_migrated_task = 0;
+
 parsec_node_info_t *node_info; /** stats on migration in a node */
 static int my_rank, nb_nodes, current_taskpool_id;
 PARSEC_OBJ_CLASS_INSTANCE(migrated_node_level_task_t, migrated_node_level_task_t, NULL, NULL);
@@ -325,6 +328,12 @@ int parsec_node_migrate_init(parsec_context_t *context)
     my_rank = context->my_rank;
     nb_nodes = context->nb_nodes;
     srand(time(NULL));
+
+    if( parsec_runtime_node_migrate_stats ) {
+        char hostname[256];
+        gethostname(hostname, sizeof(hostname));
+        printf("PID %d on %s with rank %d\n", getpid(), hostname, my_rank);
+    }
 
     finalised_hop_count = ((0 == parsec_runtime_hop_count) || (parsec_runtime_hop_count >= nb_nodes) ) ? (nb_nodes - 1) : parsec_runtime_hop_count;
 
@@ -627,6 +636,10 @@ recieve_steal_request(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
 
     if (steal_request->msg.root == my_rank) /** request initiated from this node */ {
 
+        if(steal_request->msg.nb_task_request > 0) {
+            parsec_atomic_fetch_add_int32(&expected_migrated_task, (-1 * steal_request->msg.nb_task_request));
+        }
+
         if (parsec_runtime_node_migrate_stats) {
             if(steal_request->msg.nb_task_request < parsec_runtime_chunk_size) {
                 if(0 == steal_request->msg.nb_task_request) {
@@ -767,7 +780,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                  && (get_progress_counter(d) > parsec_runtime_progress_count) 
                  && (my_rank < (nb_nodes - parsec_runtime_expand_nodes))
                  && ((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
-                 && (only_one_task < 1)
+                 && (only_one_task < 1000)
             ) {
                 list = &(gpu_device->pending);
                 if( !parsec_atomic_trylock( &list->atomic_lock ) ) {
@@ -788,7 +801,7 @@ int process_steal_request(parsec_execution_stream_t *es)
                         && (gpu_task->ec->task_class->task_class_id == parsec_runtime_mig_task_class) 
                     ) {
 
-                        //only_one_task += 1;
+                        only_one_task += 1;
 
                         item = parsec_list_nolock_remove(list, item);
                         PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
@@ -1002,6 +1015,8 @@ int initiate_steal_request(parsec_execution_stream_t *es)
         steal_request_msg.successful_victims[i] = 0;
     }
 
+    expected_migrated_task = steal_request_msg.nb_task_request;
+
 
     if (0 == parsec_runtime_steal_request_policy) { /* RING */
         steal_request_msg.dst = (my_rank + 1) % nb_nodes;
@@ -1119,6 +1134,7 @@ int send_steal_request(parsec_execution_stream_t *es)
     if(5 == parsec_runtime_steal_request_policy) { /* Expand */
         if(    (my_rank < (nb_nodes - parsec_runtime_expand_nodes)) 
             || !((parsec_runtime_expand_start <= get_current_taskpool_id()) && (get_current_taskpool_id() < parsec_runtime_expand_stop))
+            || (expected_migrated_task > 0)
         )
         {
             return PARSEC_HOOK_RETURN_ASYNC;
@@ -1281,12 +1297,23 @@ parsec_remote_deps_t *prepare_remote_deps(parsec_execution_stream_t *es,
         assert(mig_task->data[i].data_in == mig_task->data[i].data_out);
 
         output = &deps->output[i];
-        output->data.data = mig_task->data[i].data_in;
+        int target_device = 0;
+        output->data.data = parsec_data_get_copy(mig_task->data[i].data_in->original, target_device);
+        parsec_data_transfer_ownership_to_copy(mig_task->data[i].data_in->original,
+                                           target_device, PARSEC_FLOW_ACCESS_READ);
         output->rank_bits[_array_pos] |= _array_mask;
         output->count_bits++; /** This is required in remote_dep_complete_and_cleanup()*/
         output->deps_mask |= (1 << i);
         deps->outgoing_mask |= (1 << i);
 
+        //printf("prepare_remote_deps original %p owner %d for flow %d data_in %p (device %d) refcount %d output data %p (device %d) refcount %d \n", 
+        //    mig_task->data[i].data_in->original, mig_task->data[i].data_in->original->owner_device, i,
+        //    mig_task->data[i].data_in, mig_task->data[i].data_in->device_index, ((parsec_object_t *)output->data.data)->obj_reference_count,
+        //    output->data.data, output->data.data->device_index, ((parsec_object_t *)output->data.data)->obj_reference_count);
+        
+        //if(i == 0 && 1 == ((parsec_object_t *)output->data.data)->obj_reference_count) {
+        //    PARSEC_OBJ_RETAIN(output->data.data);
+        //}
         parsec_atomic_fetch_inc_int32(&deps->pending_ack);
     }
 
@@ -1650,7 +1677,7 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         }
 
    
-    //#if 0
+    #if 0
         /** Mimic the functioning of iterative successor */
         parsec_dep_data_description_t data;
         uint32_t flow_mask = (1U << task->task_class->in[flow_index]->flow_index) | 0x80000000U;
@@ -1706,9 +1733,9 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         assert(task->data[flow_index].data_out == origin->output[flow_index].data.data);
         task->data[flow_index].fulfill = 1;
 
-    //#endif
+    #endif
 
-    #if 0
+    //#if 0
         repo_entry->data[flow_index]  = origin->output[flow_index].data.data;
 
         task->repo_entry                         = NULL;
@@ -1720,14 +1747,11 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
         PARSEC_OBJ_RETAIN(chunk);
 
         int target_device = 0;
-        task->data[flow_index].data_out = task->data[flow_index].data_in;
-        PARSEC_OBJ_RETAIN(task->data[flow_index].data_out);
-        PARSEC_OBJ_RETAIN(task->data[flow_index].data_out);
-        PARSEC_OBJ_RETAIN(task->data[flow_index].data_out);
+        task->data[flow_index].data_out = parsec_data_get_copy(chunk->original, target_device);;
         task->data[flow_index].fulfill = 1;
 
         output_usage++;
-    #endif
+    //#endif
     }
     data_repo_entry_addto_usage_limit(output_repo, key, output_usage);
 
@@ -1756,6 +1780,8 @@ get_mig_task_data_complete(parsec_execution_stream_t *es,
     schedule_migrated_task(es, task);
     assert(origin->root == origin->from);
 
+    parsec_atomic_fetch_dec_int32( &expected_migrated_task);
+  
     /** mark the end of communication for this migration message */
     origin->taskpool->tdm.module->incoming_message_end(origin->taskpool, origin);
 

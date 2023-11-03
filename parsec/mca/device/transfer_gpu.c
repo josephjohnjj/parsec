@@ -315,7 +315,12 @@ int parsec_gpu_complete_w2r_task(parsec_device_gpu_module_t *gpu_device,
 
         cpu_copy = original->device_copies[0];
 
-        if( cpu_copy->version < gpu_copy->version ) {
+        if(NULL == cpu_copy) {
+            PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
+                                 "D2H[%s] task %p:%i GPU data copy %p [%p] special case",
+                                 gpu_device->super.name, (void*)task, i, gpu_copy, gpu_copy->original);
+        }
+        else if( cpu_copy->version < gpu_copy->version ) {
             /* the GPU version has been acquired by a new task that is waiting for submission */
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "D2H[%s] task %p:%i GPU data copy %p [%p] has a backup in memory",
