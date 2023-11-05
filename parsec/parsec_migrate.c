@@ -858,12 +858,9 @@ int process_steal_request(parsec_execution_stream_t *es)
             /** buff holds the message that will be send to the thief node */
             buff = malloc(buffer_size);
 
-            for (item = PARSEC_LIST_ITERATOR_FIRST(ring);
-                (PARSEC_LIST_ITERATOR_END(ring) != item);
-                item = PARSEC_LIST_ITERATOR_NEXT(item)) {
+            while(NULL != (item = parsec_list_nolock_pop_front(ring)) ) {
 
                 parsec_gpu_task_t *gpu_task = (parsec_gpu_task_t *)item;
-                item = parsec_list_nolock_remove(ring, item);
                 PARSEC_LIST_ITEM_SINGLETON((parsec_list_item_t *)gpu_task);
                 assert(gpu_task->ec->mig_status != PARSEC_MIGRATED_TASK);
                 assert(gpu_task->ec->mig_status != PARSEC_MIGRATED_DIRECT);
