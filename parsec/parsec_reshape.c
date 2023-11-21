@@ -21,6 +21,10 @@
 #define PARSEC_FULFILLED_RESHAPE_PROMISE   1
 
 extern int parsec_runtime_task_mapping;
+extern int parsec_runtime_shrink_nodes;
+extern int parsec_runtime_shrink_start;
+extern int parsec_runtime_mig_task_class;
+
 /**
  *
  * Callback routine to clean up a reshape promise.
@@ -416,6 +420,23 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
     data_repo_t *setup_repo;
     parsec_key_t setup_repo_key;
     int promise_type;
+
+    if(oldcontext->taskpool->taskpool_id >=  parsec_runtime_shrink_start) {
+        if(newcontext->task_class->task_class_id == parsec_runtime_mig_task_class ) {
+            if( dst_rank >= (get_nb_nodes() - parsec_runtime_shrink_nodes) ) {
+                int shrunk_rank =  dst_rank / 2;
+            #if 0
+                char tmp1[MAX_TASK_STRLEN];
+                char tmp2[MAX_TASK_STRLEN];
+                parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, oldcontext);
+                parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, newcontext);
+                printf("SHRINK-MSG: [parsec_set_up_reshape_promise] rank %d parent task %s dest task %s dst_rank changed from node %d to %d.  \n", 
+                            get_my_rank(), tmp1, tmp2, dst_rank, shrunk_rank);
+            #endif
+                dst_rank = shrunk_rank;
+            }
+        }
+    }
 
     parsec_release_dep_fct_arg_t *arg = (parsec_release_dep_fct_arg_t *)param;
 

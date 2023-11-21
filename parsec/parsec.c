@@ -176,6 +176,7 @@ int parsec_runtime_task_mapping           = 0;
 int parsec_runtime_expand_nodes           = 0;
 int parsec_runtime_expand_start           = 0;
 int parsec_runtime_expand_stop            = 0;
+int parsec_runtime_shrink_nodes           = 0;
 int parsec_runtime_shrink_start           = 0;
 int parsec_runtime_mig_task_class         = 0;
 
@@ -980,10 +981,11 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_expand_stop);
     parsec_mca_param_reg_int_name("runtime", "mig_task_class", "Task class that will be migrated",
                                 false, false, 5 /** dense GEMM*/, &parsec_runtime_mig_task_class);
+    parsec_mca_param_reg_int_name("runtime", "shrink_nodes", "Number of nodes to expand",
+                                false, false, 0, &parsec_runtime_shrink_nodes);
     parsec_mca_param_reg_int_name("runtime", "shrink_start", "Taskpool to start shrink",
                                 false, false, 0, &parsec_runtime_shrink_start);
                            
-
     if( parsec_runtime_gdb_attach > 0 )
     {
         char hostname[256];
@@ -1784,7 +1786,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                                       int src_rank)
 {
     const parsec_task_class_t* tc = task->task_class;
-    parsec_task_t** pready_ring = &arg->ready_lists[dst_vpid];
+    parsec_task_t** pready_ring = &arg->ready_lists[0];
     parsec_dependency_t *deps;
     int completed;
     parsec_dependency_t source_mask = (parsec_dependency_t)0;
@@ -1816,6 +1818,7 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
         }
     #endif
     }
+
 
 #if defined(PARSEC_PROF_GRAPHER)
     parsec_prof_grapher_dep(origin, task, completed, origin_flow, dest_flow);
@@ -1873,6 +1876,19 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                 new_context->sources = source_mask; /** Set the intermediate dataflow sources */
             }
 
+        #if 0
+            if(origin->taskpool->taskpool_id >=  parsec_runtime_shrink_start) {
+                char tmp1[MAX_TASK_STRLEN];
+                char tmp2[MAX_TASK_STRLEN];
+                parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, origin);
+                parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, task);
+
+                printf("SHRINK-MSG: [parsec_release_local_OUT_dependencies] rank %d parent task %s succ task %s parsec_runtime_shrink_start %d taskpool_id %d.   \n", 
+                    get_my_rank(), tmp1, tmp2, parsec_runtime_shrink_start, origin->taskpool->taskpool_id);
+            
+            }
+        #endif
+
             if(task->task_class->flags & PARSEC_IMMEDIATE_TASK) {
                 PARSEC_DEBUG_VERBOSE(20, parsec_debug_output, "  Task %s is immediate and will be executed ASAP", tmp1);
                 __parsec_execute(es, new_context);
@@ -1886,14 +1902,14 @@ parsec_release_local_OUT_dependencies(parsec_execution_stream_t* es,
                 *pimmediate_ring = new_context;
 #endif
             } else {
-                //*pready_ring = (parsec_task_t*)
-                    //parsec_list_item_ring_push_sorted( (parsec_list_item_t*)(*pready_ring),
-                    //                                   &new_context->super,
-                    //                                   parsec_execution_context_priority_comparator );
+                *pready_ring = (parsec_task_t*)
+                        parsec_list_item_ring_push_sorted( (parsec_list_item_t*)(*pready_ring),
+                                                           &new_context->super,
+                                                           parsec_execution_context_priority_comparator );
                 
                 
-                *pready_ring = (parsec_task_t*) parsec_list_item_ring_push_unsorted((parsec_list_item_t*)(*pready_ring),
-                                    &new_context->super);
+                //*pready_ring = (parsec_task_t*) parsec_list_item_ring_push_unsorted((parsec_list_item_t*)(*pready_ring),
+                //                    &new_context->super);
                 
             }
         }
@@ -1943,6 +1959,32 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
         #endif
 
             return PARSEC_ITERATE_CONTINUE;
+        }
+    }
+
+    if(parsec_runtime_shrink_start) {
+        assert(oldcontext->taskpool != NULL);
+
+        if(oldcontext->taskpool->taskpool_id >=  parsec_runtime_shrink_start) {
+
+            assert(NULL != newcontext);
+            assert(NULL != newcontext->task_class);
+
+            if(newcontext->task_class->task_class_id == parsec_runtime_mig_task_class) {
+                if( dst_rank >= (get_nb_nodes() - parsec_runtime_shrink_nodes) ) {
+                    int shrunk_rank =  dst_rank / 2;
+                #if 0
+                    char tmp1[MAX_TASK_STRLEN];
+                    char tmp2[MAX_TASK_STRLEN];
+                    parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, oldcontext);
+                    parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, newcontext);
+
+                    printf("SHRINK-MSG: [parsec_release_dep_fct] rank %d parent task %s dest task %s dst_rank changed from node %d to %d.  \n", 
+                        get_my_rank(), tmp1, tmp2, dst_rank, shrunk_rank);
+                #endif
+                    dst_rank = shrunk_rank;
+                }
+            }
         }
     }
 

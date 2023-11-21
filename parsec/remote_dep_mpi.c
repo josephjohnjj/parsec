@@ -52,6 +52,9 @@ extern int parsec_runtime_node_migrate_tasks;
 extern int parsec_migration_engine_up;
 extern int parsec_runtime_node_migrate_stats;
 extern int parsec_runtime_task_mapping;
+extern int parsec_runtime_shrink_nodes;
+extern int parsec_runtime_shrink_start;
+extern int parsec_runtime_mig_task_class;
 
 char*
 remote_dep_cmd_to_string(remote_dep_wire_activate_t* origin,
@@ -763,6 +766,24 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
 {
     (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
     (void)successor_repo; (void) successor_repo_key; (void)src_rank;
+
+    if(oldcontext->taskpool->taskpool_id >=  parsec_runtime_shrink_start) {
+        if(newcontext->task_class->task_class_id == parsec_runtime_mig_task_class) {
+            if( dst_rank >= (get_nb_nodes() - parsec_runtime_shrink_nodes) ) {
+                int shrunk_rank =  dst_rank / 2;
+            #if 0
+                char tmp1[MAX_TASK_STRLEN];
+                char tmp2[MAX_TASK_STRLEN];
+                parsec_task_snprintf(tmp1, MAX_TASK_STRLEN, oldcontext);
+                parsec_task_snprintf(tmp2, MAX_TASK_STRLEN, newcontext);
+
+                printf("SHRINK-MSG: [remote_dep_mpi_retrieve_datatype] rank %d parent task %s succ task %s  dst_rank changed from node %d to %d.  \n", 
+                    get_my_rank(), tmp1, tmp2, dst_rank, shrunk_rank);
+            #endif
+                dst_rank = shrunk_rank;
+            }
+        }
+    }
 
     if( dst_rank != eu->virtual_process->parsec_context->my_rank )
         return PARSEC_ITERATE_CONTINUE;
