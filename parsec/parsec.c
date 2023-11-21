@@ -176,6 +176,7 @@ int parsec_runtime_task_mapping           = 0;
 int parsec_runtime_expand_nodes           = 0;
 int parsec_runtime_expand_start           = 0;
 int parsec_runtime_expand_stop            = 0;
+int parsec_runtime_shrink_start           = 0;
 int parsec_runtime_mig_task_class         = 0;
 
 static PARSEC_TLS_DECLARE(parsec_tls_execution_stream);
@@ -973,12 +974,14 @@ parsec_context_t* parsec_init( int nb_cores, int* pargc, char** pargv[] )
                                 false, false, 0, &parsec_runtime_task_mapping);
     parsec_mca_param_reg_int_name("runtime", "expand_nodes", "Number of nodes to expand",
                                 false, false, 0, &parsec_runtime_expand_nodes);
-    parsec_mca_param_reg_int_name("runtime", "expand_start", "Number of nodes to expand",
+    parsec_mca_param_reg_int_name("runtime", "expand_start", "Taskpool to start expansion",
                                 false, false, 0, &parsec_runtime_expand_start);
-    parsec_mca_param_reg_int_name("runtime", "expand_stop", "Number of nodes to expand",
+    parsec_mca_param_reg_int_name("runtime", "expand_stop", "Taskpool to stop expansion",
                                 false, false, 0, &parsec_runtime_expand_stop);
     parsec_mca_param_reg_int_name("runtime", "mig_task_class", "Task class that will be migrated",
                                 false, false, 5 /** dense GEMM*/, &parsec_runtime_mig_task_class);
+    parsec_mca_param_reg_int_name("runtime", "shrink_start", "Taskpool to start shrink",
+                                false, false, 0, &parsec_runtime_shrink_start);
                            
 
     if( parsec_runtime_gdb_attach > 0 )

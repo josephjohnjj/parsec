@@ -23,6 +23,7 @@ extern int parsec_runtime_task_mapping;
 extern int parsec_runtime_expand_nodes;
 extern int parsec_runtime_expand_start;
 extern int parsec_runtime_expand_stop ;
+extern int parsec_runtime_shrink_start;
 extern int parsec_runtime_mig_task_class;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
