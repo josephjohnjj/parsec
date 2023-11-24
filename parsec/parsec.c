@@ -1965,7 +1965,7 @@ parsec_release_dep_fct(parsec_execution_stream_t *es,
     if(parsec_runtime_shrink_start) {
         assert(oldcontext->taskpool != NULL);
 
-        if(oldcontext->taskpool->taskpool_id >=  parsec_runtime_shrink_start) {
+        if(oldcontext->taskpool->taskpool_id ==  parsec_runtime_shrink_start) {
 
             assert(NULL != newcontext);
             assert(NULL != newcontext->task_class);
