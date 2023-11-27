@@ -25,6 +25,7 @@ extern int parsec_runtime_expand_start;
 extern int parsec_runtime_expand_stop ;
 extern int parsec_runtime_shrink_start;
 extern int parsec_runtime_mig_task_class;
+int communication = 0;
 
 int finalised_hop_count  = 0;  /* Max hop count of a steal request */
 int expand_next_rank = 0; /* Starting rank for round_robin */
@@ -242,6 +243,12 @@ int parsec_node_mig_inc_task_migrated()
 {
     parsec_atomic_fetch_inc_int32(&(node_info->nb_task_migrated));
     return node_info->nb_task_migrated;
+}
+
+int inc_communication()
+{
+    parsec_atomic_fetch_inc_int32(&(communication));
+    return communication;
 }
 
 int parsec_node_mig_inc_task_recvd()
@@ -479,6 +486,7 @@ int parsec_node_stats_fini()
     else {
         printf("Data distrbution                : Skewed \n");
     }
+    printf("Total communication             : %d\n", communication);
     printf("Total Nodes                     : %d \n", nb_nodes);
 
     return 0;

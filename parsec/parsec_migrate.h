@@ -179,4 +179,5 @@ int set_current_taskpool_id(int id);
 int destroy_possible_memory_leak(parsec_taskpool_t* tp);
 int migrate_register_tags();
 int migrate_unregister_tags();
+int inc_communication();
 #endif

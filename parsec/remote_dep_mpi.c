@@ -1990,6 +1990,7 @@ remote_dep_mpi_save_activate_cb(parsec_comm_engine_t *ce, parsec_ce_tag_t tag,
          * the data we should be receiving from the predecessor.
          */
         rc = remote_dep_get_datatypes(es, deps, 0, &position);
+        inc_communication();
 
         if( -1 == rc ) {
             /* the corresponding tp doesn't exist, yet. Put it in unexpected */
