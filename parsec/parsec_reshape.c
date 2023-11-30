@@ -421,7 +421,9 @@ parsec_set_up_reshape_promise(parsec_execution_stream_t *es,
     parsec_key_t setup_repo_key;
     int promise_type;
 
-    if(oldcontext->taskpool->taskpool_id ==  parsec_runtime_shrink_start) {
+    //if(oldcontext->taskpool->taskpool_id ==  parsec_runtime_shrink_start) {
+    int tp_bitmap = (1 << oldcontext->taskpool->taskpool_id);
+    if(0 != ( tp_bitmap & parsec_runtime_shrink_start)) {
         if(newcontext->task_class->task_class_id == parsec_runtime_mig_task_class ) {
             if( dst_rank >= (get_nb_nodes() - parsec_runtime_shrink_nodes) ) {
                 int shrunk_rank =  dst_rank / 2;

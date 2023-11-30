@@ -767,7 +767,9 @@ remote_dep_mpi_retrieve_datatype(parsec_execution_stream_t *eu,
     (void)eu; (void)oldcontext; (void)dst_vpid; (void)newcontext; (void)out_data;
     (void)successor_repo; (void) successor_repo_key; (void)src_rank;
 
-    if(oldcontext->taskpool->taskpool_id ==  parsec_runtime_shrink_start) {
+    //if(oldcontext->taskpool->taskpool_id ==  parsec_runtime_shrink_start) {
+    int tp_bitmap = (1 << oldcontext->taskpool->taskpool_id);
+    if(0 != ( tp_bitmap & parsec_runtime_shrink_start)) {
         if(newcontext->task_class->task_class_id == parsec_runtime_mig_task_class) {
             if( dst_rank >= (get_nb_nodes() - parsec_runtime_shrink_nodes) ) {
                 int shrunk_rank =  dst_rank / 2;
