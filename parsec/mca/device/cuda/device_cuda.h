@@ -28,6 +28,9 @@ typedef struct parsec_cuda_task_s parsec_cuda_task_t;
 struct parsec_cuda_exec_stream_s;
 typedef struct parsec_cuda_exec_stream_s parsec_cuda_exec_stream_t;
 
+struct parsec_cuda_mempool_s;
+typedef struct parsec_cuda_mempool_s parsec_cuda_mempool_t;
+
 struct parsec_device_cuda_module_s;
 typedef struct parsec_device_cuda_module_s parsec_device_cuda_module_t;
 
@@ -58,6 +61,12 @@ struct parsec_cuda_exec_stream_s {
      */
     cudaEvent_t               *events;
     cudaStream_t               cuda_stream;
+};
+
+
+struct parsec_cuda_mempool_s {
+    cudaEvent_t     *events;
+    cudaMemPool_t   cuda_mempool;
 };
 
 /**
