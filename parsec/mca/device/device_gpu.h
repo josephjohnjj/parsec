@@ -248,6 +248,8 @@ struct parsec_device_gpu_module_s {
 #if defined(PARSEC_PROF_TRACE)
     int                        trackable_events;
 #endif /* PARSEC_PROF_TRACE */
+
+    void    *mempool; /** mempool handle */
 };
 
 struct parsec_gpu_exec_stream_s {
