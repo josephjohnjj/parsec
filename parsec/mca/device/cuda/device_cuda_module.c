@@ -545,6 +545,9 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
 #endif  /* defined(PARSEC_PROF_TRACE) */
     }
 
+    gpu_device->mempool = (parsec_cuda_mempool_t*)calloc(1, sizeof(parsec_cuda_mempool_t));
+
+
     device->type                 = PARSEC_DEV_CUDA;
     device->executed_tasks       = 0;
     device->data_in_array_size   = 0;     // We'll let the modules_attach allocate the array of the right size for us
