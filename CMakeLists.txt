@@ -184,6 +184,10 @@ option(PARSEC_GPU_ALLOC_PER_TILE
   "Tile based allocation engine for GPU memory (instead of internal management
   of a complete allocation)" OFF)
 mark_as_advanced(PARSEC_GPU_ALLOC_PER_TILE)
+option(PARSEC_GPU_MEMPOOL_ALLOC
+  "Mempool based allocation engine for GPU memory (instead of internal management
+  of a complete allocation)" OFF)
+mark_as_advanced(PARSEC_GPU_MEMPOOL_ALLOC)
 option(PARSEC_GPU_WITH_CUDA
   "Enable GPU support using CUDA kernels" ON)
 option(PARSEC_GPU_WITH_HIP
