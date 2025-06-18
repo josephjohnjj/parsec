@@ -213,6 +213,22 @@ typedef int (*parsec_device_memory_free_fn_t)(struct parsec_device_gpu_module_s 
  */
 typedef void* (*parsec_device_find_incarnation_fn_t)(parsec_device_gpu_module_t* gpu_device, const char* fname);
 
+
+/**
+ * @brief Function to create a memory pool
+ * 
+ * @param gpu_device the target GPU
+ * @param size bytes of memory in the mempool
+ */
+typedef int (*parsec_device_mempool_create_fn_t)(parsec_device_gpu_module_t* gpu_device, size_t size);
+
+/**
+ * @brief Function remove a memory pool
+ * 
+ * @param gpu_device the target GPU
+ */
+typedef int (*parsec_device_mempool_remove_fn_t)(parsec_device_gpu_module_t* gpu_device);
+
 struct parsec_device_gpu_module_s {
     parsec_device_module_t     super;
 
@@ -225,6 +241,8 @@ struct parsec_device_gpu_module_s {
     parsec_device_memory_allocate_fn_t  memory_allocate;
     parsec_device_memory_free_fn_t      memory_free;
     parsec_device_find_incarnation_fn_t find_incarnation;
+    parsec_device_mempool_create_fn_t   mempool_create; 
+    parsec_device_mempool_remove_fn_t   mempool_remove;
 
     uint8_t                    max_exec_streams;
     uint8_t                    num_exec_streams;

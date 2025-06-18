@@ -403,6 +403,45 @@ static int parsec_cuda_memory_free(struct parsec_device_gpu_module_s *gpu, void 
     return PARSEC_SUCCESS;
 }
 
+static int parsec_cuda_mempool_create(struct parsec_device_gpu_module_s *gpu, size_t size)
+{
+    parsec_device_cuda_module_t *cuda_device = (parsec_device_cuda_module_t *)gpu;
+    parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu->exec_stream[0];
+
+    gpu->set_device(gpu);
+
+    struct cudaMemPoolProps props = {};
+    props.allocType = cudaMemAllocationTypePinned;   // Pinned host memory
+    props.handleTypes = cudaMemHandleTypeNone;       // No interprocess sharing
+    props.location.type = cudaMemLocationTypeDevice; // Device memory
+    props.location.id = cuda_device->cuda_index;     // GPU device index
+
+    parsec_cuda_mempool_t* cuda_mempool = (parsec_cuda_mempool_t*)gpu->mempool;
+    cudaMemPoolCreate(&(cuda_mempool->cuda_mempool), &props);
+
+    // Force CUDA to add all the bytes to the pool
+    void *initial_pool = NULL;
+    cudaMallocFromPoolAsync(initial_pool, size, cuda_mempool->cuda_mempool, cuda_stream->cuda_stream);
+    cudaFreeAsync(initial_pool, cuda_stream->cuda_stream);
+    cudaStreamSynchronize(cuda_stream->cuda_stream);
+
+}
+
+static int parsec_cuda_mempool_remove(struct parsec_device_gpu_module_s *gpu)
+{
+    parsec_device_cuda_module_t *cuda_device = (parsec_device_cuda_module_t *)gpu;
+    parsec_cuda_exec_stream_t *cuda_stream = (parsec_cuda_exec_stream_t *)gpu->exec_stream[0];
+    parsec_cuda_mempool_t* cuda_mempool = (parsec_cuda_mempool_t*)gpu->mempool;
+
+    gpu->set_device(gpu);
+
+    cudaStreamSynchronize(cuda_stream->cuda_stream);
+    cudaMemPoolTrimTo(cuda_mempool->cuda_mempool, 0);
+    cudaMemPoolDestroy(cuda_mempool->cuda_mempool); 
+
+}
+
+
 static int parsec_cuda_mempool_allocate(struct parsec_device_gpu_module_s *gpu, size_t bytes, void **addr)
 {
     parsec_cuda_mempool_t* cuda_mempool = (parsec_cuda_mempool_t*)gpu->mempool;
@@ -598,8 +637,14 @@ parsec_cuda_module_init( int dev_id, parsec_device_module_t** module )
     gpu_device->event_record     = parsec_cuda_event_record;
     gpu_device->event_query      = parsec_cuda_event_query;
     gpu_device->memory_info      = parsec_cuda_memory_info;
+    gpu_device->memory_allocate  = parsec_cuda_memory_allocate;
+    gpu_device->memory_free      = parsec_cuda_memory_free;
+#if defined(PARSEC_GPU_MEMPOOL_ALLOC)
     gpu_device->memory_allocate  = parsec_cuda_mempool_allocate;
     gpu_device->memory_free      = parsec_cuda_mempool_free;
+    gpu_device->mempool_create   = parsec_cuda_mempool_create;
+    gpu_device->mempool_remove   = parsec_cuda_mempool_remove;
+#endif
     gpu_device->find_incarnation = parsec_cuda_find_incarnation;
 
     if( PARSEC_SUCCESS != parsec_device_memory_reserve(gpu_device,

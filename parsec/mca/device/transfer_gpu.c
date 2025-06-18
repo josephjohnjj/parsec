@@ -338,7 +338,12 @@ int parsec_gpu_complete_w2r_task(parsec_device_gpu_module_t *gpu_device,
             PARSEC_DEBUG_VERBOSE(10, parsec_gpu_output_stream,
                                  "D2H[%d:%s] task %p:%i GPU data copy %p [%p] now available",
                                  gpu_device->super.device_index, gpu_device->super.name, (void*)task, i, gpu_copy, gpu_copy->original);
+#if defined(PARSEC_GPU_MEMPOOL_ALLOC)
+            gpu_device->memory_free(gpu_device, (void*)(gpu_copy->device_private));
+            PARSEC_OBJ_RELEASE(gpu_copy);
+#else
             parsec_list_push_back(&gpu_device->gpu_mem_lru, (parsec_list_item_t*)gpu_copy);
+#endif
         }
         parsec_atomic_unlock(&gpu_copy->original->lock);
     }
